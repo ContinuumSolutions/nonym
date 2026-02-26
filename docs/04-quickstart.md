@@ -1,4 +1,4 @@
-# Quickstart — Run EK-1 in 5 Minutes
+# Quickstart - Run EK-1 in 5 Minutes
 
 This gets you from zero to a running Shadow-Mode demo using only Go.
 No blockchain, no Rust, no external accounts required.
@@ -32,7 +32,7 @@ You will see:
 ```
 ╔═══════════════════════════════════════════════════════════════╗
 ║            E G O - K E R N E L   (EK-1)                      ║
-║         Sovereign Architecture — Off-Chain Brain              ║
+║         Sovereign Architecture - Off-Chain Brain              ║
 ║                    Phase 1: The Shadow                        ║
 ╚═══════════════════════════════════════════════════════════════╝
 

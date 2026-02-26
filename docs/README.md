@@ -8,7 +8,7 @@ Guides for deploying every module of the Ego-Kernel MVP.
 
 | # | Guide | What It Covers |
 |---|-------|----------------|
-| [00](./00-prerequisites.md) | Prerequisites | Go, Rust, Solana CLI, Anchor, Node — all version-pinned |
+| [00](./00-prerequisites.md) | Prerequisites | Go, Rust, Solana CLI, Anchor, Node - all version-pinned |
 | [01](./01-deploy-go-brain.md) | Go Brain | Build, test, run, tune, and TEE-deploy the off-chain orchestrator |
 | [02](./02-deploy-anchor.md) | Anchor Program | Build, test, and deploy the on-chain Reputation Ledger to devnet/mainnet |
 | [03](./03-deploy-harvest.md) | Harvest Scanner | Run locally, wire live APIs, schedule as cron/systemd/Docker |
@@ -48,7 +48,7 @@ Guides for deploying every module of the Ego-Kernel MVP.
 
 ## Start Here
 
-**First time?** → [`04-quickstart.md`](./04-quickstart.md) — running in 5 minutes.
+**First time?** → [`04-quickstart.md`](./04-quickstart.md) - running in 5 minutes.
 
 **Ready for blockchain?** → [`00-prerequisites.md`](./00-prerequisites.md) then
 [`02-deploy-anchor.md`](./02-deploy-anchor.md).

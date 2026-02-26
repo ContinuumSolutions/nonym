@@ -5,7 +5,7 @@ on Solana Mainnet.
 
 ---
 
-## Phase 1 — "The Shadow" (Weeks 1–4)
+## Phase 1 - "The Shadow" (Weeks 1–4)
 
 **Goal:** Read-only decision mirror. No execution. No blockchain.
 
@@ -45,7 +45,7 @@ crontab -e
 
 ---
 
-## Phase 2 — "The Hand" (Weeks 5–8)
+## Phase 2 - "The Hand" (Weeks 5–8)
 
 **Goal:** Give the Kernel a wallet. Automate micro-escrow settlements ($5 disputes).
 
@@ -98,12 +98,12 @@ solana program show $PROGRAM_ID --url devnet
 ### Demo checkpoint
 
 - On-chain `KernelProfile` visible on Solana Explorer (devnet).
-- A micro-escrow is created, settled, and the reputation score updated — zero
+- A micro-escrow is created, settled, and the reputation score updated - zero
   human intervention, confirmed on-chain in < 1 second.
 
 ---
 
-## Phase 3 — "The Voice" (Weeks 9–12)
+## Phase 3 - "The Voice" (Weeks 9–12)
 
 **Goal:** Live multi-agent Titan Handshake demo. Two Kernels resolve a conflict
 in < 50ms; both Reputation Ledgers update atomically on-chain.
@@ -126,7 +126,7 @@ in < 50ms; both Reputation Ledgers update atomically on-chain.
 solana config set --url mainnet-beta
 anchor deploy --provider.cluster mainnet
 
-# 3. Make the program immutable (optional — removes upgrade authority)
+# 3. Make the program immutable (optional - removes upgrade authority)
 solana program set-upgrade-authority $PROGRAM_ID --final --url mainnet-beta
 
 # 4. Spin up 100 Bot Kernels (each with a funded devnet/mainnet wallet)
@@ -160,9 +160,9 @@ Show the audience:
 
 | Phase | Blockchain | Go Brain | Ledger |
 |-------|-----------|----------|--------|
-| 1 — Shadow | None | Local | In-memory |
-| 2 — Hand | Solana Devnet | Local / VM | On-chain (devnet) |
-| 3 — Voice | Solana Mainnet | Cloud VM / TEE | On-chain (mainnet) |
+| 1 - Shadow | None | Local | In-memory |
+| 2 - Hand | Solana Devnet | Local / VM | On-chain (devnet) |
+| 3 - Voice | Solana Mainnet | Cloud VM / TEE | On-chain (mainnet) |
 
 ---
 

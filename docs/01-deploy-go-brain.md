@@ -14,7 +14,7 @@ Phase 1 (Shadow Mode).
 | `brain` | `src/brain/` | Kernel lifecycle, Triage, Decide, Soul-Drift Guard |
 | `protocols` | `src/protocols/` | Titan Handshake (P2P negotiation) |
 | `ledger` | `src/ledger/` | Reputation scoring (local in Phase 1) |
-| `ek1` (main) | `cmd/ek1/` | Entry point — runs Shadow demo + Handshake demo |
+| `ek1` (main) | `cmd/ek1/` | Entry point - runs Shadow demo + Handshake demo |
 | `harvest` | `scripts/harvest/` | Social leverage scanner |
 
 ---
@@ -51,7 +51,7 @@ Expected output: **14/14 tests pass.**
 
 ---
 
-## 3. Run Phase 1 — Shadow Mode (Local)
+## 3. Run Phase 1 - Shadow Mode (Local)
 
 Shadow Mode runs entirely in-process with no external dependencies.
 It mirrors what EK-1 *would* decide, without executing anything.
@@ -111,7 +111,7 @@ Override at runtime by constructing a custom `brain.ValueMatrix` in
 
 ---
 
-## 6. Phase 2 — Connecting to Solana Devnet
+## 6. Phase 2 - Connecting to Solana Devnet
 
 Once the on-chain Reputation Ledger is deployed (see
 [`02-deploy-anchor.md`](./02-deploy-anchor.md)), replace the `LocalLedger`

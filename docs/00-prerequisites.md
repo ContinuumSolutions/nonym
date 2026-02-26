@@ -12,7 +12,7 @@ Required version: **Go 1.22+**
 # Verify
 go version
 
-# Install (if missing) — Linux/macOS
+# Install (if missing) - Linux/macOS
 wget https://go.dev/dl/go1.22.5.linux-amd64.tar.gz
 sudo tar -C /usr/local -xzf go1.22.5.linux-amd64.tar.gz
 export PATH=$PATH:/usr/local/go/bin

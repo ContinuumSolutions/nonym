@@ -9,7 +9,7 @@ In **Phase 2+** it connects to live API integrations.
 
 ---
 
-## Phase 1 — Local Demo
+## Phase 1 - Local Demo
 
 No external dependencies. Runs immediately.
 
@@ -29,7 +29,7 @@ go build -o harvest ./scripts/harvest/scan.go
 
 ---
 
-## Phase 2 — Live API Integrations
+## Phase 2 - Live API Integrations
 
 Replace the demo `contacts` slice in `scan.go` with real data sources.
 
@@ -70,7 +70,7 @@ curl -H "Authorization: Bearer $GITHUB_TOKEN" \
 Use the Gmail API to count sent vs. received emails per contact:
 
 ```bash
-# Gmail API — list recent threads
+# Gmail API - list recent threads
 curl -H "Authorization: Bearer $GOOGLE_ACCESS_TOKEN" \
   "https://gmail.googleapis.com/gmail/v1/users/me/threads?maxResults=500"
 ```
@@ -79,7 +79,7 @@ Convert thread counts into `FavorsReceived` / `FavorsGiven` metrics.
 
 ---
 
-## Phase 2 — Running as a Scheduled Job
+## Phase 2 - Running as a Scheduled Job
 
 ### Cron (Linux)
 
@@ -162,7 +162,7 @@ docker run --rm \
 
 ---
 
-## Phase 3 — On-Chain Favor Tokens
+## Phase 3 - On-Chain Favor Tokens
 
 Once the Anchor program is live (see [`02-deploy-anchor.md`](./02-deploy-anchor.md)),
 the scanner can convert Social Debt into on-chain Blind Favor Tokens:

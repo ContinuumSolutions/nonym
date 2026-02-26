@@ -2,7 +2,7 @@
 
 The `ek-logic` Anchor program is the immutable "Court" of the Sovereign Protocol.
 It stores every Kernel's reputation score, logs interactions, flags bad-faith actors,
-and manages micro-escrow settlements — all on Solana.
+and manages micro-escrow settlements - all on Solana.
 
 ---
 
@@ -27,14 +27,14 @@ and manages micro-escrow settlements — all on Solana.
 
 ---
 
-## Step 1 — Install Prerequisites
+## Step 1 - Install Prerequisites
 
 See [`00-prerequisites.md`](./00-prerequisites.md) for Rust, Solana CLI,
 and Anchor CLI installation.
 
 ---
 
-## Step 2 — Configure Your Wallet
+## Step 2 - Configure Your Wallet
 
 ```bash
 # Generate a new keypair (skip if you already have one)
@@ -53,13 +53,13 @@ solana balance
 
 ---
 
-## Step 3 — Generate a Program Address
+## Step 3 - Generate a Program Address
 
 ```bash
 # Create a fresh keypair for the program
 solana-keygen new --outfile target/deploy/ek_logic-keypair.json --no-bip39-passphrase
 
-# Extract the public key — this is your program ID
+# Extract the public key - this is your program ID
 solana-keygen pubkey target/deploy/ek_logic-keypair.json
 ```
 
@@ -78,7 +78,7 @@ declare_id!("<YOUR_PROGRAM_ID>");
 
 ---
 
-## Step 4 — Build
+## Step 4 - Build
 
 ```bash
 # Build the program (compiles to SBF bytecode)
@@ -93,7 +93,7 @@ cat target/idl/ek_logic.json
 
 ---
 
-## Step 5 — Run On-Chain Tests (Localnet)
+## Step 5 - Run On-Chain Tests (Localnet)
 
 Spin up a local validator and run tests before going to devnet.
 
@@ -112,7 +112,7 @@ Expected: all instructions initialize, log, flag, and settle correctly.
 
 ---
 
-## Step 6 — Deploy to Devnet
+## Step 6 - Deploy to Devnet
 
 ```bash
 # Deploy to Solana Devnet (costs ~2 SOL in rent)
@@ -134,12 +134,12 @@ Deployed In Slot: <slot>
 
 ---
 
-## Step 7 — Initialize Your First Kernel
+## Step 7 - Initialize Your First Kernel
 
 Use the Solana CLI to send a raw transaction, or use the Anchor TypeScript
 client generated from the IDL.
 
-### Option A — TypeScript (Anchor client)
+### Option A - TypeScript (Anchor client)
 
 ```bash
 pnpm install
@@ -178,7 +178,7 @@ console.log("Kernel initialized:", kernelPDA.toBase58());
 anchor run init-kernel --provider.cluster devnet
 ```
 
-### Option B — Solana CLI (raw)
+### Option B - Solana CLI (raw)
 
 ```bash
 # After building, you can call instructions directly with solana program invoke
@@ -187,7 +187,7 @@ anchor run init-kernel --provider.cluster devnet
 
 ---
 
-## Step 8 — Verify On-Chain
+## Step 8 - Verify On-Chain
 
 ```bash
 # Check your program is live
@@ -204,7 +204,7 @@ solana-verify verify-program <YOUR_PROGRAM_ID> \
 
 ---
 
-## Step 9 — Deploy to Mainnet
+## Step 9 - Deploy to Mainnet
 
 Only proceed after devnet validation is complete.
 
@@ -212,7 +212,7 @@ Only proceed after devnet validation is complete.
 # Switch wallet to mainnet-funded keypair
 solana config set --url mainnet-beta
 
-# Fund wallet (real SOL required — ~2–4 SOL for deployment)
+# Fund wallet (real SOL required - ~2–4 SOL for deployment)
 # Transfer SOL from exchange or bridge
 
 # Deploy
@@ -252,15 +252,15 @@ solana program set-upgrade-authority <YOUR_PROGRAM_ID> \
 
 ```
 KernelProfile
-├── authority        [Pubkey  32B]  — wallet that controls this kernel
-├── uid              [String  68B]  — human-readable identity string
-├── reputation_score [u64      8B]  — current score (baseline: 1,000)
+├── authority        [Pubkey  32B]  - wallet that controls this kernel
+├── uid              [String  68B]  - human-readable identity string
+├── reputation_score [u64      8B]  - current score (baseline: 1,000)
 ├── total_interactions [u64    8B]
 ├── total_successes  [u64      8B]
 ├── total_betrayals  [u64      8B]
-├── bad_faith_flags  [u8       1B]  — count of Dishonesty Hashes received
-├── is_exiled        [bool     1B]  — true when score < 100
-└── initialized_at   [i64      8B]  — Unix timestamp
+├── bad_faith_flags  [u8       1B]  - count of Dishonesty Hashes received
+├── is_exiled        [bool     1B]  - true when score < 100
+└── initialized_at   [i64      8B]  - Unix timestamp
 ```
 
 Total account size: **~140 bytes** (~0.0014 SOL rent-exempt).
