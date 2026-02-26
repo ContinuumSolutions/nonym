@@ -1,0 +1,21 @@
+Ego-Kernel Business Source License 1.1
+
+Parameters
+Licensor: Continuum Solutions Limited (Ego Kernel)
+Software: The Ego-Kernel (EK-1) Orchestrator (Golang), including all sub-modules and associated documentation.
+Change Date: February 26, 2026 + 3 Years (February 26, 2029).
+Change License: Apache License, Version 2.0.
+
+Additional Use Grant: You are authorized to use the Software for Personal, Non-Commercial use and for Research purposes without restriction. Use by any entity (or affiliated group) with more than $3,000,000 (USD) in annual revenue or total funding is prohibited without a separate commercial license from the Licensor.
+
+1. License Terms
+The Licensor hereby grants you the right to copy, modify, create derivative works, redistribute, and make non-commercial use of the Software in accordance with the terms of this License.
+
+2. Commercial Use
+Any use of the Software that does not fall within the Additional Use Grant (specifically commercial use by organizations exceeding the revenue/funding threshold) requires a commercial agreement. This ensures that the "Sovereignty Tax" is paid by those extracting massive enterprise value from the protocol.
+
+3. Change to Open Source
+On the Change Date, or the fourth anniversary of the first public release of a version of the Software (whichever is earlier), this License will automatically convert to the Change License (Apache 2.0).
+
+4. Notices
+You must include a copy of this License and all original copyright notices in any copy or derivative work of the Software you distribute.
