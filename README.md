@@ -8,12 +8,12 @@ Guides for deploying every module of the Ego-Kernel MVP.
 
 | # | Guide | What It Covers |
 |---|-------|----------------|
-| [00](./00-prerequisites.md) | Prerequisites | Go, Rust, Solana CLI, Anchor, Node — all version-pinned |
-| [01](./01-deploy-go-brain.md) | Go Brain | Build, test, run, tune, and TEE-deploy the off-chain orchestrator |
-| [02](./02-deploy-anchor.md) | Anchor Program | Build, test, and deploy the on-chain Reputation Ledger to devnet/mainnet |
-| [03](./03-deploy-harvest.md) | Harvest Scanner | Run locally, wire live APIs, schedule as cron/systemd/Docker |
-| [04](./04-quickstart.md) | Quickstart | Zero to running Shadow demo in 5 minutes (Go only, no blockchain) |
-| [05](./05-phase-deployment.md) | Phase Deployment | Full 12-week sprint: Shadow → Hand → Voice |
+| [00](./docs/00-prerequisites.md) | Prerequisites | Go, Rust, Solana CLI, Anchor, Node — all version-pinned |
+| [01](./docs/01-deploy-go-brain.md) | Go Brain | Build, test, run, tune, and TEE-deploy the off-chain orchestrator |
+| [02](./docs/02-deploy-anchor.md) | Anchor Program | Build, test, and deploy the on-chain Reputation Ledger to devnet/mainnet |
+| [03](./docs/03-deploy-harvest.md) | Harvest Scanner | Run locally, wire live APIs, schedule as cron/systemd/Docker |
+| [04](./docs/04-quickstart.md) | Quickstart | Zero to running Shadow demo in 5 minutes (Go only, no blockchain) |
+| [05](./docs/05-phase-deployment.md) | Phase Deployment | Full 12-week sprint: Shadow → Hand → Voice |
 
 ---
 
