@@ -1,5 +1,9 @@
 package integrations
 
+import (
+	"time"
+)
+
 type ConnectionStatus int
 
 const (
@@ -20,4 +24,6 @@ type Service struct {
 	Description string           `json:"description"`
 	Status      ConnectionStatus `json:"status"`
 	Custom      bool             `json:"custom"`
+	CreatedAt   time.Time        `json:"created_at"`
+	UpdatedAt   time.Time        `json:"updated_at"`
 }
