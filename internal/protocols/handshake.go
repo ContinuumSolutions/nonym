@@ -15,7 +15,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/egokernel/ek1/src/ledger"
+	"github.com/egokernel/ek1/internal/ledger"
 )
 
 // HandshakeParams describes the context for a negotiation.

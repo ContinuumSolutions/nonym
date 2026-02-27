@@ -1,7 +1,7 @@
 // Package harvest implements the Social Leverage Scanner.
 // It identifies "Hidden Value" in professional and social networks:
 // - Unreciprocated favors (Social Debt)
-// - Bottleneck matches (your solution ↔ their problem)
+// - Bottleneck matches (your solution <-> their problem)
 // - Passive revenue opportunities
 //
 // In Phase 1 (Shadow), this runs in read-only mode and surfaces
