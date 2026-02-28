@@ -1,154 +1,163 @@
+// @title          EK-1 Ego-Kernel API
+// @version        1.0
+// @description    Personal AI agent — calendar, email, finance & negotiations.
+// @host           localhost:3000
+// @BasePath       /
+// @schemes        http
 package main
 
 import (
-	"fmt"
+	"database/sql"
+	"log"
 	"os"
-	"os/signal"
-	"syscall"
+	"strconv"
+	"time"
 
-	"github.com/egokernel/ek1/src/brain"
-	"github.com/egokernel/ek1/src/ledger"
-	"github.com/egokernel/ek1/src/protocols"
+	"github.com/joho/godotenv"
+
+	_ "github.com/egokernel/ek1/docs"
+	"github.com/egokernel/ek1/internal/activities"
+	"github.com/egokernel/ek1/internal/ai"
+	"github.com/egokernel/ek1/internal/biometrics"
+	"github.com/egokernel/ek1/internal/brain"
+	"github.com/egokernel/ek1/internal/datasync"
+	"github.com/egokernel/ek1/internal/harvest"
+	"github.com/egokernel/ek1/internal/integrations"
+	"github.com/egokernel/ek1/internal/ledger"
+	"github.com/egokernel/ek1/internal/notifications"
+	"github.com/egokernel/ek1/internal/profile"
+	"github.com/egokernel/ek1/internal/scheduler"
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/gofiber/fiber/v2/middleware/recover"
+	fiberswagger "github.com/swaggo/fiber-swagger"
+	_ "modernc.org/sqlite"
 )
 
+func initDB() (*sql.DB, error) {
+	db, err := sql.Open("sqlite", "./ek1.db")
+	if err != nil {
+		return nil, err
+	}
+	if err := db.Ping(); err != nil {
+		return nil, err
+	}
+	_, err = db.Exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;`)
+	return db, err
+}
+
+func syncInterval() time.Duration {
+	mins, _ := strconv.Atoi(os.Getenv("SYNC_INTERVAL_MINUTES"))
+	if mins <= 0 {
+		mins = 15
+	}
+	return time.Duration(mins) * time.Minute
+}
+
 func main() {
-	fmt.Println(`
-╔═══════════════════════════════════════════════════════════════╗
-║            E G O - K E R N E L   (EK-1)                      ║
-║         Sovereign Architecture — Off-Chain Brain              ║
-║                    Phase 1: The Shadow                        ║
-╚═══════════════════════════════════════════════════════════════╝
-`)
-
-	uid := os.Getenv("EK_UID")
-	if uid == "" {
-		uid = "Sovereign_001_Alpha"
+	if err := godotenv.Load(".env"); err != nil {
+		log.Println("no .env file found, falling back to environment")
 	}
 
-	// --- Initialize the Kernel ---
-	values := brain.DefaultMatrix()
-	ek := brain.NewKernel(uid, values)
+	db, err := initDB()
+	if err != nil {
+		log.Fatalf("failed to open database: %v", err)
+	}
+	defer db.Close()
 
-	// --- Reputation Ledger (Phase 2: connects to Solana Devnet) ---
-	repClient := ledger.NewLocalLedger()
-	repClient.Initialize(uid)
-
-	// --- Trade Engine (concurrent signal processing) ---
-	engine := brain.NewTradeEngine(ek, 100)
-	go consumeResults(engine)
-
-	// --- Simulate Phase 1: "The Shadow" Decision Mirror ---
-	fmt.Println("\n[SHADOW MODE] Evaluating today's queue against Value-Weighting Matrix...\n")
-	runShadowDemo(uid, ek, engine, repClient)
-
-	// --- Titan Handshake Demo ---
-	fmt.Println("\n[TITAN HANDSHAKE] Initiating P2P negotiation demo...\n")
-	runHandshakeDemo(uid, ek, repClient)
-
-	// --- Daily Summary ---
-	ek.DailySummary()
-
-	// Wait for interrupt.
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-
-	engine.Close()
-	fmt.Println("\nEK-1 offline. Sovereignty preserved.")
-}
-
-func runShadowDemo(uid string, ek *brain.EgoKernel, engine *brain.TradeEngine, rep *ledger.LocalLedger) {
-	// Simulate the "Day in the Life" queue.
-	signals := []brain.MarketSignal{
-		{
-			Source: "Raydium", Type: "financial/arbitrage",
-			ExpectedROI: 1200, TimeCommitment: 0.01, ReputationRisk: 0.01,
-			AutoExecutable: true,
-		},
-		{
-			Source: "EmailAPI", Type: "meeting/status-update",
-			ExpectedROI: 50, TimeCommitment: 1.0, ReputationRisk: 0.0,
-			AutoExecutable: false,
-		},
-		{
-			Source: "VentureCapital", Type: "deal/prestige-project",
-			ExpectedROI: 5000, TimeCommitment: 10.0, ReputationRisk: 0.3,
-			AutoExecutable: false,
-		},
-		{
-			Source: "EnergyMarket", Type: "financial/futures",
-			ExpectedROI: 420, TimeCommitment: 0.001, ReputationRisk: 0.02,
-			AutoExecutable: true,
-		},
-		{
-			Source: "LinkedInAPI", Type: "social/toxic-connection",
-			ExpectedROI: 0, TimeCommitment: 0.5, ReputationRisk: 0.8,
-			AutoExecutable: false,
-		},
+	// ── Stores & migrations ──────────────────────────────────────────────────
+	profileStore := profile.NewStore(db)
+	if err := profileStore.Migrate(); err != nil {
+		log.Fatalf("profile migration failed: %v", err)
 	}
 
-	// Evaluate each via triage + trade engine.
-	for _, sig := range signals {
-		req := brain.IncomingRequest{
-			ID:             sig.Source + "/" + sig.Type,
-			SenderID:       sig.Source,
-			Description:    sig.Type,
-			EstimatedROI:   sig.ExpectedROI,
-			TimeCommitment: sig.TimeCommitment,
-			ManipulationPct: func() float64 {
-				if sig.ReputationRisk > 0.5 {
-					return 0.20 // simulate manipulative source
-				}
-				return 0.02
-			}(),
-		}
-		action, reason := ek.Triage(req)
-		fmt.Printf("  TRIAGE  %-40s → %-6s | %s\n", req.ID, action, reason)
+	sqliteLedger := ledger.NewSQLiteLedger(db)
+	if err := sqliteLedger.Migrate(); err != nil {
+		log.Fatalf("ledger migration failed: %v", err)
+	}
+	sqliteLedger.Initialize("ek1-kernel")
 
-		if action == "ACCEPT" {
-			engine.Submit(sig)
-		}
+	checkInStore := biometrics.NewStore(db)
+	if err := checkInStore.Migrate(); err != nil {
+		log.Fatalf("biometrics migration failed: %v", err)
 	}
 
-	// Ranked auto-executable opportunities.
-	ranked := brain.ScoreAndRank(ek.Values, signals)
-	fmt.Printf("\n  TOP AUTO-EXECUTABLE OPPORTUNITIES:\n")
-	for i, r := range ranked {
-		fmt.Printf("    %d. %s\n", i+1, r.Reason)
+	eventsStore := activities.NewStore(db)
+	if err := eventsStore.Migrate(); err != nil {
+		log.Fatalf("activities migration failed: %v", err)
 	}
 
-	// Log a simulated reputation event.
-	rep.LogSuccess(uid, 50)
-	fmt.Printf("\n  Reputation after shadow run: %d\n", rep.Score(uid))
-}
+	rawKey := os.Getenv("EK1_SECRET_KEY")
+	if rawKey == "" {
+		log.Fatal("EK1_SECRET_KEY is required — generate one with: openssl rand -hex 32")
+	}
+	encKey, err := integrations.ParseKey(rawKey)
+	if err != nil {
+		log.Fatalf("invalid EK1_SECRET_KEY: %v", err)
+	}
 
-func runHandshakeDemo(uid string, ek *brain.EgoKernel, rep *ledger.LocalLedger) {
-	rivalID := "RivalAE_VC_772"
-	rep.Initialize(rivalID)
-	rep.LogBetrayal(rivalID, 3) // Rival has 3 ghosted contracts
+	servicesStore := integrations.NewStore(db, encKey)
+	if err := servicesStore.Migrate(); err != nil {
+		log.Fatalf("integrations migration failed: %v", err)
+	}
+	if err := servicesStore.Seed(); err != nil {
+		log.Fatalf("integrations seed failed: %v", err)
+	}
 
-	hs := protocols.NewHandshake(ek.UID, rivalID, rep)
-	result := hs.Execute(protocols.HandshakeParams{
-		ResourceName:   "GPU Cluster / High-Priority Access",
-		UserDesire:     0.85,
-		RivalDesire:    0.70,
-		UserRepScore:   float64(rep.Score(ek.UID)),
-		RivalRepScore:  float64(rep.Score(rivalID)),
-		MarketRate:     10000.0,
+	harvestStore := harvest.NewStore(db)
+	if err := harvestStore.Migrate(); err != nil {
+		log.Fatalf("harvest migration failed: %v", err)
+	}
+
+	notifsStore := notifications.NewStore(db)
+	if err := notifsStore.Migrate(); err != nil {
+		log.Fatalf("notifications migration failed: %v", err)
+	}
+
+	// ── Brain ────────────────────────────────────────────────────────────────
+	prof, err := profileStore.Get()
+	if err != nil {
+		log.Fatalf("failed to load profile: %v", err)
+	}
+	brainSvc := brain.NewService("ek1-kernel", prof.Preferences, sqliteLedger)
+
+	// ── Pipeline ─────────────────────────────────────────────────────────────
+	aiClient := ai.NewClient(os.Getenv("OLLAMA_HOST"), os.Getenv("OLLAMA_MODEL"))
+	syncEngine := datasync.NewEngine(servicesStore, datasync.DefaultAdapters())
+	pipeline := brain.NewPipeline(brainSvc, aiClient, eventsStore, checkInStore)
+
+	// ── Scheduler ────────────────────────────────────────────────────────────
+	sched := scheduler.NewScheduler(syncEngine, pipeline, brainSvc, notifsStore, syncInterval())
+	sched.Start()
+
+	// ── Harvest ──────────────────────────────────────────────────────────────
+	harvestScanner := harvest.NewScanner(syncEngine, aiClient, eventsStore)
+
+	// ── HTTP app ─────────────────────────────────────────────────────────────
+	app := fiber.New(fiber.Config{AppName: "EK-1"})
+	app.Use(logger.New())
+	app.Use(recover.New())
+
+	// @Summary      Health check
+	// @Tags         system
+	// @Produce      json
+	// @Success      200  {object}  map[string]interface{}
+	// @Router       /health [get]
+	app.Get("/health", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{"status": "ok"})
 	})
 
-	fmt.Printf("  HANDSHAKE RESULT: %s\n", result.Outcome)
-	fmt.Printf("  Final Price: $%.2f\n", result.FinalPrice)
-	fmt.Printf("  Duration: %s\n", result.Duration)
-	fmt.Printf("  Log:\n")
-	for _, line := range result.Log {
-		fmt.Printf("    %s\n", line)
-	}
-}
+	app.Get("/swagger/*", fiberswagger.WrapHandler)
 
-func consumeResults(engine *brain.TradeEngine) {
-	for range engine.Results() {
-		// Results already logged by the kernel's emit() calls.
-		// In Phase 2, this goroutine submits EXECUTE decisions to the Solana RPC.
-	}
+	profile.NewHandler(profileStore).RegisterRoutes(app)
+	brain.NewHandler(brainSvc, eventsStore).RegisterRoutes(app)
+	ledger.NewHandler(sqliteLedger, "ek1-kernel").RegisterRoutes(app)
+	biometrics.NewHandler(checkInStore).RegisterRoutes(app)
+	activities.NewHandler(eventsStore).RegisterRoutes(app)
+	integrations.NewHandler(servicesStore).RegisterRoutes(app)
+	harvest.NewHandler(harvestScanner, harvestStore, notifsStore).RegisterRoutes(app)
+	notifications.NewHandler(notifsStore).RegisterRoutes(app)
+	scheduler.NewHandler(sched).RegisterRoutes(app)
+
+	log.Fatal(app.Listen(":3000"))
 }

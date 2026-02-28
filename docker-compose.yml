@@ -1,0 +1,56 @@
+name: ek1
+
+services:
+
+  # ── Ollama LLM ─────────────────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/version || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+
+  # Pull the model once on first start, then exits.
+  # Change the command to match OLLAMA_MODEL in your .env if you switch models.
+  ollama-pull:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama-models:/root/.ollama
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    command: pull llama3.2
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
+
+  # ── EK-1 Ego-Kernel ────────────────────────────────────────────────────────
+  ek1:
+    build: .
+    ports:
+      - "3000:3000"
+    # Load all variables from .env (EK1_SECRET_KEY, OLLAMA_MODEL, SYNC_INTERVAL_MINUTES, etc.)
+    env_file:
+      - .env
+    environment:
+      # Override the localhost value in .env with the Docker service hostname
+      OLLAMA_HOST: http://ollama:11434
+    volumes:
+      - ek1-data:/data
+    depends_on:
+      ollama:
+        condition: service_healthy
+      ollama-pull:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  ollama-models:   # Ollama model weights — persisted across restarts
+  ek1-data:        # SQLite database (ek1.db) — persisted across restarts

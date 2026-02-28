@@ -1,0 +1,1072 @@
+basePath: /
+definitions:
+  activities.Decision:
+    enum:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    type: integer
+    x-enum-varnames:
+    - Pending
+    - Accepted
+    - Declined
+    - Negotiated
+    - Automated
+    - Cancelled
+  activities.Event:
+    properties:
+      created_at:
+        type: string
+      decision:
+        $ref: '#/definitions/activities.Decision'
+      event_type:
+        $ref: '#/definitions/activities.EventType'
+      gain:
+        $ref: '#/definitions/activities.Gain'
+      id:
+        type: integer
+      importance:
+        $ref: '#/definitions/activities.Importance'
+      narrative:
+        description: Detail description of exactly what happened
+        type: string
+      read:
+        type: boolean
+      updated_at:
+        type: string
+    type: object
+  activities.EventType:
+    enum:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+    type: integer
+    x-enum-varnames:
+    - Finance
+    - Calendar
+    - Communication
+    - Billing
+    - Health
+  activities.Gain:
+    properties:
+      _symbol:
+        description: How to present the gain e.g $ for money type
+        type: string
+      _value:
+        type: number
+      details:
+        type: string
+      type:
+        $ref: '#/definitions/activities.GainType'
+    type: object
+  activities.GainType:
+    enum:
+    - 0
+    - 1
+    type: integer
+    x-enum-varnames:
+    - Positive
+    - Negative
+  activities.Importance:
+    enum:
+    - 0
+    - 1
+    - 2
+    type: integer
+    x-enum-varnames:
+    - Low
+    - Medium
+    - High
+  biometrics.CheckIn:
+    properties:
+      created_at:
+        type: string
+      energy:
+        type: integer
+      extra_context:
+        type: string
+      feeling:
+        type: integer
+      sleep:
+        type: integer
+      stress_level:
+        type: integer
+      updated_at:
+        type: string
+    type: object
+  brain.KernelSnapshot:
+    properties:
+      decision_count:
+        type: integer
+      identity_entropy:
+        type: number
+      status:
+        type: string
+      values:
+        $ref: '#/definitions/brain.ValueMatrix'
+    type: object
+  brain.PipelineResult:
+    properties:
+      accepted:
+        description: 'passed Triage + Decide → Decision: Automated'
+        type: integer
+      ghosted:
+        description: 'manipulation detected → Decision: Declined (ghost)'
+        type: integer
+      rejected:
+        description: 'failed Triage or Decide → Decision: Declined'
+        type: integer
+      shield_reason:
+        description: why shield was active
+        type: string
+      shielded:
+        description: biometrics gate was active during this run
+        type: boolean
+      total:
+        type: integer
+    type: object
+  brain.StatusResponse:
+    properties:
+      decision_count:
+        type: integer
+      identity_entropy:
+        type: number
+      reputation_score:
+        type: integer
+      reputation_tier:
+        type: string
+      status:
+        type: string
+      values:
+        $ref: '#/definitions/brain.ValueMatrix'
+    type: object
+  brain.ValueMatrix:
+    properties:
+      baseHourlyRate:
+        description: |-
+          BaseHourlyRate is the user's baseline value of one hour (in USD).
+          Used to compute the Cognitive Tax on time-consuming opportunities.
+        format: float64
+        type: number
+      presentBiasDiscount:
+        description: |-
+          PresentBiasDiscount (ρ) is the user's personal discount rate for future rewards.
+          Higher ρ = more present-biased (prefers immediate gains).
+        format: float64
+        type: number
+      reputationImpact:
+        description: |-
+          ReputationImpact: how much the user cares about ledger cleanliness (0–1).
+          HIGH priority. Predatory trades incur a reputation cost.
+        format: float64
+        type: number
+      riskTolerance:
+        description: |-
+          RiskTolerance: 0.05 = very conservative, 0.90 = degen.
+          MEDIUM priority. Mapped to a configurable σ.
+        format: float64
+        type: number
+      socialEntropy:
+        description: |-
+          SocialEntropy: desire to maintain human-like friction (prevents appearing robotic).
+          LOW priority. Set > 0 to inject periodic "irrational" human choices.
+        format: float64
+        type: number
+      temporalSovereignty:
+        description: |-
+          TemporalSovereignty: how much the user values unstructured free time (0–1).
+          CRITICAL priority. Any interaction yielding < 1.5× ROI on attention is culled.
+        format: float64
+        type: number
+      utilityThreshold:
+        description: |-
+          UtilityThreshold is the minimum computed utility required to execute an action.
+          Actions below this are automatically culled.
+        format: float64
+        type: number
+    type: object
+  harvest.ContactRecord:
+    properties:
+      favors_given:
+        description: favours the contact gave to the user
+        type: integer
+      favors_received:
+        description: favours the contact received from the user
+        type: integer
+      id:
+        type: string
+      last_contact:
+        type: string
+      name:
+        type: string
+      overlap:
+        description: max 0-1 solution/bottleneck similarity seen
+        type: number
+    type: object
+  harvest.HarvestResult:
+    properties:
+      contacts_found:
+        type: integer
+      debts:
+        items:
+          $ref: '#/definitions/harvest.SocialDebt'
+        type: array
+      opportunities:
+        items:
+          type: string
+        type: array
+      scanned_at:
+        type: string
+      total_value:
+        type: number
+    type: object
+  harvest.SocialDebt:
+    properties:
+      action:
+        description: recommended next step
+        type: string
+      contact:
+        $ref: '#/definitions/harvest.ContactRecord'
+      estimated_value:
+        description: USD equivalent
+        type: number
+      net_favors:
+        description: positive = contact owes the user
+        type: integer
+    type: object
+  integrations.AuthMethod:
+    enum:
+    - 0
+    - 1
+    type: integer
+    x-enum-varnames:
+    - APIKeyAuth
+    - OAuth2Auth
+  integrations.ConnectInput:
+    properties:
+      api_key:
+        type: string
+      oauth_access_token:
+        type: string
+      oauth_refresh_token:
+        type: string
+    type: object
+  integrations.ConnectionStatus:
+    enum:
+    - 0
+    - 1
+    - 2
+    type: integer
+    x-enum-comments:
+      InProgress: credentials being entered
+      Installed: connected and active
+      Pending: not installed
+    x-enum-descriptions:
+    - not installed
+    - credentials being entered
+    - connected and active
+    x-enum-varnames:
+    - Pending
+    - InProgress
+    - Installed
+  integrations.Service:
+    properties:
+      api_endpoint:
+        type: string
+      api_key:
+        description: masked on read, never raw
+        type: string
+      auth_method:
+        $ref: '#/definitions/integrations.AuthMethod'
+      category:
+        type: string
+      created_at:
+        type: string
+      custom:
+        type: boolean
+      description:
+        type: string
+      icon:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      oauth_connected:
+        type: boolean
+      slug:
+        type: string
+      status:
+        $ref: '#/definitions/integrations.ConnectionStatus'
+      updated_at:
+        type: string
+    type: object
+  ledger.HistoryEntry:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      impact:
+        type: integer
+      success:
+        type: boolean
+    type: object
+  notifications.Notification:
+    properties:
+      body:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: integer
+      read:
+        type: boolean
+      title:
+        type: string
+      type:
+        $ref: '#/definitions/notifications.Type'
+    type: object
+  notifications.Type:
+    enum:
+    - H2HI
+    - OPPORTUNITY
+    - HARVEST
+    - SOUL_DRIFT
+    type: string
+    x-enum-comments:
+      TypeH2HI: identity entropy spike — manual sync required
+      TypeHarvest: ghost-agreement opportunity detected
+      TypeOpportunity: high-value social debt detected by harvest engine
+      TypeSoulDrift: periodic irrational-human injection event
+    x-enum-descriptions:
+    - identity entropy spike — manual sync required
+    - high-value social debt detected by harvest engine
+    - ghost-agreement opportunity detected
+    - periodic irrational-human injection event
+    x-enum-varnames:
+    - TypeH2HI
+    - TypeOpportunity
+    - TypeHarvest
+    - TypeSoulDrift
+  profile.ConnectionSetting:
+    properties:
+      api_endpoint:
+        type: string
+      kernel_name:
+        type: string
+      timezone:
+        description: IANA timezone name e.g. "Europe/London", "UTC"
+        type: string
+    type: object
+  profile.DecisionPreference:
+    properties:
+      autonomy:
+        description: Minimise dependence on third parties
+        type: integer
+      financial_growth:
+        description: Prioritise revenue-generating decisions
+        type: integer
+      health_recovery:
+        description: Respect sleep, stress and energy limits
+        type: integer
+      privacy_protection:
+        description: Refuse data sharing with low-trust parties
+        type: integer
+      reputation_building:
+        description: Long-term trust over short-term gain
+        type: integer
+      time_sovereignty:
+        description: Weight given to protecting your time
+        type: integer
+    type: object
+  profile.EKProgress:
+    properties:
+      hand:
+        type: boolean
+      shadow:
+        type: boolean
+      voice:
+        type: boolean
+    type: object
+  profile.Profile:
+    properties:
+      api_endpoint:
+        type: string
+      created_at:
+        type: string
+      kernel_name:
+        type: string
+      preferences:
+        $ref: '#/definitions/profile.DecisionPreference'
+      progress:
+        $ref: '#/definitions/profile.EKProgress'
+      timezone:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  scheduler.Status:
+    properties:
+      interval_minutes:
+        type: integer
+      last_result:
+        allOf:
+        - $ref: '#/definitions/brain.PipelineResult'
+        description: nil if never run
+      last_run_at:
+        description: nil if never run
+        type: string
+      last_signal_count:
+        type: integer
+      next_run_at:
+        description: nil if not started
+        type: string
+    type: object
+host: localhost:3000
+info:
+  contact: {}
+  description: Personal AI agent — calendar, email, finance & negotiations.
+  title: EK-1 Ego-Kernel API
+  version: "1.0"
+paths:
+  /activities/events:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/activities.Event'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List events
+      tags:
+      - activities
+  /activities/events/{id}:
+    get:
+      parameters:
+      - description: Event ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/activities.Event'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get event by ID
+      tags:
+      - activities
+  /activities/events/{id}/read:
+    put:
+      parameters:
+      - description: Event ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/activities.Event'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Toggle read status
+      tags:
+      - activities
+  /biometrics/checkin:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/biometrics.CheckIn'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get current check-in
+      tags:
+      - biometrics
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Check-in data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/biometrics.CheckIn'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/biometrics.CheckIn'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update check-in
+      tags:
+      - biometrics
+  /brain/events:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/activities.Event'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List brain events (alias for /activities/events)
+      tags:
+      - brain
+  /brain/status:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/brain.StatusResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get brain status
+      tags:
+      - brain
+  /brain/sync-acknowledge:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/brain.KernelSnapshot'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Acknowledge manual sync (clears H2HI)
+      tags:
+      - brain
+  /harvest/results:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/harvest.HarvestResult'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get latest harvest results
+      tags:
+      - harvest
+  /harvest/scan:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/harvest.HarvestResult'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Run harvest scan
+      tags:
+      - harvest
+  /integrations/services:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/integrations.Service'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List all services
+      tags:
+      - integrations
+  /integrations/services/{id}:
+    get:
+      parameters:
+      - description: Service ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/integrations.Service'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get service by ID
+      tags:
+      - integrations
+  /integrations/services/{id}/connect:
+    delete:
+      parameters:
+      - description: Service ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/integrations.Service'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Uninstall a service
+      tags:
+      - integrations
+    post:
+      parameters:
+      - description: Service ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/integrations.Service'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Start connecting a service
+      tags:
+      - integrations
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Service ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Credentials (api_key or oauth_access_token)
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/integrations.ConnectInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/integrations.Service'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Complete connecting a service
+      tags:
+      - integrations
+  /integrations/services/custom:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Custom service (name, category, api_endpoint, api_key required)
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/integrations.Service'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/integrations.Service'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Create custom service
+      tags:
+      - integrations
+  /ledger/history:
+    get:
+      parameters:
+      - description: Results per page (1–100, default 20)
+        in: query
+        name: limit
+        type: integer
+      - description: Pagination offset (default 0)
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/ledger.HistoryEntry'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get reputation history
+      tags:
+      - ledger
+  /ledger/score:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get reputation score
+      tags:
+      - ledger
+  /notifications:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/notifications.Notification'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List unread notifications
+      tags:
+      - notifications
+  /notifications/{id}/read:
+    put:
+      parameters:
+      - description: Notification ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Mark notification as read
+      tags:
+      - notifications
+  /notifications/read-all:
+    put:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Mark all notifications as read
+      tags:
+      - notifications
+  /profile:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/profile.Profile'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get profile
+      tags:
+      - profile
+  /profile/connection:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Connection settings
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/profile.ConnectionSetting'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/profile.Profile'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update connection settings
+      tags:
+      - profile
+  /profile/preferences:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Preference weights (1–10 each)
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/profile.DecisionPreference'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/profile.Profile'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update decision preferences
+      tags:
+      - profile
+  /scheduler/run-now:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/brain.PipelineResult'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Trigger immediate pipeline cycle
+      tags:
+      - scheduler
+  /scheduler/status:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/scheduler.Status'
+      summary: Get scheduler status
+      tags:
+      - scheduler
+schemes:
+- http
+swagger: "2.0"
