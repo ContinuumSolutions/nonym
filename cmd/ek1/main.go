@@ -12,6 +12,7 @@ import (
 	"github.com/egokernel/ek1/internal/biometrics"
 	"github.com/egokernel/ek1/internal/brain"
 	"github.com/egokernel/ek1/internal/datasync"
+	"github.com/egokernel/ek1/internal/harvest"
 	"github.com/egokernel/ek1/internal/integrations"
 	"github.com/egokernel/ek1/internal/ledger"
 	"github.com/egokernel/ek1/internal/profile"
@@ -102,6 +103,12 @@ func main() {
 	pipeline := brain.NewPipeline(brainSvc, aiClient, eventsStore)
 	_ = pipeline // will be called by the scheduler in step 9
 
+	harvestStore := harvest.NewStore(db)
+	if err := harvestStore.Migrate(); err != nil {
+		log.Fatalf("harvest migration failed: %v", err)
+	}
+	harvestScanner := harvest.NewScanner(syncEngine, aiClient, eventsStore)
+
 	app := fiber.New(fiber.Config{
 		AppName: "EK-1",
 	})
@@ -119,6 +126,7 @@ func main() {
 	biometrics.NewHandler(checkInStore).RegisterRoutes(app)
 	activities.NewHandler(eventsStore).RegisterRoutes(app)
 	integrations.NewHandler(servicesStore).RegisterRoutes(app)
+	harvest.NewHandler(harvestScanner, harvestStore).RegisterRoutes(app)
 
 	log.Fatal(app.Listen(":3000"))
 }
