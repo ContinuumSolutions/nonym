@@ -120,7 +120,7 @@ type RawSignal struct {
 
 **Output:** An `IncomingRequest` (for triage) + partial `Event` struct ready for the activities table.
 
-**Config added to `.env-temp`:**
+**Config added to `.env`:**
 ```
 OLLAMA_HOST=http://localhost:11434
 OLLAMA_MODEL=llama3.2
@@ -182,7 +182,7 @@ This wires `biometrics.CheckIn` → `brain.EgoKernel` for the first time.
 ### 9. Scheduler — Automated Sync Cycles
 **What:** A background goroutine that runs the full pipeline (sync → LLM → brain → events) on a configurable interval. Default: every 15 minutes while the app is running.
 
-**Config added to `.env-temp`:**
+**Config added to `.env`:**
 ```
 SYNC_INTERVAL_MINUTES=15
 ```

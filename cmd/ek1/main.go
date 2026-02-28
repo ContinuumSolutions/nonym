@@ -11,6 +11,7 @@ import (
 	"github.com/egokernel/ek1/internal/biometrics"
 	"github.com/egokernel/ek1/internal/brain"
 	"github.com/egokernel/ek1/internal/integrations"
+	"github.com/egokernel/ek1/internal/ledger"
 	"github.com/egokernel/ek1/internal/profile"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
@@ -52,11 +53,17 @@ func main() {
 		log.Fatalf("profile migration failed: %v", err)
 	}
 
+	sqliteLedger := ledger.NewSQLiteLedger(db)
+	if err := sqliteLedger.Migrate(); err != nil {
+		log.Fatalf("ledger migration failed: %v", err)
+	}
+	sqliteLedger.Initialize("ek1-kernel")
+
 	prof, err := profileStore.Get()
 	if err != nil {
 		log.Fatalf("failed to load profile: %v", err)
 	}
-	brainSvc := brain.NewService("ek1-kernel", prof.Preferences)
+	brainSvc := brain.NewService("ek1-kernel", prof.Preferences, sqliteLedger)
 
 	checkInStore := biometrics.NewStore(db)
 	if err := checkInStore.Migrate(); err != nil {
@@ -98,6 +105,7 @@ func main() {
 
 	profile.NewHandler(profileStore).RegisterRoutes(app)
 	brain.NewHandler(brainSvc).RegisterRoutes(app)
+	ledger.NewHandler(sqliteLedger, "ek1-kernel").RegisterRoutes(app)
 	biometrics.NewHandler(checkInStore).RegisterRoutes(app)
 	activities.NewHandler(eventsStore).RegisterRoutes(app)
 	integrations.NewHandler(servicesStore).RegisterRoutes(app)

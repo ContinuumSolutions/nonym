@@ -11,17 +11,15 @@ import (
 type Service struct {
 	uid    string
 	kernel *EgoKernel
-	ledger *ledger.LocalLedger
+	ledger ledger.Ledger
 }
 
-// NewService initialises the kernel and ledger from the user's stored preferences.
-func NewService(uid string, prefs profile.DecisionPreference) *Service {
-	l := ledger.NewLocalLedger()
-	l.Initialize(uid)
-
+// NewService initialises the kernel from the user's stored preferences.
+// The ledger is injected so it can be swapped between implementations
+// (SQLiteLedger for Phase 1/2, Solana RPC for Phase 3).
+func NewService(uid string, prefs profile.DecisionPreference, l ledger.Ledger) *Service {
 	vm := MatrixFromPreferences(prefs)
 	k := NewKernel(uid, vm)
-
 	return &Service{uid: uid, kernel: k, ledger: l}
 }
 
@@ -29,7 +27,7 @@ func NewService(uid string, prefs profile.DecisionPreference) *Service {
 func (s *Service) Kernel() *EgoKernel { return s.kernel }
 
 // Ledger returns the reputation ledger for use by other packages.
-func (s *Service) Ledger() *ledger.LocalLedger { return s.ledger }
+func (s *Service) Ledger() ledger.Ledger { return s.ledger }
 
 // UpdateValues rebuilds the ValueMatrix from updated preferences and applies it
 // to the running kernel. Safe to call at any time.

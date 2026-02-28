@@ -40,12 +40,12 @@ type HandshakeOutcome struct {
 type Handshake struct {
 	userID  string
 	rivalID string
-	ledger  *ledger.LocalLedger
+	ledger  ledger.Ledger
 	log     []string
 }
 
 // NewHandshake creates a new Titan Handshake session.
-func NewHandshake(userID, rivalID string, rep *ledger.LocalLedger) *Handshake {
+func NewHandshake(userID, rivalID string, rep ledger.Ledger) *Handshake {
 	return &Handshake{
 		userID:  userID,
 		rivalID: rivalID,
