@@ -50,6 +50,14 @@ func (s *Service) UpdateValues(prefs profile.DecisionPreference) {
 	s.kernel.mu.Unlock()
 }
 
+// IsH2HI returns true when the kernel is in H2HI (identity entropy spike) mode.
+// Thread-safe; used by the scheduler to detect state transitions for notifications.
+func (s *Service) IsH2HI() bool {
+	s.kernel.mu.RLock()
+	defer s.kernel.mu.RUnlock()
+	return s.kernel.Status == StatusH2HI
+}
+
 // ApplyBiometricsGate checks today's biometrics and updates the kernel status.
 //
 // Shield conditions (from PLAN.md step 8):

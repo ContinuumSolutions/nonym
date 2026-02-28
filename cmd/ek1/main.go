@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"log"
 	"os"
+	"strconv"
+	"time"
 
 	"github.com/joho/godotenv"
 
@@ -15,7 +17,9 @@ import (
 	"github.com/egokernel/ek1/internal/harvest"
 	"github.com/egokernel/ek1/internal/integrations"
 	"github.com/egokernel/ek1/internal/ledger"
+	"github.com/egokernel/ek1/internal/notifications"
 	"github.com/egokernel/ek1/internal/profile"
+	"github.com/egokernel/ek1/internal/scheduler"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
@@ -27,17 +31,19 @@ func initDB() (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	if err := db.Ping(); err != nil {
 		return nil, err
 	}
-
 	_, err = db.Exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;`)
-	if err != nil {
-		return nil, err
-	}
+	return db, err
+}
 
-	return db, nil
+func syncInterval() time.Duration {
+	mins, _ := strconv.Atoi(os.Getenv("SYNC_INTERVAL_MINUTES"))
+	if mins <= 0 {
+		mins = 15
+	}
+	return time.Duration(mins) * time.Minute
 }
 
 func main() {
@@ -51,6 +57,7 @@ func main() {
 	}
 	defer db.Close()
 
+	// ── Stores & migrations ──────────────────────────────────────────────────
 	profileStore := profile.NewStore(db)
 	if err := profileStore.Migrate(); err != nil {
 		log.Fatalf("profile migration failed: %v", err)
@@ -61,12 +68,6 @@ func main() {
 		log.Fatalf("ledger migration failed: %v", err)
 	}
 	sqliteLedger.Initialize("ek1-kernel")
-
-	prof, err := profileStore.Get()
-	if err != nil {
-		log.Fatalf("failed to load profile: %v", err)
-	}
-	brainSvc := brain.NewService("ek1-kernel", prof.Preferences, sqliteLedger)
 
 	checkInStore := biometrics.NewStore(db)
 	if err := checkInStore.Migrate(); err != nil {
@@ -95,24 +96,37 @@ func main() {
 		log.Fatalf("integrations seed failed: %v", err)
 	}
 
-	syncEngine := datasync.NewEngine(servicesStore, datasync.DefaultAdapters())
-	_ = syncEngine // will be wired to the scheduler in step 9
-
-	aiClient := ai.NewClient(os.Getenv("OLLAMA_HOST"), os.Getenv("OLLAMA_MODEL"))
-
-	pipeline := brain.NewPipeline(brainSvc, aiClient, eventsStore, checkInStore)
-	_ = pipeline // will be called by the scheduler in step 9
-
 	harvestStore := harvest.NewStore(db)
 	if err := harvestStore.Migrate(); err != nil {
 		log.Fatalf("harvest migration failed: %v", err)
 	}
+
+	notifsStore := notifications.NewStore(db)
+	if err := notifsStore.Migrate(); err != nil {
+		log.Fatalf("notifications migration failed: %v", err)
+	}
+
+	// ── Brain ────────────────────────────────────────────────────────────────
+	prof, err := profileStore.Get()
+	if err != nil {
+		log.Fatalf("failed to load profile: %v", err)
+	}
+	brainSvc := brain.NewService("ek1-kernel", prof.Preferences, sqliteLedger)
+
+	// ── Pipeline ─────────────────────────────────────────────────────────────
+	aiClient := ai.NewClient(os.Getenv("OLLAMA_HOST"), os.Getenv("OLLAMA_MODEL"))
+	syncEngine := datasync.NewEngine(servicesStore, datasync.DefaultAdapters())
+	pipeline := brain.NewPipeline(brainSvc, aiClient, eventsStore, checkInStore)
+
+	// ── Scheduler ────────────────────────────────────────────────────────────
+	sched := scheduler.NewScheduler(syncEngine, pipeline, brainSvc, notifsStore, syncInterval())
+	sched.Start()
+
+	// ── Harvest ──────────────────────────────────────────────────────────────
 	harvestScanner := harvest.NewScanner(syncEngine, aiClient, eventsStore)
 
-	app := fiber.New(fiber.Config{
-		AppName: "EK-1",
-	})
-
+	// ── HTTP app ─────────────────────────────────────────────────────────────
+	app := fiber.New(fiber.Config{AppName: "EK-1"})
 	app.Use(logger.New())
 	app.Use(recover.New())
 
@@ -126,7 +140,9 @@ func main() {
 	biometrics.NewHandler(checkInStore).RegisterRoutes(app)
 	activities.NewHandler(eventsStore).RegisterRoutes(app)
 	integrations.NewHandler(servicesStore).RegisterRoutes(app)
-	harvest.NewHandler(harvestScanner, harvestStore).RegisterRoutes(app)
+	harvest.NewHandler(harvestScanner, harvestStore, notifsStore).RegisterRoutes(app)
+	notifications.NewHandler(notifsStore).RegisterRoutes(app)
+	scheduler.NewHandler(sched).RegisterRoutes(app)
 
 	log.Fatal(app.Listen(":3000"))
 }
