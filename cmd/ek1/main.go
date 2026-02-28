@@ -3,9 +3,13 @@ package main
 import (
 	"database/sql"
 	"log"
+	"os"
+
+	"github.com/joho/godotenv"
 
 	"github.com/egokernel/ek1/internal/activities"
 	"github.com/egokernel/ek1/internal/biometrics"
+	"github.com/egokernel/ek1/internal/integrations"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
@@ -31,6 +35,10 @@ func initDB() (*sql.DB, error) {
 }
 
 func main() {
+	if err := godotenv.Load(".env-temp"); err != nil {
+		log.Println("no .env-temp file found, falling back to environment")
+	}
+
 	db, err := initDB()
 	if err != nil {
 		log.Fatalf("failed to open database: %v", err)
@@ -47,6 +55,23 @@ func main() {
 		log.Fatalf("activities migration failed: %v", err)
 	}
 
+	rawKey := os.Getenv("EK1_SECRET_KEY")
+	if rawKey == "" {
+		log.Fatal("EK1_SECRET_KEY is required — generate one with: openssl rand -hex 32")
+	}
+	encKey, err := integrations.ParseKey(rawKey)
+	if err != nil {
+		log.Fatalf("invalid EK1_SECRET_KEY: %v", err)
+	}
+
+	servicesStore := integrations.NewStore(db, encKey)
+	if err := servicesStore.Migrate(); err != nil {
+		log.Fatalf("integrations migration failed: %v", err)
+	}
+	if err := servicesStore.Seed(); err != nil {
+		log.Fatalf("integrations seed failed: %v", err)
+	}
+
 	app := fiber.New(fiber.Config{
 		AppName: "EK-1",
 	})
@@ -60,6 +85,7 @@ func main() {
 
 	biometrics.NewHandler(checkInStore).RegisterRoutes(app)
 	activities.NewHandler(eventsStore).RegisterRoutes(app)
+	integrations.NewHandler(servicesStore).RegisterRoutes(app)
 
 	log.Fatal(app.Listen(":3000"))
 }
