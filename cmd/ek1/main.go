@@ -9,6 +9,7 @@ import (
 
 	"github.com/egokernel/ek1/internal/activities"
 	"github.com/egokernel/ek1/internal/biometrics"
+	"github.com/egokernel/ek1/internal/brain"
 	"github.com/egokernel/ek1/internal/integrations"
 	"github.com/egokernel/ek1/internal/profile"
 	"github.com/gofiber/fiber/v2"
@@ -36,8 +37,8 @@ func initDB() (*sql.DB, error) {
 }
 
 func main() {
-	if err := godotenv.Load(".env-temp"); err != nil {
-		log.Println("no .env-temp file found, falling back to environment")
+	if err := godotenv.Load(".env"); err != nil {
+		log.Println("no .env file found, falling back to environment")
 	}
 
 	db, err := initDB()
@@ -50,6 +51,12 @@ func main() {
 	if err := profileStore.Migrate(); err != nil {
 		log.Fatalf("profile migration failed: %v", err)
 	}
+
+	prof, err := profileStore.Get()
+	if err != nil {
+		log.Fatalf("failed to load profile: %v", err)
+	}
+	brainSvc := brain.NewService("ek1-kernel", prof.Preferences)
 
 	checkInStore := biometrics.NewStore(db)
 	if err := checkInStore.Migrate(); err != nil {
@@ -90,6 +97,7 @@ func main() {
 	})
 
 	profile.NewHandler(profileStore).RegisterRoutes(app)
+	brain.NewHandler(brainSvc).RegisterRoutes(app)
 	biometrics.NewHandler(checkInStore).RegisterRoutes(app)
 	activities.NewHandler(eventsStore).RegisterRoutes(app)
 	integrations.NewHandler(servicesStore).RegisterRoutes(app)
