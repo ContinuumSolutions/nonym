@@ -2,51 +2,77 @@ package brain
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 
 	"github.com/egokernel/ek1/internal/activities"
 	"github.com/egokernel/ek1/internal/ai"
+	"github.com/egokernel/ek1/internal/biometrics"
 	"github.com/egokernel/ek1/internal/datasync"
 )
 
+const shieldNote = "Note: kernel operating in reduced-load mode due to elevated stress."
+
 // PipelineResult summarises one full sync cycle through the brain.
 type PipelineResult struct {
-	Total    int `json:"total"`
-	Accepted int `json:"accepted"` // passed Triage + Decide → Decision: Automated
-	Rejected int `json:"rejected"` // failed Triage or Decide → Decision: Declined
-	Ghosted  int `json:"ghosted"`  // manipulation detected → Decision: Declined (ghost)
+	Total        int    `json:"total"`
+	Accepted     int    `json:"accepted"`     // passed Triage + Decide → Decision: Automated
+	Rejected     int    `json:"rejected"`     // failed Triage or Decide → Decision: Declined
+	Ghosted      int    `json:"ghosted"`      // manipulation detected → Decision: Declined (ghost)
+	Shielded     bool   `json:"shielded"`     // biometrics gate was active during this run
+	ShieldReason string `json:"shield_reason,omitempty"` // why shield was active
 }
 
 // Pipeline is the full RawSignal → LLM → Triage → Decide → Event flow.
 // It is constructed once at startup and called by the scheduler (step 9).
 type Pipeline struct {
-	svc    *Service
-	ai     *ai.Client
-	events *activities.Store
+	svc        *Service
+	ai         *ai.Client
+	events     *activities.Store
+	biometrics *biometrics.Store
 }
 
-// NewPipeline wires the AI client, brain service, and activities store.
-func NewPipeline(svc *Service, aiClient *ai.Client, events *activities.Store) *Pipeline {
-	return &Pipeline{svc: svc, ai: aiClient, events: events}
+// NewPipeline wires the AI client, brain service, activities store, and biometrics store.
+func NewPipeline(svc *Service, aiClient *ai.Client, events *activities.Store, bio *biometrics.Store) *Pipeline {
+	return &Pipeline{svc: svc, ai: aiClient, events: events, biometrics: bio}
 }
 
 // Run processes a batch of raw signals end-to-end:
 //
-//	RawSignal → LLM analysis → Triage → (Accept → Decide) → Write Event
+//	Biometrics gate → RawSignal → LLM analysis → Triage → (Accept → Decide) → Write Event
 //
 // Every signal produces exactly one Event row regardless of outcome.
 // In Stage 1 (Shadow), Decision: Automated means "would have acted" — no real action is taken.
 func (p *Pipeline) Run(ctx context.Context, signals []datasync.RawSignal) (PipelineResult, error) {
 	result := PipelineResult{Total: len(signals)}
+
+	// ── Step 0: Biometrics gate ──────────────────────────────────────────────
+	checkIn, err := p.biometrics.Get()
+	if err != nil && !errors.Is(err, biometrics.ErrNotFound) {
+		log.Printf("brain/pipeline: read biometrics: %v", err)
+	}
+	if errors.Is(err, biometrics.ErrNotFound) {
+		checkIn = nil
+	}
+
+	shielded := p.svc.ApplyBiometricsGate(checkIn)
+	if shielded {
+		result.Shielded = true
+		result.ShieldReason = fmt.Sprintf(
+			"stress=%d sleep=%d — UtilityThreshold raised %.0f%%",
+			checkIn.StressLevel, checkIn.Sleep, (shieldMultiplier-1)*100,
+		)
+	}
+
 	if len(signals) == 0 {
 		return result, nil
 	}
 
-	// Step 1: LLM analysis — concurrent, capped at 3 goroutines inside AnalyseBatch.
+	// ── Step 1: LLM analysis — concurrent, capped at 3 goroutines ───────────
 	analysed, errs := p.ai.AnalyseBatch(ctx, signals)
 
-	// Step 2: Triage + Decide + Write for each signal.
+	// ── Step 2: Triage + Decide + Write ─────────────────────────────────────
 	for i, as := range analysed {
 		if as == nil {
 			log.Printf("brain/pipeline: signal[%d] LLM error: %v — skipping", i, errs[i])
@@ -84,14 +110,12 @@ func (p *Pipeline) Run(ctx context.Context, signals []datasync.RawSignal) (Pipel
 				Name:           fmt.Sprintf("%s — %s", as.Signal.ServiceSlug, as.Signal.Title),
 				ExpectedROI:    as.Request.EstimatedROI,
 				TimeCommitment: as.Request.TimeCommitment,
-				// Manipulation score doubles as reputation risk proxy after triage.
 				ReputationRisk: as.Request.ManipulationPct,
 			}
 			eval := p.svc.kernel.Decide(op)
 			if eval.Execute {
 				decision = activities.Automated
 				narrative = fmt.Sprintf("%s | %s", as.Narrative, eval.Reason)
-				// Log reputation success scaled to utility.
 				p.svc.ledger.LogSuccess(p.svc.uid, int64(eval.Utility))
 				result.Accepted++
 			} else {
@@ -101,10 +125,14 @@ func (p *Pipeline) Run(ctx context.Context, signals []datasync.RawSignal) (Pipel
 			}
 
 		default:
-			// Unexpected triage action — decline as a safe default.
 			decision = activities.Declined
 			narrative = fmt.Sprintf("Unknown triage action %q: %s", action, reason)
 			result.Rejected++
+		}
+
+		// Prepend the shield annotation when the biometrics gate is active.
+		if shielded {
+			narrative = fmt.Sprintf("[SHIELDED] %s | %s", shieldNote, narrative)
 		}
 
 		event := activities.Event{

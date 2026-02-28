@@ -100,7 +100,7 @@ func main() {
 
 	aiClient := ai.NewClient(os.Getenv("OLLAMA_HOST"), os.Getenv("OLLAMA_MODEL"))
 
-	pipeline := brain.NewPipeline(brainSvc, aiClient, eventsStore)
+	pipeline := brain.NewPipeline(brainSvc, aiClient, eventsStore, checkInStore)
 	_ = pipeline // will be called by the scheduler in step 9
 
 	harvestStore := harvest.NewStore(db)

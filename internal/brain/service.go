@@ -1,9 +1,16 @@
 package brain
 
 import (
+	"fmt"
+
+	"github.com/egokernel/ek1/internal/biometrics"
 	"github.com/egokernel/ek1/internal/ledger"
 	"github.com/egokernel/ek1/internal/profile"
 )
+
+// shieldMultiplier is the factor by which UtilityThreshold is raised when the
+// biometrics gate detects elevated stress or poor sleep.
+const shieldMultiplier = 1.5
 
 // Service is the runtime brain — an EgoKernel paired with its Ledger.
 // Initialised once at startup from the stored profile; values can be
@@ -12,6 +19,10 @@ type Service struct {
 	uid    string
 	kernel *EgoKernel
 	ledger ledger.Ledger
+
+	// baseThreshold stores the unshielded UtilityThreshold so it can be
+	// restored when the biometrics gate lifts the shield.
+	baseThreshold float64
 }
 
 // NewService initialises the kernel from the user's stored preferences.
@@ -35,7 +46,44 @@ func (s *Service) UpdateValues(prefs profile.DecisionPreference) {
 	vm := MatrixFromPreferences(prefs)
 	s.kernel.mu.Lock()
 	s.kernel.Values = vm
+	s.baseThreshold = vm.UtilityThreshold
 	s.kernel.mu.Unlock()
+}
+
+// ApplyBiometricsGate checks today's biometrics and updates the kernel status.
+//
+// Shield conditions (from PLAN.md step 8):
+//   - StressLevel > 7 OR Sleep < 5 → StatusShielded, UtilityThreshold × shieldMultiplier
+//   - Otherwise                    → StatusOnline (if was Shielded), restore threshold
+//
+// Returns true if the shield is active after the call.
+// Safe to call on every pipeline run; idempotent for unchanged conditions.
+func (s *Service) ApplyBiometricsGate(checkIn *biometrics.CheckIn) bool {
+	shielded := checkIn != nil && (checkIn.StressLevel > 7 || checkIn.Sleep < 5)
+
+	s.kernel.mu.Lock()
+	defer s.kernel.mu.Unlock()
+
+	if shielded && s.kernel.Status != StatusShielded {
+		// Save the current threshold before boosting.
+		s.baseThreshold = s.kernel.Values.UtilityThreshold
+		boosted := s.baseThreshold * shieldMultiplier
+		s.kernel.Values.UtilityThreshold = boosted
+		s.kernel.Status = StatusShielded
+		s.kernel.emit(fmt.Sprintf(
+			"BIOMETRICS GATE: StatusShielded activated — stress=%d sleep=%d. "+
+				"UtilityThreshold raised %.0f → %.0f.",
+			checkIn.StressLevel, checkIn.Sleep, s.baseThreshold, boosted,
+		))
+	} else if !shielded && s.kernel.Status == StatusShielded {
+		if s.baseThreshold > 0 {
+			s.kernel.Values.UtilityThreshold = s.baseThreshold
+		}
+		s.kernel.Status = StatusOnline
+		s.kernel.emit("BIOMETRICS GATE: Shield lifted — kernel returning to ONLINE mode.")
+	}
+
+	return shielded
 }
 
 // MatrixFromPreferences translates a 1–10 DecisionPreference into the float
