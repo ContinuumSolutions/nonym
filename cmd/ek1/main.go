@@ -8,8 +8,10 @@ import (
 	"github.com/joho/godotenv"
 
 	"github.com/egokernel/ek1/internal/activities"
+	"github.com/egokernel/ek1/internal/ai"
 	"github.com/egokernel/ek1/internal/biometrics"
 	"github.com/egokernel/ek1/internal/brain"
+	"github.com/egokernel/ek1/internal/datasync"
 	"github.com/egokernel/ek1/internal/integrations"
 	"github.com/egokernel/ek1/internal/ledger"
 	"github.com/egokernel/ek1/internal/profile"
@@ -91,6 +93,12 @@ func main() {
 	if err := servicesStore.Seed(); err != nil {
 		log.Fatalf("integrations seed failed: %v", err)
 	}
+
+	syncEngine := datasync.NewEngine(servicesStore, datasync.DefaultAdapters())
+	_ = syncEngine // will be wired to the scheduler in step 9
+
+	aiClient := ai.NewClient(os.Getenv("OLLAMA_HOST"), os.Getenv("OLLAMA_MODEL"))
+	_ = aiClient // will be wired to the brain pipeline in step 6
 
 	app := fiber.New(fiber.Config{
 		AppName: "EK-1",
