@@ -24,17 +24,22 @@ type PipelineResult struct {
 	ShieldReason string `json:"shield_reason,omitempty"` // why shield was active
 }
 
+// Analyser is satisfied by *ai.Client and can be stubbed in tests.
+type Analyser interface {
+	AnalyseBatch(ctx context.Context, signals []datasync.RawSignal) ([]*ai.AnalysedSignal, []error)
+}
+
 // Pipeline is the full RawSignal → LLM → Triage → Decide → Event flow.
 // It is constructed once at startup and called by the scheduler (step 9).
 type Pipeline struct {
 	svc        *Service
-	ai         *ai.Client
+	ai         Analyser
 	events     *activities.Store
 	biometrics *biometrics.Store
 }
 
 // NewPipeline wires the AI client, brain service, activities store, and biometrics store.
-func NewPipeline(svc *Service, aiClient *ai.Client, events *activities.Store, bio *biometrics.Store) *Pipeline {
+func NewPipeline(svc *Service, aiClient Analyser, events *activities.Store, bio *biometrics.Store) *Pipeline {
 	return &Pipeline{svc: svc, ai: aiClient, events: events, biometrics: bio}
 }
 

@@ -41,7 +41,7 @@ func (s *Store) Save(result HarvestResult) error {
 func (s *Store) Latest() (*HarvestResult, error) {
 	row := s.db.QueryRow(`
 		SELECT result_json FROM harvest_results
-		ORDER BY created_at DESC LIMIT 1
+		ORDER BY created_at DESC, id DESC LIMIT 1
 	`)
 	var raw string
 	if err := row.Scan(&raw); err != nil {
