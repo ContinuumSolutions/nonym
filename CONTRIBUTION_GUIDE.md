@@ -2,7 +2,7 @@
 
 ## Running Tests
 
-All tests use the Go standard library test runner. No external services are required — every package uses in-memory SQLite and stub dependencies.
+All tests use the Go standard library test runner. No external services are required - every package uses in-memory SQLite and stub dependencies.
 
 ### Run the full suite
 
