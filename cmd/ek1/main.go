@@ -98,7 +98,9 @@ func main() {
 	_ = syncEngine // will be wired to the scheduler in step 9
 
 	aiClient := ai.NewClient(os.Getenv("OLLAMA_HOST"), os.Getenv("OLLAMA_MODEL"))
-	_ = aiClient // will be wired to the brain pipeline in step 6
+
+	pipeline := brain.NewPipeline(brainSvc, aiClient, eventsStore)
+	_ = pipeline // will be called by the scheduler in step 9
 
 	app := fiber.New(fiber.Config{
 		AppName: "EK-1",
@@ -112,7 +114,7 @@ func main() {
 	})
 
 	profile.NewHandler(profileStore).RegisterRoutes(app)
-	brain.NewHandler(brainSvc).RegisterRoutes(app)
+	brain.NewHandler(brainSvc, eventsStore).RegisterRoutes(app)
 	ledger.NewHandler(sqliteLedger, "ek1-kernel").RegisterRoutes(app)
 	biometrics.NewHandler(checkInStore).RegisterRoutes(app)
 	activities.NewHandler(eventsStore).RegisterRoutes(app)

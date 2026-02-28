@@ -1,6 +1,7 @@
 package brain
 
 import (
+	"github.com/egokernel/ek1/internal/activities"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -12,16 +13,18 @@ type StatusResponse struct {
 }
 
 type Handler struct {
-	svc *Service
+	svc    *Service
+	events *activities.Store
 }
 
-func NewHandler(svc *Service) *Handler {
-	return &Handler{svc: svc}
+func NewHandler(svc *Service, events *activities.Store) *Handler {
+	return &Handler{svc: svc, events: events}
 }
 
 func (h *Handler) RegisterRoutes(r fiber.Router) {
 	r.Get("/brain/status", h.status)
 	r.Post("/brain/sync-acknowledge", h.syncAcknowledge)
+	r.Get("/brain/events", h.events_)
 }
 
 func (h *Handler) status(c *fiber.Ctx) error {
@@ -40,4 +43,16 @@ func (h *Handler) syncAcknowledge(c *fiber.Ctx) error {
 	h.svc.kernel.AcknowledgeManualSync()
 	snap := h.svc.kernel.Snapshot()
 	return c.JSON(snap)
+}
+
+// events_ is an alias for GET /activities/events — all events originate from the brain.
+func (h *Handler) events_(c *fiber.Ctx) error {
+	list, err := h.events.List()
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+	if list == nil {
+		list = []activities.Event{}
+	}
+	return c.JSON(list)
 }

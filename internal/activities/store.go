@@ -93,6 +93,30 @@ func (s *Store) Get(id int) (*Event, error) {
 	return scanRow(row)
 }
 
+// Create inserts a new event written by the brain pipeline.
+// The read flag is always initialised to false.
+func (s *Store) Create(e Event) (*Event, error) {
+	now := time.Now().UTC().Unix()
+	res, err := s.db.Exec(`
+		INSERT INTO events
+			(event_type, decision, importance, narrative,
+			 gain_type, gain_value, gain_symbol, gain_details,
+			 read, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+	`, e.EventType, e.Decision, e.Importance, e.Narrative,
+		e.Gain.Type, e.Gain.Value, e.Gain.Symbol, e.Gain.Details,
+		now, now,
+	)
+	if err != nil {
+		return nil, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+	return s.Get(int(id))
+}
+
 func (s *Store) ToggleRead(id int) (*Event, error) {
 	now := time.Now().UTC().Unix()
 	res, err := s.db.Exec(`

@@ -14,7 +14,6 @@ import (
 	"sync"
 
 	"github.com/egokernel/ek1/internal/activities"
-	"github.com/egokernel/ek1/internal/brain"
 	"github.com/egokernel/ek1/internal/datasync"
 )
 
@@ -36,11 +35,23 @@ func NewClient(host, model string) *Client {
 	return &Client{host: host, model: model}
 }
 
+// SignalRequest carries the triage inputs derived from the LLM analysis.
+// It mirrors brain.IncomingRequest but lives here to avoid an import cycle
+// (brain/pipeline.go imports ai; ai must not import brain).
+type SignalRequest struct {
+	ID              string
+	SenderID        string
+	Description     string
+	EstimatedROI    float64
+	TimeCommitment  float64
+	ManipulationPct float64
+}
+
 // AnalysedSignal is the fully structured output produced by the LLM for one RawSignal.
 // It contains everything the brain pipeline needs: triage input and a partial Event.
 type AnalysedSignal struct {
 	Signal     datasync.RawSignal
-	Request    brain.IncomingRequest    // for EgoKernel.Triage()
+	Request    SignalRequest         // for EgoKernel.Triage() — convert in brain/pipeline.go
 	EventType  activities.EventType
 	Importance activities.Importance
 	Narrative  string
@@ -204,7 +215,7 @@ func toAnalysedSignal(signal datasync.RawSignal, out llmOutput) *AnalysedSignal 
 
 	return &AnalysedSignal{
 		Signal: signal,
-		Request: brain.IncomingRequest{
+		Request: SignalRequest{
 			ID:              fmt.Sprintf("%s-%d", signal.ServiceSlug, signal.OccurredAt.Unix()),
 			SenderID:        sender,
 			Description:     out.Narrative,
