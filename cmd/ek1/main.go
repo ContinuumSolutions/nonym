@@ -10,6 +10,7 @@ import (
 	"github.com/egokernel/ek1/internal/activities"
 	"github.com/egokernel/ek1/internal/biometrics"
 	"github.com/egokernel/ek1/internal/integrations"
+	"github.com/egokernel/ek1/internal/profile"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
@@ -44,6 +45,11 @@ func main() {
 		log.Fatalf("failed to open database: %v", err)
 	}
 	defer db.Close()
+
+	profileStore := profile.NewStore(db)
+	if err := profileStore.Migrate(); err != nil {
+		log.Fatalf("profile migration failed: %v", err)
+	}
 
 	checkInStore := biometrics.NewStore(db)
 	if err := checkInStore.Migrate(); err != nil {
@@ -83,6 +89,7 @@ func main() {
 		return c.JSON(fiber.Map{"status": "ok"})
 	})
 
+	profile.NewHandler(profileStore).RegisterRoutes(app)
 	biometrics.NewHandler(checkInStore).RegisterRoutes(app)
 	activities.NewHandler(eventsStore).RegisterRoutes(app)
 	integrations.NewHandler(servicesStore).RegisterRoutes(app)
