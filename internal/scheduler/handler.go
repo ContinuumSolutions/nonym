@@ -15,12 +15,21 @@ func (h *Handler) RegisterRoutes(r fiber.Router) {
 	r.Post("/scheduler/run-now", h.runNow)
 }
 
+// @Summary      Get scheduler status
+// @Tags         scheduler
+// @Produce      json
+// @Success      200  {object}  scheduler.Status
+// @Router       /scheduler/status [get]
 func (h *Handler) status(c *fiber.Ctx) error {
 	return c.JSON(h.scheduler.GetStatus())
 }
 
-// runNow triggers an immediate cycle and returns the pipeline result.
-// Useful for testing without waiting for the next tick.
+// @Summary      Trigger immediate pipeline cycle
+// @Tags         scheduler
+// @Produce      json
+// @Success      200  {object}  brain.PipelineResult
+// @Failure      500  {object}  map[string]interface{}
+// @Router       /scheduler/run-now [post]
 func (h *Handler) runNow(c *fiber.Ctx) error {
 	result, err := h.scheduler.RunNow(c.Context())
 	if err != nil {

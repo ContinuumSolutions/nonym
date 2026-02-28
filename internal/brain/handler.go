@@ -27,6 +27,12 @@ func (h *Handler) RegisterRoutes(r fiber.Router) {
 	r.Get("/brain/events", h.events_)
 }
 
+// @Summary      Get brain status
+// @Tags         brain
+// @Produce      json
+// @Success      200  {object}  brain.StatusResponse
+// @Failure      500  {object}  map[string]interface{}
+// @Router       /brain/status [get]
 func (h *Handler) status(c *fiber.Ctx) error {
 	snap := h.svc.kernel.Snapshot()
 	score := h.svc.ledger.Score(h.svc.uid)
@@ -39,13 +45,24 @@ func (h *Handler) status(c *fiber.Ctx) error {
 	})
 }
 
+// @Summary      Acknowledge manual sync (clears H2HI)
+// @Tags         brain
+// @Produce      json
+// @Success      200  {object}  brain.KernelSnapshot
+// @Failure      500  {object}  map[string]interface{}
+// @Router       /brain/sync-acknowledge [post]
 func (h *Handler) syncAcknowledge(c *fiber.Ctx) error {
 	h.svc.kernel.AcknowledgeManualSync()
 	snap := h.svc.kernel.Snapshot()
 	return c.JSON(snap)
 }
 
-// events_ is an alias for GET /activities/events — all events originate from the brain.
+// @Summary      List brain events (alias for /activities/events)
+// @Tags         brain
+// @Produce      json
+// @Success      200  {array}   activities.Event
+// @Failure      500  {object}  map[string]interface{}
+// @Router       /brain/events [get]
 func (h *Handler) events_(c *fiber.Ctx) error {
 	list, err := h.events.List()
 	if err != nil {

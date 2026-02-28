@@ -21,6 +21,12 @@ func (h *Handler) RegisterRoutes(r fiber.Router) {
 	r.Put("/activities/events/:id/read", h.toggleRead)
 }
 
+// @Summary      List events
+// @Tags         activities
+// @Produce      json
+// @Success      200  {array}   activities.Event
+// @Failure      500  {object}  map[string]interface{}
+// @Router       /activities/events [get]
 func (h *Handler) list(c *fiber.Ctx) error {
 	events, err := h.store.List()
 	if err != nil {
@@ -32,6 +38,15 @@ func (h *Handler) list(c *fiber.Ctx) error {
 	return c.JSON(events)
 }
 
+// @Summary      Get event by ID
+// @Tags         activities
+// @Produce      json
+// @Param        id   path      int  true  "Event ID"
+// @Success      200  {object}  activities.Event
+// @Failure      400  {object}  map[string]interface{}
+// @Failure      404  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Router       /activities/events/{id} [get]
 func (h *Handler) get(c *fiber.Ctx) error {
 	id, err := strconv.Atoi(c.Params("id"))
 	if err != nil {
@@ -47,6 +62,15 @@ func (h *Handler) get(c *fiber.Ctx) error {
 	return c.JSON(event)
 }
 
+// @Summary      Toggle read status
+// @Tags         activities
+// @Produce      json
+// @Param        id   path      int  true  "Event ID"
+// @Success      200  {object}  activities.Event
+// @Failure      400  {object}  map[string]interface{}
+// @Failure      404  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Router       /activities/events/{id}/read [put]
 func (h *Handler) toggleRead(c *fiber.Ctx) error {
 	id, err := strconv.Atoi(c.Params("id"))
 	if err != nil {

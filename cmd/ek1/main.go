@@ -1,3 +1,9 @@
+// @title          EK-1 Ego-Kernel API
+// @version        1.0
+// @description    Personal AI agent — calendar, email, finance & negotiations.
+// @host           localhost:3000
+// @BasePath       /
+// @schemes        http
 package main
 
 import (
@@ -9,6 +15,7 @@ import (
 
 	"github.com/joho/godotenv"
 
+	_ "github.com/egokernel/ek1/docs"
 	"github.com/egokernel/ek1/internal/activities"
 	"github.com/egokernel/ek1/internal/ai"
 	"github.com/egokernel/ek1/internal/biometrics"
@@ -23,6 +30,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
+	fiberswagger "github.com/swaggo/fiber-swagger"
 	_ "modernc.org/sqlite"
 )
 
@@ -130,9 +138,16 @@ func main() {
 	app.Use(logger.New())
 	app.Use(recover.New())
 
+	// @Summary      Health check
+	// @Tags         system
+	// @Produce      json
+	// @Success      200  {object}  map[string]interface{}
+	// @Router       /health [get]
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok"})
 	})
+
+	app.Get("/swagger/*", fiberswagger.WrapHandler)
 
 	profile.NewHandler(profileStore).RegisterRoutes(app)
 	brain.NewHandler(brainSvc, eventsStore).RegisterRoutes(app)

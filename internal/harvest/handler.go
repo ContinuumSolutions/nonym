@@ -27,8 +27,12 @@ func (h *Handler) RegisterRoutes(r fiber.Router) {
 	r.Get("/harvest/results", h.results)
 }
 
-// scan triggers a full social graph scan synchronously, persists the result,
-// creates notifications for high-value findings, and returns the result.
+// @Summary      Run harvest scan
+// @Tags         harvest
+// @Produce      json
+// @Success      200  {object}  harvest.HarvestResult
+// @Failure      500  {object}  map[string]interface{}
+// @Router       /harvest/scan [post]
 func (h *Handler) scan(c *fiber.Ctx) error {
 	result, err := h.scanner.Scan(c.Context())
 	if err != nil {
@@ -44,7 +48,12 @@ func (h *Handler) scan(c *fiber.Ctx) error {
 	return c.JSON(result)
 }
 
-// results returns the most recent stored harvest result.
+// @Summary      Get latest harvest results
+// @Tags         harvest
+// @Produce      json
+// @Success      200  {object}  harvest.HarvestResult
+// @Failure      500  {object}  map[string]interface{}
+// @Router       /harvest/results [get]
 func (h *Handler) results(c *fiber.Ctx) error {
 	result, err := h.store.Latest()
 	if err != nil {

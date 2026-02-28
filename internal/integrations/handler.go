@@ -24,6 +24,12 @@ func (h *Handler) RegisterRoutes(r fiber.Router) {
 	r.Delete("/integrations/services/:id/connect", h.uninstall)
 }
 
+// @Summary      List all services
+// @Tags         integrations
+// @Produce      json
+// @Success      200  {array}   integrations.Service
+// @Failure      500  {object}  map[string]interface{}
+// @Router       /integrations/services [get]
 func (h *Handler) list(c *fiber.Ctx) error {
 	services, err := h.store.List()
 	if err != nil {
@@ -35,6 +41,15 @@ func (h *Handler) list(c *fiber.Ctx) error {
 	return c.JSON(services)
 }
 
+// @Summary      Get service by ID
+// @Tags         integrations
+// @Produce      json
+// @Param        id   path      int  true  "Service ID"
+// @Success      200  {object}  integrations.Service
+// @Failure      400  {object}  map[string]interface{}
+// @Failure      404  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Router       /integrations/services/{id} [get]
 func (h *Handler) get(c *fiber.Ctx) error {
 	id, err := strconv.Atoi(c.Params("id"))
 	if err != nil {
@@ -50,6 +65,15 @@ func (h *Handler) get(c *fiber.Ctx) error {
 	return c.JSON(svc)
 }
 
+// @Summary      Create custom service
+// @Tags         integrations
+// @Accept       json
+// @Produce      json
+// @Param        body  body      integrations.Service  true  "Custom service (name, category, api_endpoint, api_key required)"
+// @Success      201   {object}  integrations.Service
+// @Failure      400   {object}  map[string]interface{}
+// @Failure      500   {object}  map[string]interface{}
+// @Router       /integrations/services/custom [post]
 func (h *Handler) createCustom(c *fiber.Ctx) error {
 	var body Service
 	if err := c.BodyParser(&body); err != nil {
@@ -67,6 +91,15 @@ func (h *Handler) createCustom(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(svc)
 }
 
+// @Summary      Start connecting a service
+// @Tags         integrations
+// @Produce      json
+// @Param        id   path      int  true  "Service ID"
+// @Success      200  {object}  integrations.Service
+// @Failure      400  {object}  map[string]interface{}
+// @Failure      404  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Router       /integrations/services/{id}/connect [post]
 func (h *Handler) startConnect(c *fiber.Ctx) error {
 	id, err := strconv.Atoi(c.Params("id"))
 	if err != nil {
@@ -82,6 +115,17 @@ func (h *Handler) startConnect(c *fiber.Ctx) error {
 	return c.JSON(svc)
 }
 
+// @Summary      Complete connecting a service
+// @Tags         integrations
+// @Accept       json
+// @Produce      json
+// @Param        id    path      int                         true  "Service ID"
+// @Param        body  body      integrations.ConnectInput   true  "Credentials (api_key or oauth_access_token)"
+// @Success      200   {object}  integrations.Service
+// @Failure      400   {object}  map[string]interface{}
+// @Failure      404   {object}  map[string]interface{}
+// @Failure      500   {object}  map[string]interface{}
+// @Router       /integrations/services/{id}/connect [put]
 func (h *Handler) completeConnect(c *fiber.Ctx) error {
 	id, err := strconv.Atoi(c.Params("id"))
 	if err != nil {
@@ -106,6 +150,15 @@ func (h *Handler) completeConnect(c *fiber.Ctx) error {
 	return c.JSON(svc)
 }
 
+// @Summary      Uninstall a service
+// @Tags         integrations
+// @Produce      json
+// @Param        id   path      int  true  "Service ID"
+// @Success      200  {object}  integrations.Service
+// @Failure      400  {object}  map[string]interface{}
+// @Failure      404  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Router       /integrations/services/{id}/connect [delete]
 func (h *Handler) uninstall(c *fiber.Ctx) error {
 	id, err := strconv.Atoi(c.Params("id"))
 	if err != nil {

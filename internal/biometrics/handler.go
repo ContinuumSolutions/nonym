@@ -19,6 +19,12 @@ func (h *Handler) RegisterRoutes(r fiber.Router) {
 	r.Put("/biometrics/checkin", h.update)
 }
 
+// @Summary      Get current check-in
+// @Tags         biometrics
+// @Produce      json
+// @Success      200  {object}  biometrics.CheckIn
+// @Failure      404  {object}  map[string]interface{}
+// @Router       /biometrics/checkin [get]
 func (h *Handler) get(c *fiber.Ctx) error {
 	checkin, err := h.store.Get()
 	if errors.Is(err, ErrNotFound) {
@@ -30,6 +36,15 @@ func (h *Handler) get(c *fiber.Ctx) error {
 	return c.JSON(checkin)
 }
 
+// @Summary      Update check-in
+// @Tags         biometrics
+// @Accept       json
+// @Produce      json
+// @Param        body  body      biometrics.CheckIn  true  "Check-in data"
+// @Success      200   {object}  biometrics.CheckIn
+// @Failure      400   {object}  map[string]interface{}
+// @Failure      500   {object}  map[string]interface{}
+// @Router       /biometrics/checkin [put]
 func (h *Handler) update(c *fiber.Ctx) error {
 	var body CheckIn
 	if err := c.BodyParser(&body); err != nil {
