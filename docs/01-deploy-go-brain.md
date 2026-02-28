@@ -23,7 +23,7 @@ Phase 1 (Shadow Mode).
 
 ```bash
 # Build all packages
-go build ./...
+go build ./cmd/ek1/...
 
 # Build just the main binary
 go build -o ek1 ./cmd/ek1/
