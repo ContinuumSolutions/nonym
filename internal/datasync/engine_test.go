@@ -39,15 +39,15 @@ func newTestIntegrationStore(t *testing.T) *integrations.Store {
 	return s
 }
 
-// insertInstalledService directly inserts a service row with status=Installed (2)
-// so the engine can find it via ListInstalled().
-func insertInstalledService(t *testing.T, s *integrations.Store, slug string) {
+// insertConnectedService directly inserts a service row with status=Connected (2)
+// so the engine can find it via ListConnected().
+func insertConnectedService(t *testing.T, s *integrations.Store, slug string) {
 	t.Helper()
 	// Use CreateCustom with a dummy key, then patch the slug directly via the store's List+Get pattern.
 	// Since Store doesn't expose a raw insert, we use the public API:
 	// CreateCustom sets slug=''; we work around by creating and relying on the engine
-	// matching adapters by slug from ListInstalled.
-	// Instead, insert an installed service via the integration store's Seed path for real slugs,
+	// matching adapters by slug from ListConnected.
+	// Instead, insert a connected service via the integration store's Seed path for real slugs,
 	// or use StartConnect+CompleteConnect on a seeded row.
 	s.Seed()
 	svcs, err := s.List()
@@ -65,7 +65,7 @@ func insertInstalledService(t *testing.T, s *integrations.Store, slug string) {
 	t.Fatalf("seeded service with slug %q not found", slug)
 }
 
-func TestEngineRun_NoInstalledServices(t *testing.T) {
+func TestEngineRun_NoConnectedServices(t *testing.T) {
 	store := newTestIntegrationStore(t)
 	engine := NewEngine(store, nil)
 
@@ -74,14 +74,14 @@ func TestEngineRun_NoInstalledServices(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 	if len(signals) != 0 {
-		t.Errorf("want 0 signals with no installed services, got %d", len(signals))
+		t.Errorf("want 0 signals with no connected services, got %d", len(signals))
 	}
 }
 
 func TestEngineRun_WithStubAdapter_CollectsSignals(t *testing.T) {
 	store := newTestIntegrationStore(t)
 	// Install the google-calendar service (known slug from catalog)
-	insertInstalledService(t, store, "google-calendar")
+	insertConnectedService(t, store, "google-calendar")
 
 	expected := []RawSignal{
 		{ServiceSlug: "google-calendar", Category: "Calendar", Title: "Test event"},
@@ -104,8 +104,8 @@ func TestEngineRun_WithStubAdapter_CollectsSignals(t *testing.T) {
 func TestEngineRun_AdapterError_ContinuesGracefully(t *testing.T) {
 	store := newTestIntegrationStore(t)
 	// Install two services
-	insertInstalledService(t, store, "google-calendar")
-	insertInstalledService(t, store, "gmail")
+	insertConnectedService(t, store, "google-calendar")
+	insertConnectedService(t, store, "gmail")
 
 	calStub := &stubAdapter{
 		slug:    "google-calendar",
@@ -129,7 +129,7 @@ func TestEngineRun_AdapterError_ContinuesGracefully(t *testing.T) {
 
 func TestEngineRun_UpdatesLastSync(t *testing.T) {
 	store := newTestIntegrationStore(t)
-	insertInstalledService(t, store, "google-calendar")
+	insertConnectedService(t, store, "google-calendar")
 
 	stub := &stubAdapter{slug: "google-calendar", signals: []RawSignal{
 		{ServiceSlug: "google-calendar", Title: "Meeting"},
@@ -146,7 +146,7 @@ func TestEngineRun_UpdatesLastSync(t *testing.T) {
 	}
 }
 
-func TestEngineRun_NoAdapterForInstalledService_Skipped(t *testing.T) {
+func TestEngineRun_NoAdapterForConnectedService_Skipped(t *testing.T) {
 	store := newTestIntegrationStore(t)
 	// Create a custom service (no slug, so no adapter matches)
 	store.CreateCustom(&integrations.Service{

@@ -119,8 +119,8 @@ func TestHandlerCreateCustom_201(t *testing.T) {
 	if svc.ID == 0 {
 		t.Error("want non-zero ID in response")
 	}
-	if svc.Status != Installed {
-		t.Errorf("want Installed, got %v", svc.Status)
+	if svc.Status != Connected {
+		t.Errorf("want Connected, got %v", svc.Status)
 	}
 }
 
@@ -148,8 +148,8 @@ func TestHandlerStartConnect_200(t *testing.T) {
 	}
 	var svc Service
 	json.NewDecoder(resp.Body).Decode(&svc)
-	if svc.Status != InProgress {
-		t.Errorf("want InProgress, got %v", svc.Status)
+	if svc.Status != Pending {
+		t.Errorf("want Pending, got %v", svc.Status)
 	}
 }
 
@@ -186,8 +186,8 @@ func TestHandlerCompleteConnect_200APIKey(t *testing.T) {
 	}
 	var svc Service
 	json.NewDecoder(resp.Body).Decode(&svc)
-	if svc.Status != Installed {
-		t.Errorf("want Installed, got %v", svc.Status)
+	if svc.Status != Connected {
+		t.Errorf("want Connected, got %v", svc.Status)
 	}
 }
 
@@ -218,8 +218,8 @@ func TestHandlerUninstall_200(t *testing.T) {
 	}
 	var got Service
 	json.NewDecoder(resp.Body).Decode(&got)
-	if got.Status != Pending {
-		t.Errorf("want Pending after uninstall, got %v", got.Status)
+	if got.Status != Disconnected {
+		t.Errorf("want Disconnected after uninstall, got %v", got.Status)
 	}
 }
 

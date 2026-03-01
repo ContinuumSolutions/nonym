@@ -223,7 +223,7 @@ func TestPipelineRun_ShieldedFlagSetWhenBiometricsActive(t *testing.T) {
 	bioStore := biometrics.NewStore(bioDB)
 	bioStore.Migrate()
 	// Stress=8 > 7 → shield active
-	bioStore.Upsert(&biometrics.CheckIn{Feeling: 5, StressLevel: 8, Sleep: 6, Energy: 5})
+	bioStore.Upsert(&biometrics.CheckIn{Mood: 5, StressLevel: 8, Sleep: 6, Energy: 5})
 
 	p := NewPipeline(svc, &stubAnalyser{}, actStore, bioStore)
 	result, err := p.Run(context.Background(), nil)

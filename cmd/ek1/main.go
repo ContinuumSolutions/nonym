@@ -110,6 +110,11 @@ func main() {
 		log.Fatalf("harvest migration failed: %v", err)
 	}
 
+	chatHistoryStore := chat.NewHistoryStore(db)
+	if err := chatHistoryStore.Migrate(); err != nil {
+		log.Fatalf("chat history migration failed: %v", err)
+	}
+
 	notifsStore := notifications.NewStore(db)
 	if err := notifsStore.Migrate(); err != nil {
 		log.Fatalf("notifications migration failed: %v", err)
@@ -159,7 +164,7 @@ func main() {
 	harvest.NewHandler(harvestScanner, harvestStore, notifsStore).RegisterRoutes(app)
 	notifications.NewHandler(notifsStore).RegisterRoutes(app)
 	scheduler.NewHandler(sched).RegisterRoutes(app)
-	chat.NewHandler(aiClient, brainSvc, profileStore, checkInStore, eventsStore, sqliteLedger, notifsStore, harvestStore, sched, "ek1-kernel").RegisterRoutes(app)
+	chat.NewHandler(aiClient, brainSvc, profileStore, checkInStore, eventsStore, sqliteLedger, notifsStore, harvestStore, sched, chatHistoryStore, "ek1-kernel").RegisterRoutes(app)
 
 	log.Fatal(app.Listen(":3000"))
 }

@@ -7,9 +7,9 @@ import (
 )
 
 type CheckIn struct {
-	Feeling      int       `json:"feeling"`
+	Mood         int       `json:"mood"`
 	StressLevel  int       `json:"stress_level"`
-	Sleep        int       `json:"sleep"`
+	Sleep        float64   `json:"sleep"`
 	Energy       int       `json:"energy"`
 	ExtraContext string    `json:"extra_context"`
 	CreatedAt    time.Time `json:"created_at"`
@@ -30,9 +30,9 @@ func (s *Store) Migrate() error {
 	_, err := s.db.Exec(`
 		CREATE TABLE IF NOT EXISTS check_ins (
 			id            INTEGER PRIMARY KEY CHECK (id = 1),
-			feeling       INTEGER NOT NULL,
+			mood          INTEGER NOT NULL,
 			stress_level  INTEGER NOT NULL,
-			sleep         INTEGER NOT NULL,
+			sleep         REAL    NOT NULL,
 			energy        INTEGER NOT NULL,
 			extra_context TEXT    NOT NULL DEFAULT '',
 			created_at    INTEGER NOT NULL DEFAULT (unixepoch()),
@@ -40,9 +40,9 @@ func (s *Store) Migrate() error {
 		);
 		CREATE TABLE IF NOT EXISTS check_in_history (
 			id            INTEGER PRIMARY KEY AUTOINCREMENT,
-			feeling       INTEGER NOT NULL,
+			mood          INTEGER NOT NULL,
 			stress_level  INTEGER NOT NULL,
-			sleep         INTEGER NOT NULL,
+			sleep         REAL    NOT NULL,
 			energy        INTEGER NOT NULL,
 			extra_context TEXT    NOT NULL DEFAULT '',
 			recorded_at   INTEGER NOT NULL DEFAULT (unixepoch())
@@ -53,12 +53,12 @@ func (s *Store) Migrate() error {
 
 func (s *Store) Get() (*CheckIn, error) {
 	row := s.db.QueryRow(`
-		SELECT feeling, stress_level, sleep, energy, extra_context, created_at, updated_at
+		SELECT mood, stress_level, sleep, energy, extra_context, created_at, updated_at
 		FROM check_ins WHERE id = 1
 	`)
 	var c CheckIn
 	var createdAt, updatedAt int64
-	err := row.Scan(&c.Feeling, &c.StressLevel, &c.Sleep, &c.Energy, &c.ExtraContext, &createdAt, &updatedAt)
+	err := row.Scan(&c.Mood, &c.StressLevel, &c.Sleep, &c.Energy, &c.ExtraContext, &createdAt, &updatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -79,24 +79,24 @@ func (s *Store) Upsert(in *CheckIn) (*CheckIn, error) {
 	defer tx.Rollback() //nolint:errcheck
 
 	_, err = tx.Exec(`
-		INSERT INTO check_ins (id, feeling, stress_level, sleep, energy, extra_context, created_at, updated_at)
+		INSERT INTO check_ins (id, mood, stress_level, sleep, energy, extra_context, created_at, updated_at)
 		VALUES (1, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
-			feeling       = excluded.feeling,
+			mood          = excluded.mood,
 			stress_level  = excluded.stress_level,
 			sleep         = excluded.sleep,
 			energy        = excluded.energy,
 			extra_context = excluded.extra_context,
 			updated_at    = excluded.updated_at
-	`, in.Feeling, in.StressLevel, in.Sleep, in.Energy, in.ExtraContext, now, now)
+	`, in.Mood, in.StressLevel, in.Sleep, in.Energy, in.ExtraContext, now, now)
 	if err != nil {
 		return nil, err
 	}
 
 	_, err = tx.Exec(`
-		INSERT INTO check_in_history (feeling, stress_level, sleep, energy, extra_context, recorded_at)
+		INSERT INTO check_in_history (mood, stress_level, sleep, energy, extra_context, recorded_at)
 		VALUES (?, ?, ?, ?, ?, ?)
-	`, in.Feeling, in.StressLevel, in.Sleep, in.Energy, in.ExtraContext, now)
+	`, in.Mood, in.StressLevel, in.Sleep, in.Energy, in.ExtraContext, now)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +117,7 @@ func (s *Store) History(limit int) ([]CheckIn, error) {
 		limit = 90
 	}
 	rows, err := s.db.Query(`
-		SELECT feeling, stress_level, sleep, energy, extra_context, recorded_at
+		SELECT mood, stress_level, sleep, energy, extra_context, recorded_at
 		FROM check_in_history
 		ORDER BY recorded_at DESC, id DESC
 		LIMIT ?
@@ -131,7 +131,7 @@ func (s *Store) History(limit int) ([]CheckIn, error) {
 	for rows.Next() {
 		var c CheckIn
 		var recordedAt int64
-		if err := rows.Scan(&c.Feeling, &c.StressLevel, &c.Sleep, &c.Energy, &c.ExtraContext, &recordedAt); err != nil {
+		if err := rows.Scan(&c.Mood, &c.StressLevel, &c.Sleep, &c.Energy, &c.ExtraContext, &recordedAt); err != nil {
 			return nil, err
 		}
 		c.CreatedAt = time.Unix(recordedAt, 0).UTC()

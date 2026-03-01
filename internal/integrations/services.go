@@ -3,13 +3,13 @@ package integrations
 import "time"
 
 // ConnectionStatus represents the integration's connection state.
-// 0=Pending, 1=InProgress, 2=Installed
+// 0=Disconnected, 1=Pending, 2=Connected
 type ConnectionStatus int
 
 const (
-	Pending    ConnectionStatus = iota // not installed
-	InProgress                         // credentials being entered
-	Installed                          // connected and active
+	Disconnected ConnectionStatus = iota // not installed
+	Pending                              // credentials being entered
+	Connected                            // connected and active
 )
 
 // AuthMethod describes how the integration authenticates.

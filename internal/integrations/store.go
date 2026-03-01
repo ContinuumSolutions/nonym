@@ -173,7 +173,7 @@ func (s *Store) Get(id int) (*Service, error) {
 	return s.scanRow(row)
 }
 
-// CreateCustom registers a custom service with credentials and sets it to Installed immediately.
+// CreateCustom registers a custom service with credentials and sets it to Connected immediately.
 func (s *Store) CreateCustom(svc *Service) (*Service, error) {
 	encKey, err := encrypt(s.key, svc.APIKey)
 	if err != nil {
@@ -184,7 +184,7 @@ func (s *Store) CreateCustom(svc *Service) (*Service, error) {
 		INSERT INTO services
 			(slug, name, category, icon, color, description, auth_method, status, custom, api_key, api_endpoint, created_at, updated_at)
 		VALUES ('', ?, ?, '', '', ?, ?, ?, 1, ?, ?, ?, ?)
-	`, svc.Name, svc.Category, svc.Description, APIKeyAuth, Installed,
+	`, svc.Name, svc.Category, svc.Description, APIKeyAuth, Connected,
 		encKey, svc.APIEndpoint, now, now,
 	)
 	if err != nil {
@@ -204,12 +204,12 @@ type ConnectInput struct {
 	OAuthRefreshToken string `json:"oauth_refresh_token"`
 }
 
-// StartConnect marks the service as InProgress — the user has begun connecting.
+// StartConnect marks the service as Pending — the user has begun connecting.
 func (s *Store) StartConnect(id int) (*Service, error) {
 	now := time.Now().UTC().Unix()
 	res, err := s.db.Exec(
 		`UPDATE services SET status = ?, updated_at = ? WHERE id = ?`,
-		InProgress, now, id,
+		Pending, now, id,
 	)
 	if err != nil {
 		return nil, err
@@ -217,7 +217,7 @@ func (s *Store) StartConnect(id int) (*Service, error) {
 	return s.requireAffected(res, id)
 }
 
-// CompleteConnect encrypts and saves credentials, then marks the service as Installed.
+// CompleteConnect encrypts and saves credentials, then marks the service as Connected.
 func (s *Store) CompleteConnect(id int, input ConnectInput) (*Service, error) {
 	encKey, err := encrypt(s.key, input.APIKey)
 	if err != nil {
@@ -243,7 +243,7 @@ func (s *Store) CompleteConnect(id int, input ConnectInput) (*Service, error) {
 			oauth_refresh_token = CASE WHEN ? != '' THEN ? ELSE oauth_refresh_token END,
 			updated_at          = ?
 		WHERE id = ?
-	`, Installed,
+	`, Connected,
 		input.APIKey, encKey,
 		input.OAuthAccessToken, encAccess,
 		input.OAuthRefreshToken, encRefresh,
@@ -255,7 +255,7 @@ func (s *Store) CompleteConnect(id int, input ConnectInput) (*Service, error) {
 	return s.requireAffected(res, id)
 }
 
-// Uninstall clears all credentials and resets the service to Pending.
+// Uninstall clears all credentials and resets the service to Disconnected.
 func (s *Store) Uninstall(id int) (*Service, error) {
 	now := time.Now().UTC().Unix()
 	res, err := s.db.Exec(`
@@ -266,7 +266,7 @@ func (s *Store) Uninstall(id int) (*Service, error) {
 			oauth_refresh_token = '',
 			updated_at          = ?
 		WHERE id = ?
-	`, Pending, now, id)
+	`, Disconnected, now, id)
 	if err != nil {
 		return nil, err
 	}

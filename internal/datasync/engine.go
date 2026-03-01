@@ -62,17 +62,17 @@ func NewEngine(services *integrations.Store, adapters []Adapter) *Engine {
 	}
 }
 
-// Run pulls fresh signals from every installed service that has a registered
+// Run pulls fresh signals from every connected service that has a registered
 // adapter. Services without adapters (custom) are skipped silently.
 // Adapter errors are logged but do not abort the run.
 func (e *Engine) Run(ctx context.Context) ([]RawSignal, error) {
-	installed, err := e.services.ListInstalled()
+	connected, err := e.services.ListConnected()
 	if err != nil {
-		return nil, fmt.Errorf("datasync: list installed: %w", err)
+		return nil, fmt.Errorf("datasync: list connected: %w", err)
 	}
 
 	var all []RawSignal
-	for _, svc := range installed {
+	for _, svc := range connected {
 		adapter, ok := e.adapters[svc.Slug]
 		if !ok {
 			continue // custom service — no built-in adapter yet

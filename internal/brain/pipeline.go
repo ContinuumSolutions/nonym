@@ -65,7 +65,7 @@ func (p *Pipeline) Run(ctx context.Context, signals []datasync.RawSignal) (Pipel
 	if shielded {
 		result.Shielded = true
 		result.ShieldReason = fmt.Sprintf(
-			"stress=%d sleep=%d — UtilityThreshold raised %.0f%%",
+			"stress=%d sleep=%.1f — UtilityThreshold raised %.0f%%",
 			checkIn.StressLevel, checkIn.Sleep, (shieldMultiplier-1)*100,
 		)
 	}

@@ -247,12 +247,14 @@ func parseEventType(s, fallback string) activities.EventType {
 		return activities.Billing
 	case "health":
 		return activities.Health
+	case "other":
+		return activities.Other
 	}
 	// Derive from signal category if LLM returned an unrecognised value.
 	if fallback != "" && fallback != s {
 		return parseEventType(fallback, "")
 	}
-	return activities.Communication // safe default
+	return activities.Other // unrecognised — explicit fallback value
 }
 
 func parseImportance(s string) activities.Importance {

@@ -77,8 +77,8 @@ func TestStoreCreateCustom_Roundtrip(t *testing.T) {
 	if svc.ID == 0 {
 		t.Error("want non-zero ID after CreateCustom")
 	}
-	if svc.Status != Installed {
-		t.Errorf("want Installed status, got %v", svc.Status)
+	if svc.Status != Connected {
+		t.Errorf("want Connected status, got %v", svc.Status)
 	}
 	if !svc.Custom {
 		t.Error("want Custom=true")
@@ -100,7 +100,7 @@ func TestStoreGet_NotFound(t *testing.T) {
 	}
 }
 
-func TestStoreStartConnect_SetsInProgress(t *testing.T) {
+func TestStoreStartConnect_SetsPending(t *testing.T) {
 	s := newTestStore(t)
 	if err := s.Seed(); err != nil {
 		t.Fatalf("Seed: %v", err)
@@ -111,8 +111,8 @@ func TestStoreStartConnect_SetsInProgress(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StartConnect: %v", err)
 	}
-	if svc.Status != InProgress {
-		t.Errorf("want InProgress, got %v", svc.Status)
+	if svc.Status != Pending {
+		t.Errorf("want Pending, got %v", svc.Status)
 	}
 }
 
@@ -137,8 +137,8 @@ func TestStoreCompleteConnect_APIKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CompleteConnect: %v", err)
 	}
-	if svc.Status != Installed {
-		t.Errorf("want Installed, got %v", svc.Status)
+	if svc.Status != Connected {
+		t.Errorf("want Connected, got %v", svc.Status)
 	}
 	// Key is stored encrypted; returned masked (>4 chars so has suffix)
 	if svc.APIKey == "" {
@@ -159,8 +159,8 @@ func TestStoreCompleteConnect_OAuth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CompleteConnect OAuth: %v", err)
 	}
-	if svc.Status != Installed {
-		t.Errorf("want Installed, got %v", svc.Status)
+	if svc.Status != Connected {
+		t.Errorf("want Connected, got %v", svc.Status)
 	}
 	if !svc.OAuthConnected {
 		t.Error("want OAuthConnected=true after OAuth token saved")
@@ -175,7 +175,7 @@ func TestStoreCompleteConnect_NotFound(t *testing.T) {
 	}
 }
 
-func TestStoreUninstall_ResetsToPending(t *testing.T) {
+func TestStoreUninstall_ResetsToDisconnected(t *testing.T) {
 	s := newTestStore(t)
 	svc, err := s.CreateCustom(&Service{
 		Name:        "X",
@@ -190,8 +190,8 @@ func TestStoreUninstall_ResetsToPending(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Uninstall: %v", err)
 	}
-	if uninstalled.Status != Pending {
-		t.Errorf("want Pending after Uninstall, got %v", uninstalled.Status)
+	if uninstalled.Status != Disconnected {
+		t.Errorf("want Disconnected after Uninstall, got %v", uninstalled.Status)
 	}
 	if uninstalled.APIKey != "" {
 		t.Errorf("want empty APIKey after Uninstall, got %q", uninstalled.APIKey)
@@ -206,40 +206,40 @@ func TestStoreUninstall_NotFound(t *testing.T) {
 	}
 }
 
-func TestStoreListInstalled_ReturnsOnlyInstalled(t *testing.T) {
+func TestStoreListConnected_ReturnsOnlyConnected(t *testing.T) {
 	s := newTestStore(t)
-	// CreateCustom sets status=Installed immediately
+	// CreateCustom sets status=Connected immediately
 	s.CreateCustom(&Service{Name: "A", Category: "Z", APIEndpoint: "https://a.com", APIKey: "key1234"})
 	// Create another then uninstall it
 	svc2, _ := s.CreateCustom(&Service{Name: "B", Category: "Z", APIEndpoint: "https://b.com", APIKey: "key5678"})
 	s.Uninstall(svc2.ID)
 
-	installed, err := s.ListInstalled()
+	connected, err := s.ListConnected()
 	if err != nil {
-		t.Fatalf("ListInstalled: %v", err)
+		t.Fatalf("ListConnected: %v", err)
 	}
-	if len(installed) != 1 {
-		t.Errorf("want 1 installed, got %d", len(installed))
+	if len(connected) != 1 {
+		t.Errorf("want 1 connected, got %d", len(connected))
 	}
-	if installed[0].Name != "A" {
-		t.Errorf("want service A, got %q", installed[0].Name)
+	if connected[0].Name != "A" {
+		t.Errorf("want service A, got %q", connected[0].Name)
 	}
 }
 
-func TestStoreListInstalled_DecryptsCredentials(t *testing.T) {
+func TestStoreListConnected_DecryptsCredentials(t *testing.T) {
 	s := newTestStore(t)
 	s.CreateCustom(&Service{Name: "C", Category: "Z", APIEndpoint: "https://c.com", APIKey: "myrawkey"})
 
-	installed, err := s.ListInstalled()
+	connected, err := s.ListConnected()
 	if err != nil {
-		t.Fatalf("ListInstalled: %v", err)
+		t.Fatalf("ListConnected: %v", err)
 	}
-	if len(installed) != 1 {
-		t.Fatalf("want 1 installed, got %d", len(installed))
+	if len(connected) != 1 {
+		t.Fatalf("want 1 connected, got %d", len(connected))
 	}
-	// ListInstalled returns the raw (decrypted) key, not the masked version
-	if installed[0].APIKey != "myrawkey" {
-		t.Errorf("want raw key %q, got %q", "myrawkey", installed[0].APIKey)
+	// ListConnected returns the raw (decrypted) key, not the masked version
+	if connected[0].APIKey != "myrawkey" {
+		t.Errorf("want raw key %q, got %q", "myrawkey", connected[0].APIKey)
 	}
 }
 

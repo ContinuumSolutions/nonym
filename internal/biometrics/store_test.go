@@ -37,12 +37,12 @@ func TestGet_NotFoundBeforeAnyUpsert(t *testing.T) {
 
 func TestUpsert_CreatesRow(t *testing.T) {
 	s := newTestStore(t)
-	in := &CheckIn{Feeling: 8, StressLevel: 3, Sleep: 7, Energy: 9, ExtraContext: "feeling good"}
+	in := &CheckIn{Mood: 8, StressLevel: 3, Sleep: 7, Energy: 9, ExtraContext: "feeling good"}
 	got, err := s.Upsert(in)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got.Feeling != 8 || got.StressLevel != 3 || got.Sleep != 7 || got.Energy != 9 {
+	if got.Mood != 8 || got.StressLevel != 3 || got.Sleep != 7 || got.Energy != 9 {
 		t.Errorf("unexpected check-in values: %+v", got)
 	}
 	if got.ExtraContext != "feeling good" {
@@ -55,14 +55,14 @@ func TestUpsert_CreatesRow(t *testing.T) {
 
 func TestUpsert_UpdatesExistingRow(t *testing.T) {
 	s := newTestStore(t)
-	s.Upsert(&CheckIn{Feeling: 5, StressLevel: 5, Sleep: 5, Energy: 5})
+	s.Upsert(&CheckIn{Mood: 5, StressLevel: 5, Sleep: 5, Energy: 5})
 
-	updated, err := s.Upsert(&CheckIn{Feeling: 9, StressLevel: 2, Sleep: 8, Energy: 10})
+	updated, err := s.Upsert(&CheckIn{Mood: 9, StressLevel: 2, Sleep: 8, Energy: 10})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if updated.Feeling != 9 {
-		t.Errorf("want updated Feeling=9, got %d", updated.Feeling)
+	if updated.Mood != 9 {
+		t.Errorf("want updated Mood=9, got %d", updated.Mood)
 	}
 	if updated.StressLevel != 2 {
 		t.Errorf("want updated StressLevel=2, got %d", updated.StressLevel)
@@ -71,13 +71,13 @@ func TestUpsert_UpdatesExistingRow(t *testing.T) {
 
 func TestGet_AfterUpsert(t *testing.T) {
 	s := newTestStore(t)
-	s.Upsert(&CheckIn{Feeling: 7, StressLevel: 4, Sleep: 6, Energy: 8})
+	s.Upsert(&CheckIn{Mood: 7, StressLevel: 4, Sleep: 6, Energy: 8})
 	got, err := s.Get()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got.Feeling != 7 {
-		t.Errorf("want Feeling=7, got %d", got.Feeling)
+	if got.Mood != 7 {
+		t.Errorf("want Mood=7, got %d", got.Mood)
 	}
 }
 
@@ -96,8 +96,8 @@ func TestHistory_EmptyBeforeAnyUpsert(t *testing.T) {
 
 func TestHistory_RecordsEachUpsert(t *testing.T) {
 	s := newTestStore(t)
-	s.Upsert(&CheckIn{Feeling: 5, StressLevel: 5, Sleep: 5, Energy: 5})
-	s.Upsert(&CheckIn{Feeling: 7, StressLevel: 3, Sleep: 8, Energy: 9})
+	s.Upsert(&CheckIn{Mood: 5, StressLevel: 5, Sleep: 5, Energy: 5})
+	s.Upsert(&CheckIn{Mood: 7, StressLevel: 3, Sleep: 8, Energy: 9})
 
 	entries, err := s.History(10)
 	if err != nil {
@@ -110,22 +110,22 @@ func TestHistory_RecordsEachUpsert(t *testing.T) {
 
 func TestHistory_NewestFirst(t *testing.T) {
 	s := newTestStore(t)
-	s.Upsert(&CheckIn{Feeling: 3, StressLevel: 8, Sleep: 4, Energy: 3})
-	s.Upsert(&CheckIn{Feeling: 9, StressLevel: 1, Sleep: 9, Energy: 9})
+	s.Upsert(&CheckIn{Mood: 3, StressLevel: 8, Sleep: 4, Energy: 3})
+	s.Upsert(&CheckIn{Mood: 9, StressLevel: 1, Sleep: 9, Energy: 9})
 
 	entries, err := s.History(10)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if entries[0].Feeling != 9 {
-		t.Errorf("want newest entry first (Feeling=9), got Feeling=%d", entries[0].Feeling)
+	if entries[0].Mood != 9 {
+		t.Errorf("want newest entry first (Mood=9), got Mood=%d", entries[0].Mood)
 	}
 }
 
 func TestHistory_LimitRespected(t *testing.T) {
 	s := newTestStore(t)
 	for i := 0; i < 5; i++ {
-		s.Upsert(&CheckIn{Feeling: i + 1, StressLevel: 5, Sleep: 5, Energy: 5})
+		s.Upsert(&CheckIn{Mood: i + 1, StressLevel: 5, Sleep: 5, Energy: 5})
 	}
 	entries, err := s.History(3)
 	if err != nil {
@@ -159,7 +159,7 @@ func TestHistory_DefaultLimitAppliedForZero(t *testing.T) {
 
 func TestHistory_CreatedAtPopulated(t *testing.T) {
 	s := newTestStore(t)
-	s.Upsert(&CheckIn{Feeling: 6, StressLevel: 4, Sleep: 7, Energy: 8})
+	s.Upsert(&CheckIn{Mood: 6, StressLevel: 4, Sleep: 7, Energy: 8})
 
 	entries, err := s.History(1)
 	if err != nil {

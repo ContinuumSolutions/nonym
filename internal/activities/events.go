@@ -5,7 +5,7 @@ import (
 )
 
 // EventType classifies the category of an event.
-// 0=Finance, 1=Calendar, 2=Communication, 3=Billing, 4=Health
+// 0=Finance, 1=Calendar, 2=Communication, 3=Billing, 4=Health, 5=Other
 type EventType int
 
 const (
@@ -14,6 +14,7 @@ const (
 	Communication
 	Billing
 	Health
+	Other
 )
 
 // Decision is the outcome the kernel reached for an event.
@@ -57,7 +58,7 @@ type Gain struct {
 
 type Event struct {
 	ID         int        `json:"id"`
-	EventType  EventType  `json:"event_type" enums:"0,1,2,3,4"`
+	EventType  EventType  `json:"event_type" enums:"0,1,2,3,4,5"`
 	Decision   Decision   `json:"decision" enums:"0,1,2,3,4,5"`
 	Importance Importance `json:"importance" enums:"0,1,2"`
 	Narrative  string     `json:"narrative"` // Detail description of exactly what happened

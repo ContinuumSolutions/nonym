@@ -347,6 +347,43 @@
                 }
             }
         },
+        "/chat/history": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Get conversation history",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Max messages to return (1–200, default 50)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/chat.Message"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/harvest/results": {
             "get": {
                 "produces": [
@@ -1068,7 +1105,8 @@
                         1,
                         2,
                         3,
-                        4
+                        4,
+                        5
                     ],
                     "allOf": [
                         {
@@ -1113,14 +1151,16 @@
                 1,
                 2,
                 3,
-                4
+                4,
+                5
             ],
             "x-enum-varnames": [
                 "Finance",
                 "Calendar",
                 "Communication",
                 "Billing",
-                "Health"
+                "Health",
+                "Other"
             ]
         },
         "activities.Gain": {
@@ -1185,11 +1225,11 @@
                 "extra_context": {
                     "type": "string"
                 },
-                "feeling": {
+                "mood": {
                     "type": "integer"
                 },
                 "sleep": {
-                    "type": "integer"
+                    "type": "number"
                 },
                 "stress_level": {
                     "type": "integer"
@@ -1472,9 +1512,9 @@
                 2
             ],
             "x-enum-comments": {
-                "InProgress": "credentials being entered",
-                "Installed": "connected and active",
-                "Pending": "not installed"
+                "Connected": "connected and active",
+                "Disconnected": "not installed",
+                "Pending": "credentials being entered"
             },
             "x-enum-descriptions": [
                 "not installed",
@@ -1482,9 +1522,9 @@
                 "connected and active"
             ],
             "x-enum-varnames": [
+                "Disconnected",
                 "Pending",
-                "InProgress",
-                "Installed"
+                "Connected"
             ]
         },
         "integrations.Service": {

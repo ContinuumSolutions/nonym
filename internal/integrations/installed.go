@@ -1,8 +1,8 @@
 package integrations
 
-// InstalledService holds a fully decrypted service row.
+// ConnectedService holds a fully decrypted service row.
 // For internal use by the sync engine only — never returned by the HTTP API.
-type InstalledService struct {
+type ConnectedService struct {
 	ID                int
 	Slug              string
 	Name              string
@@ -13,22 +13,22 @@ type InstalledService struct {
 	OAuthRefreshToken string
 }
 
-// ListInstalled returns every service with status = Installed, with credentials
+// ListConnected returns every service with status = Connected, with credentials
 // fully decrypted. The caller must treat these values as secrets.
-func (s *Store) ListInstalled() ([]InstalledService, error) {
+func (s *Store) ListConnected() ([]ConnectedService, error) {
 	rows, err := s.db.Query(`
 		SELECT id, slug, name, category, api_key, api_endpoint,
 		       oauth_access_token, oauth_refresh_token
 		FROM services WHERE status = ?
-	`, Installed)
+	`, Connected)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var services []InstalledService
+	var services []ConnectedService
 	for rows.Next() {
-		var svc InstalledService
+		var svc ConnectedService
 		var apiKeyEnc, accessEnc, refreshEnc string
 
 		if err := rows.Scan(

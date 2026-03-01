@@ -79,7 +79,7 @@ func (s *Service) ApplyBiometricsGate(checkIn *biometrics.CheckIn) bool {
 		s.kernel.Values.UtilityThreshold = boosted
 		s.kernel.Status = StatusShielded
 		s.kernel.emit(fmt.Sprintf(
-			"BIOMETRICS GATE: StatusShielded activated — stress=%d sleep=%d. "+
+			"BIOMETRICS GATE: StatusShielded activated — stress=%d sleep=%.1f. "+
 				"UtilityThreshold raised %.0f → %.0f.",
 			checkIn.StressLevel, checkIn.Sleep, s.baseThreshold, boosted,
 		))

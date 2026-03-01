@@ -89,7 +89,10 @@ func newTestHandler(t *testing.T, chatter Chatter) *Handler {
 	pipeline := brain.NewPipeline(brainSvc, &noopAnalyser{}, actStore, bioStore)
 	sched := scheduler.NewScheduler(engine, pipeline, brainSvc, notifsStore, time.Minute)
 
-	return NewHandler(chatter, brainSvc, profStore, bioStore, actStore, l, notifsStore, harvestStore, sched, "test")
+	historyStore := NewHistoryStore(openDB(t))
+	historyStore.Migrate()
+
+	return NewHandler(chatter, brainSvc, profStore, bioStore, actStore, l, notifsStore, harvestStore, sched, historyStore, "test")
 }
 
 // noopAnalyser satisfies brain.Analyser without an Ollama server.

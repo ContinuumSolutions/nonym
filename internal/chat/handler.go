@@ -23,7 +23,7 @@ type Chatter interface {
 	Chat(ctx context.Context, systemPrompt string, turns []ai.ChatTurn) (string, error)
 }
 
-// Handler serves POST /chat.
+// Handler serves POST /chat and GET /chat/history.
 type Handler struct {
 	ai       Chatter
 	brainSvc *brain.Service
@@ -34,6 +34,7 @@ type Handler struct {
 	notifs   *notifications.Store
 	harvest  *harvest.Store
 	sched    *scheduler.Scheduler
+	history  *HistoryStore
 	uid      string
 }
 
@@ -48,6 +49,7 @@ func NewHandler(
 	notifs *notifications.Store,
 	harvestStore *harvest.Store,
 	sched *scheduler.Scheduler,
+	history *HistoryStore,
 	uid string,
 ) *Handler {
 	return &Handler{
@@ -60,13 +62,15 @@ func NewHandler(
 		notifs:   notifs,
 		harvest:  harvestStore,
 		sched:    sched,
+		history:  history,
 		uid:      uid,
 	}
 }
 
-// RegisterRoutes mounts the chat endpoint on the given router.
+// RegisterRoutes mounts the chat endpoints on the given router.
 func (h *Handler) RegisterRoutes(r fiber.Router) {
 	r.Post("/chat", h.chat)
+	r.Get("/chat/history", h.getHistory)
 }
 
 // @Summary      Chat with your EK-1 kernel
@@ -104,7 +108,31 @@ func (h *Handler) chat(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
+
+	// Persist both sides of the turn; ignore errors so a storage hiccup never blocks the reply.
+	_ = h.history.Append("user", req.Message)
+	_ = h.history.Append("kernel", reply)
+
 	return c.JSON(Response{Reply: reply, Timestamp: time.Now().UTC()})
+}
+
+// @Summary      Get conversation history
+// @Tags         chat
+// @Produce      json
+// @Param        limit  query     int  false  "Max messages to return (1–200, default 50)"
+// @Success      200    {array}   Message
+// @Failure      500    {object}  map[string]interface{}
+// @Router       /chat/history [get]
+func (h *Handler) getHistory(c *fiber.Ctx) error {
+	limit := c.QueryInt("limit", 50)
+	msgs, err := h.history.List(limit)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+	if msgs == nil {
+		msgs = []Message{}
+	}
+	return c.JSON(msgs)
 }
 
 // buildSystemPrompt gathers live data from every store and assembles the briefing that
@@ -141,8 +169,8 @@ func (h *Handler) buildSystemPrompt() string {
 	// ── Biometrics ────────────────────────────────────────────────────────────
 	fmt.Fprintf(&sb, "## Biometrics\n")
 	if ci, err := h.bio.Get(); err == nil {
-		fmt.Fprintf(&sb, "Feeling: %d/10 | Stress: %d/10 | Sleep: %d/10 | Energy: %d/10\n",
-			ci.Feeling, ci.StressLevel, ci.Sleep, ci.Energy)
+		fmt.Fprintf(&sb, "Mood: %d/10 | Stress: %d/10 | Sleep: %.1f/10 | Energy: %d/10\n",
+			ci.Mood, ci.StressLevel, ci.Sleep, ci.Energy)
 		if ci.ExtraContext != "" {
 			fmt.Fprintf(&sb, "Notes: %s\n", ci.ExtraContext)
 		}
@@ -224,6 +252,8 @@ func eventTypeName(t activities.EventType) string {
 		return "Billing"
 	case activities.Health:
 		return "Health"
+	case activities.Other:
+		return "Other"
 	default:
 		return "Unknown"
 	}

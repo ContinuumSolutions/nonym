@@ -33,7 +33,7 @@ func TestHandlerGet_404WhenEmpty(t *testing.T) {
 func TestHandlerUpdate_Creates(t *testing.T) {
 	app := setupApp(t)
 	body, _ := json.Marshal(map[string]interface{}{
-		"feeling":      8,
+		"mood":         8,
 		"stress_level": 3,
 		"sleep":        7,
 		"energy":       9,
@@ -49,14 +49,14 @@ func TestHandlerUpdate_Creates(t *testing.T) {
 	}
 	var ci CheckIn
 	json.NewDecoder(resp.Body).Decode(&ci)
-	if ci.Feeling != 8 {
-		t.Errorf("Feeling: want 8, got %d", ci.Feeling)
+	if ci.Mood != 8 {
+		t.Errorf("Mood: want 8, got %d", ci.Mood)
 	}
 }
 
 func TestHandlerGet_200AfterUpdate(t *testing.T) {
 	store := newTestStore(t)
-	store.Upsert(&CheckIn{Feeling: 7, StressLevel: 4, Sleep: 6, Energy: 8})
+	store.Upsert(&CheckIn{Mood: 7, StressLevel: 4, Sleep: 6, Energy: 8})
 
 	app := fiber.New()
 	NewHandler(store).RegisterRoutes(app)
@@ -68,8 +68,8 @@ func TestHandlerGet_200AfterUpdate(t *testing.T) {
 	}
 	var ci CheckIn
 	json.NewDecoder(resp.Body).Decode(&ci)
-	if ci.Feeling != 7 {
-		t.Errorf("Feeling: want 7, got %d", ci.Feeling)
+	if ci.Mood != 7 {
+		t.Errorf("Mood: want 7, got %d", ci.Mood)
 	}
 }
 
@@ -104,8 +104,8 @@ func TestHandlerHistory_EmptyReturnsEmptyArray(t *testing.T) {
 
 func TestHandlerHistory_ReturnsEntriesAfterUpdate(t *testing.T) {
 	store := newTestStore(t)
-	store.Upsert(&CheckIn{Feeling: 7, StressLevel: 3, Sleep: 8, Energy: 9})
-	store.Upsert(&CheckIn{Feeling: 5, StressLevel: 6, Sleep: 6, Energy: 7})
+	store.Upsert(&CheckIn{Mood: 7, StressLevel: 3, Sleep: 8, Energy: 9})
+	store.Upsert(&CheckIn{Mood: 5, StressLevel: 6, Sleep: 6, Energy: 7})
 
 	app := fiber.New()
 	NewHandler(store).RegisterRoutes(app)
@@ -124,15 +124,15 @@ func TestHandlerHistory_ReturnsEntriesAfterUpdate(t *testing.T) {
 		t.Fatalf("want 2 history entries, got %d", len(entries))
 	}
 	// newest first
-	if entries[0].Feeling != 5 {
-		t.Errorf("want newest entry first (Feeling=5), got Feeling=%d", entries[0].Feeling)
+	if entries[0].Mood != 5 {
+		t.Errorf("want newest entry first (Mood=5), got Mood=%d", entries[0].Mood)
 	}
 }
 
 func TestHandlerHistory_LimitQueryParam(t *testing.T) {
 	store := newTestStore(t)
 	for i := 0; i < 5; i++ {
-		store.Upsert(&CheckIn{Feeling: i + 1, StressLevel: 5, Sleep: 5, Energy: 5})
+		store.Upsert(&CheckIn{Mood: i + 1, StressLevel: 5, Sleep: 5, Energy: 5})
 	}
 
 	app := fiber.New()
@@ -150,7 +150,7 @@ func TestHandlerHistory_LimitQueryParam(t *testing.T) {
 func TestHandlerHistory_DefaultLimitIs7(t *testing.T) {
 	store := newTestStore(t)
 	for i := 0; i < 10; i++ {
-		store.Upsert(&CheckIn{Feeling: i + 1, StressLevel: 5, Sleep: 5, Energy: 5})
+		store.Upsert(&CheckIn{Mood: i + 1, StressLevel: 5, Sleep: 5, Energy: 5})
 	}
 
 	app := fiber.New()

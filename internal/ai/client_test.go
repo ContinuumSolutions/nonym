@@ -24,10 +24,11 @@ func TestParseEventType(t *testing.T) {
 		{"communication", "", activities.Communication},
 		{"billing", "", activities.Billing},
 		{"health", "", activities.Health},
+		{"other", "", activities.Other},
 		// Unknown but valid fallback
 		{"unknown", "Calendar", activities.Calendar},
-		// Both unknown → safe default
-		{"", "", activities.Communication},
+		// Both unknown → explicit Other fallback
+		{"", "", activities.Other},
 	}
 	for _, tc := range cases {
 		got := parseEventType(tc.s, tc.fallback)
