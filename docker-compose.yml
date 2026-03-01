@@ -51,6 +51,17 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
+  # ── EK-1 Dashboard (frontend) ───────────────────────────────────────────────
+  dashboard:
+    image: egokernel/ek1-dashboard:latest
+    ports:
+      - "80:80"
+    environment:
+      API_BASE_URL: http://ek1:3000
+    depends_on:
+      - ek1
+    restart: unless-stopped
+
 volumes:
   ollama-models:   # Ollama model weights — persisted across restarts
   ek1-data:        # SQLite database (ek1.db) — persisted across restarts
