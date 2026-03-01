@@ -25,6 +25,7 @@ func (s *Store) Migrate() error {
 			importance   INTEGER NOT NULL DEFAULT 0,
 			narrative    TEXT    NOT NULL DEFAULT '',
 			gain_type    INTEGER NOT NULL DEFAULT 0,
+			gain_kind    INTEGER NOT NULL DEFAULT 0,
 			gain_value   REAL    NOT NULL DEFAULT 0,
 			gain_symbol  TEXT    NOT NULL DEFAULT '',
 			gain_details TEXT    NOT NULL DEFAULT '',
@@ -33,12 +34,17 @@ func (s *Store) Migrate() error {
 			updated_at   INTEGER NOT NULL DEFAULT (unixepoch())
 		);
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+	// Add gain_kind to existing databases that predate this column.
+	_, _ = s.db.Exec(`ALTER TABLE events ADD COLUMN gain_kind INTEGER NOT NULL DEFAULT 0`)
+	return nil
 }
 
 const selectFields = `
 	SELECT id, event_type, decision, importance, narrative,
-	       gain_type, gain_value, gain_symbol, gain_details,
+	       gain_type, gain_kind, gain_value, gain_symbol, gain_details,
 	       read, created_at, updated_at
 	FROM events
 `
@@ -48,7 +54,7 @@ func scanRow(row *sql.Row) (*Event, error) {
 	var createdAt, updatedAt int64
 	err := row.Scan(
 		&e.ID, &e.EventType, &e.Decision, &e.Importance, &e.Narrative,
-		&e.Gain.Type, &e.Gain.Value, &e.Gain.Symbol, &e.Gain.Details,
+		&e.Gain.Type, &e.Gain.Kind, &e.Gain.Value, &e.Gain.Symbol, &e.Gain.Details,
 		&e.Read, &createdAt, &updatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -75,7 +81,7 @@ func (s *Store) List() ([]Event, error) {
 		var createdAt, updatedAt int64
 		err := rows.Scan(
 			&e.ID, &e.EventType, &e.Decision, &e.Importance, &e.Narrative,
-			&e.Gain.Type, &e.Gain.Value, &e.Gain.Symbol, &e.Gain.Details,
+			&e.Gain.Type, &e.Gain.Kind, &e.Gain.Value, &e.Gain.Symbol, &e.Gain.Details,
 			&e.Read, &createdAt, &updatedAt,
 		)
 		if err != nil {
@@ -100,11 +106,11 @@ func (s *Store) Create(e Event) (*Event, error) {
 	res, err := s.db.Exec(`
 		INSERT INTO events
 			(event_type, decision, importance, narrative,
-			 gain_type, gain_value, gain_symbol, gain_details,
+			 gain_type, gain_kind, gain_value, gain_symbol, gain_details,
 			 read, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
 	`, e.EventType, e.Decision, e.Importance, e.Narrative,
-		e.Gain.Type, e.Gain.Value, e.Gain.Symbol, e.Gain.Details,
+		e.Gain.Type, e.Gain.Kind, e.Gain.Value, e.Gain.Symbol, e.Gain.Details,
 		now, now,
 	)
 	if err != nil {

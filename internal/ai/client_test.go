@@ -62,6 +62,33 @@ func TestParseImportance(t *testing.T) {
 	}
 }
 
+// ── parseGainKind ─────────────────────────────────────────────────────────────
+
+func TestParseGainKind(t *testing.T) {
+	cases := []struct {
+		symbol string
+		want   activities.GainKind
+	}{
+		{"$", activities.Money},
+		{"", activities.Money},
+		{"usd", activities.Money},
+		{"h", activities.Time},
+		{"H", activities.Time},
+		{"hr", activities.Time},
+		{"hrs", activities.Time},
+		{"hours", activities.Time},
+		{"min", activities.Time},
+		{"mins", activities.Time},
+		{"minutes", activities.Time},
+	}
+	for _, tc := range cases {
+		got := parseGainKind(tc.symbol)
+		if got != tc.want {
+			t.Errorf("parseGainKind(%q) = %v, want %v", tc.symbol, got, tc.want)
+		}
+	}
+}
+
 // ── buildUserMessage ──────────────────────────────────────────────────────────
 
 func TestBuildUserMessage_ContainsKeyFields(t *testing.T) {

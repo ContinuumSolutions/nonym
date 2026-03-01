@@ -49,8 +49,18 @@ const (
 	Negative
 )
 
+// GainKind distinguishes what the gain represents.
+// 0=Money, 1=Time
+type GainKind int
+
+const (
+	Money GainKind = iota
+	Time
+)
+
 type Gain struct {
 	Type    GainType `json:"type" enums:"0,1"`
+	Kind    GainKind `json:"kind" enums:"0,1"`
 	Value   float32  `json:"_value"`
 	Symbol  string   `json:"_symbol"` // How to present the gain e.g $ for money type
 	Details string   `json:"details"`

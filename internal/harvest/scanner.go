@@ -127,6 +127,7 @@ func (s *Scanner) Scan(ctx context.Context) (HarvestResult, error) {
 				Narrative:  narrative,
 				Gain: activities.Gain{
 					Type:    activities.Positive,
+					Kind:    activities.Money,
 					Value:   float32(value),
 					Symbol:  "$",
 					Details: fmt.Sprintf("Social debt from %s: %d net favour(s)", contact.Name, net),

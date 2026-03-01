@@ -1179,6 +1179,17 @@ const docTemplate = `{
                 "details": {
                     "type": "string"
                 },
+                "kind": {
+                    "enum": [
+                        0,
+                        1
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/activities.GainKind"
+                        }
+                    ]
+                },
                 "type": {
                     "enum": [
                         0,
@@ -1191,6 +1202,17 @@ const docTemplate = `{
                     ]
                 }
             }
+        },
+        "activities.GainKind": {
+            "type": "integer",
+            "enum": [
+                0,
+                1
+            ],
+            "x-enum-varnames": [
+                "Money",
+                "Time"
+            ]
         },
         "activities.GainType": {
             "type": "integer",

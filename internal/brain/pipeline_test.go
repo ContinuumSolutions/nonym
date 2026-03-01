@@ -122,7 +122,7 @@ func TestPipelineRun_AcceptPath(t *testing.T) {
 			TimeCommitment:  1.0,
 			ManipulationPct: 0.0,
 		},
-		Gain: activities.Gain{Type: activities.Positive, Value: 5000, Symbol: "$"},
+		Gain: activities.Gain{Type: activities.Positive, Kind: activities.Money, Value: 5000, Symbol: "$"},
 	}
 	analyser := &stubAnalyser{
 		results: []*ai.AnalysedSignal{analysed},

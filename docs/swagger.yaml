@@ -84,6 +84,12 @@ definitions:
         type: number
       details:
         type: string
+      kind:
+        allOf:
+        - $ref: '#/definitions/activities.GainKind'
+        enum:
+        - 0
+        - 1
       type:
         allOf:
         - $ref: '#/definitions/activities.GainType'
@@ -91,6 +97,14 @@ definitions:
         - 0
         - 1
     type: object
+  activities.GainKind:
+    enum:
+    - 0
+    - 1
+    type: integer
+    x-enum-varnames:
+    - Money
+    - Time
   activities.GainType:
     enum:
     - 0

@@ -203,6 +203,7 @@ func toAnalysedSignal(signal datasync.RawSignal, out llmOutput) *AnalysedSignal 
 	if strings.EqualFold(out.Gain.Type, "Negative") {
 		gainType = activities.Negative
 	}
+	gainKind := parseGainKind(out.Gain.Symbol)
 
 	// Derive sender from whatever metadata key the adapter populates.
 	sender := signal.Metadata["from"]
@@ -228,6 +229,7 @@ func toAnalysedSignal(signal datasync.RawSignal, out llmOutput) *AnalysedSignal 
 		Narrative:  out.Narrative,
 		Gain: activities.Gain{
 			Type:    gainType,
+			Kind:    gainKind,
 			Value:   float32(out.Gain.Value),
 			Symbol:  out.Gain.Symbol,
 			Details: out.Gain.Details,
@@ -255,6 +257,16 @@ func parseEventType(s, fallback string) activities.EventType {
 		return parseEventType(fallback, "")
 	}
 	return activities.Other // unrecognised — explicit fallback value
+}
+
+// parseGainKind derives the gain kind from the symbol the LLM returned.
+// Time-unit symbols map to Time; everything else (including "$") maps to Money.
+func parseGainKind(symbol string) activities.GainKind {
+	switch strings.ToLower(strings.TrimSpace(symbol)) {
+	case "h", "hr", "hrs", "hours", "min", "mins", "minutes":
+		return activities.Time
+	}
+	return activities.Money
 }
 
 func parseImportance(s string) activities.Importance {

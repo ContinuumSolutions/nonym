@@ -33,7 +33,7 @@ func sampleEvent() Event {
 		Decision:   Pending,
 		Importance: High,
 		Narrative:  "Test narrative",
-		Gain:       Gain{Type: Positive, Value: 500.0, Symbol: "$", Details: "Test gain"},
+		Gain:       Gain{Type: Positive, Kind: Money, Value: 500.0, Symbol: "$", Details: "Test gain"},
 	}
 }
 
