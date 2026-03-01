@@ -132,3 +132,48 @@ func TestToggleRead_NonExistentReturnsErrNotFound(t *testing.T) {
 		t.Errorf("want ErrNotFound, got %v", err)
 	}
 }
+
+// ── CountHandledToday ─────────────────────────────────────────────────────────
+
+func TestCountHandledToday_ZeroWithNoEvents(t *testing.T) {
+	s := newTestStore(t)
+	n, err := s.CountHandledToday()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("want 0, got %d", n)
+	}
+}
+
+func TestCountHandledToday_CountsTerminalDecisions(t *testing.T) {
+	s := newTestStore(t)
+	// Terminal decisions: Accepted(1), Declined(2), Negotiated(3), Automated(4)
+	s.Create(Event{EventType: Communication, Decision: Accepted})
+	s.Create(Event{EventType: Finance, Decision: Declined})
+	s.Create(Event{EventType: Calendar, Decision: Negotiated})
+	s.Create(Event{EventType: Billing, Decision: Automated})
+
+	n, err := s.CountHandledToday()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n != 4 {
+		t.Errorf("want 4, got %d", n)
+	}
+}
+
+func TestCountHandledToday_ExcludesPendingAndCancelled(t *testing.T) {
+	s := newTestStore(t)
+	s.Create(Event{EventType: Communication, Decision: Pending})
+	s.Create(Event{EventType: Billing, Decision: Cancelled})
+	s.Create(Event{EventType: Finance, Decision: Accepted}) // only this one counts
+
+	n, err := s.CountHandledToday()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("want 1 (only Accepted counted), got %d", n)
+	}
+}

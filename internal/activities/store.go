@@ -117,6 +117,19 @@ func (s *Store) Create(e Event) (*Event, error) {
 	return s.Get(int(id))
 }
 
+// CountHandledToday returns the number of events created since midnight UTC
+// that have a terminal decision (Accepted, Declined, Negotiated, or Automated).
+// Pending (0) and Cancelled (5) are excluded as they represent no kernel action.
+func (s *Store) CountHandledToday() (int, error) {
+	midnight := time.Now().UTC().Truncate(24 * time.Hour).Unix()
+	var count int
+	err := s.db.QueryRow(`
+		SELECT COUNT(*) FROM events
+		WHERE created_at >= ? AND decision NOT IN (0, 5)
+	`, midnight).Scan(&count)
+	return count, err
+}
+
 func (s *Store) ToggleRead(id int) (*Event, error) {
 	now := time.Now().UTC().Unix()
 	res, err := s.db.Exec(`

@@ -2,6 +2,7 @@ package biometrics
 
 import (
 	"errors"
+	"strconv"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -17,6 +18,7 @@ func NewHandler(store *Store) *Handler {
 func (h *Handler) RegisterRoutes(r fiber.Router) {
 	r.Get("/biometrics/checkin", h.get)
 	r.Put("/biometrics/checkin", h.update)
+	r.Get("/biometrics/checkin/history", h.history)
 }
 
 // @Summary      Get current check-in
@@ -55,4 +57,29 @@ func (h *Handler) update(c *fiber.Ctx) error {
 		return err
 	}
 	return c.JSON(updated)
+}
+
+// @Summary      Check-in history
+// @Description  Returns past check-ins newest first. Default limit is 7 (one week); maximum is 90.
+// @Tags         biometrics
+// @Produce      json
+// @Param        limit  query     int  false  "Number of entries to return (1–90, default 7)"
+// @Success      200    {array}   biometrics.CheckIn
+// @Failure      500    {object}  map[string]interface{}
+// @Router       /biometrics/checkin/history [get]
+func (h *Handler) history(c *fiber.Ctx) error {
+	limit := 7
+	if q := c.Query("limit"); q != "" {
+		if n, err := strconv.Atoi(q); err == nil {
+			limit = n
+		}
+	}
+	entries, err := h.store.History(limit)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+	if entries == nil {
+		entries = []CheckIn{}
+	}
+	return c.JSON(entries)
 }

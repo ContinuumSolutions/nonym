@@ -213,6 +213,44 @@ const docTemplate = `{
                 }
             }
         },
+        "/biometrics/checkin/history": {
+            "get": {
+                "description": "Returns past check-ins newest first. Default limit is 7 (one week); maximum is 90.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "biometrics"
+                ],
+                "summary": "Check-in history",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Number of entries to return (1–90, default 7)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/biometrics.CheckIn"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/brain/events": {
             "get": {
                 "produces": [
@@ -1238,6 +1276,20 @@ const docTemplate = `{
                 }
             }
         },
+        "brain.StageProgress": {
+            "type": "object",
+            "properties": {
+                "hand": {
+                    "type": "integer"
+                },
+                "shadow": {
+                    "type": "integer"
+                },
+                "voice": {
+                    "type": "integer"
+                }
+            }
+        },
         "brain.StatusResponse": {
             "type": "object",
             "properties": {
@@ -1253,8 +1305,15 @@ const docTemplate = `{
                 "reputation_tier": {
                     "type": "string"
                 },
+                "stage_progress": {
+                    "$ref": "#/definitions/brain.StageProgress"
+                },
                 "status": {
                     "type": "string"
+                },
+                "time_saved_today": {
+                    "description": "minutes",
+                    "type": "integer"
                 },
                 "values": {
                     "$ref": "#/definitions/brain.ValueMatrix"

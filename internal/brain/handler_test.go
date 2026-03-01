@@ -56,7 +56,7 @@ func TestHandlerStatus_200WithExpectedFields(t *testing.T) {
 	}
 	var m map[string]interface{}
 	json.NewDecoder(resp.Body).Decode(&m)
-	for _, field := range []string{"status", "reputation_score", "reputation_tier"} {
+	for _, field := range []string{"status", "reputation_score", "reputation_tier", "stage_progress", "time_saved_today"} {
 		if _, ok := m[field]; !ok {
 			t.Errorf("response missing field %q", field)
 		}
@@ -106,6 +106,62 @@ func TestHandlerEvents_EmptyArray(t *testing.T) {
 	json.NewDecoder(resp.Body).Decode(&events)
 	if len(events) != 0 {
 		t.Errorf("want empty array, got %d events", len(events))
+	}
+}
+
+func TestHandlerStatus_StageProgressShadow100(t *testing.T) {
+	app := setupBrainApp(t)
+	req := httptest.NewRequest(http.MethodGet, "/brain/status", nil)
+	resp, _ := app.Test(req)
+	var m map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&m)
+
+	sp, ok := m["stage_progress"].(map[string]interface{})
+	if !ok {
+		t.Fatal("stage_progress should be an object")
+	}
+	if sp["shadow"] != float64(100) {
+		t.Errorf("shadow: want 100, got %v", sp["shadow"])
+	}
+	if sp["hand"] != float64(0) {
+		t.Errorf("hand: want 0, got %v", sp["hand"])
+	}
+	if sp["voice"] != float64(0) {
+		t.Errorf("voice: want 0, got %v", sp["voice"])
+	}
+}
+
+func TestHandlerStatus_TimeSavedTodayZeroWithNoEvents(t *testing.T) {
+	app := setupBrainApp(t)
+	req := httptest.NewRequest(http.MethodGet, "/brain/status", nil)
+	resp, _ := app.Test(req)
+	var m map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&m)
+	if m["time_saved_today"] != float64(0) {
+		t.Errorf("time_saved_today: want 0 with no events, got %v", m["time_saved_today"])
+	}
+}
+
+func TestHandlerStatus_TimeSavedTodayCountsHandledEvents(t *testing.T) {
+	svc := newTestService(t)
+	events := newTestActivitiesStore(t)
+	app := fiber.New()
+	NewHandler(svc, events).RegisterRoutes(app)
+
+	// 2 accepted + 1 automated = 3 handled → 45 minutes
+	events.Create(activities.Event{EventType: activities.Communication, Decision: activities.Accepted})
+	events.Create(activities.Event{EventType: activities.Finance, Decision: activities.Automated})
+	events.Create(activities.Event{EventType: activities.Calendar, Decision: activities.Accepted})
+	// Pending and Cancelled should not count
+	events.Create(activities.Event{EventType: activities.Communication, Decision: activities.Pending})
+	events.Create(activities.Event{EventType: activities.Billing, Decision: activities.Cancelled})
+
+	req := httptest.NewRequest(http.MethodGet, "/brain/status", nil)
+	resp, _ := app.Test(req)
+	var m map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&m)
+	if m["time_saved_today"] != float64(45) {
+		t.Errorf("time_saved_today: want 45 (3×15 min), got %v", m["time_saved_today"])
 	}
 }
 

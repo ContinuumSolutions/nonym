@@ -154,6 +154,15 @@ definitions:
       total:
         type: integer
     type: object
+  brain.StageProgress:
+    properties:
+      hand:
+        type: integer
+      shadow:
+        type: integer
+      voice:
+        type: integer
+    type: object
   brain.StatusResponse:
     properties:
       decision_count:
@@ -164,8 +173,13 @@ definitions:
         type: integer
       reputation_tier:
         type: string
+      stage_progress:
+        $ref: '#/definitions/brain.StageProgress'
       status:
         type: string
+      time_saved_today:
+        description: minutes
+        type: integer
       values:
         $ref: '#/definitions/brain.ValueMatrix'
     type: object
@@ -623,6 +637,32 @@ paths:
             additionalProperties: true
             type: object
       summary: Update check-in
+      tags:
+      - biometrics
+  /biometrics/checkin/history:
+    get:
+      description: Returns past check-ins newest first. Default limit is 7 (one week);
+        maximum is 90.
+      parameters:
+      - description: Number of entries to return (1–90, default 7)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/biometrics.CheckIn'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Check-in history
       tags:
       - biometrics
   /brain/events:
