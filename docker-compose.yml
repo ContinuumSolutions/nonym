@@ -10,11 +10,11 @@ services:
     volumes:
       - ollama-models:/root/.ollama
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/version || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 15s
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
     restart: unless-stopped
 
   # Pull the model once on first start, then exits.
@@ -36,11 +36,9 @@ services:
     build: .
     ports:
       - "3000:3000"
-    # Load all variables from .env (EK1_SECRET_KEY, OLLAMA_MODEL, SYNC_INTERVAL_MINUTES, etc.)
     env_file:
       - .env
     environment:
-      # Override the localhost value in .env with the Docker service hostname
       OLLAMA_HOST: http://ollama:11434
     volumes:
       - ek1-data:/data
@@ -54,12 +52,24 @@ services:
   # ── EK-1 Dashboard (frontend) ───────────────────────────────────────────────
   dashboard:
     image: egokernel/ek1-dashboard:latest
-    ports:
-      - "80:80"
     environment:
-      API_BASE_URL: http://ek1:3000
+      API_BASE_URL: ""
     depends_on:
       - ek1
+    restart: unless-stopped
+
+  # ── Reverse proxy ───────────────────────────────────────────────────────────
+  # Single external entry point. Serves the SPA and proxies API calls to ek1
+  # so the browser only ever talks to one origin over the same scheme.
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - ek1
+      - dashboard
     restart: unless-stopped
 
 volumes:
