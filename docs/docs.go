@@ -251,35 +251,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/brain/events": {
-            "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "brain"
-                ],
-                "summary": "List brain events (alias for /activities/events)",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/activities.Event"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/brain/status": {
             "get": {
                 "produces": [

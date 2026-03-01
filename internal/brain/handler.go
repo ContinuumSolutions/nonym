@@ -33,7 +33,6 @@ func NewHandler(svc *Service, events *activities.Store) *Handler {
 func (h *Handler) RegisterRoutes(r fiber.Router) {
 	r.Get("/brain/status", h.status)
 	r.Post("/brain/sync-acknowledge", h.syncAcknowledge)
-	r.Get("/brain/events", h.events_)
 }
 
 // @Summary      Get brain status
@@ -75,19 +74,3 @@ func (h *Handler) syncAcknowledge(c *fiber.Ctx) error {
 	return c.JSON(snap)
 }
 
-// @Summary      List brain events (alias for /activities/events)
-// @Tags         brain
-// @Produce      json
-// @Success      200  {array}   activities.Event
-// @Failure      500  {object}  map[string]interface{}
-// @Router       /brain/events [get]
-func (h *Handler) events_(c *fiber.Ctx) error {
-	list, err := h.events.List()
-	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
-	}
-	if list == nil {
-		list = []activities.Event{}
-	}
-	return c.JSON(list)
-}

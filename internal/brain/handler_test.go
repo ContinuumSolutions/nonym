@@ -35,14 +35,6 @@ func setupBrainApp(t *testing.T) *fiber.App {
 	return app
 }
 
-func setupBrainAppWithStore(t *testing.T) (*fiber.App, *Service, *activities.Store) {
-	t.Helper()
-	svc := newTestService(t)
-	events := newTestActivitiesStore(t)
-	app := fiber.New()
-	NewHandler(svc, events).RegisterRoutes(app)
-	return app, svc, events
-}
 
 func TestHandlerStatus_200WithExpectedFields(t *testing.T) {
 	app := setupBrainApp(t)
@@ -89,23 +81,6 @@ func TestHandlerSyncAcknowledge_200(t *testing.T) {
 	json.NewDecoder(resp.Body).Decode(&m)
 	if _, ok := m["status"]; !ok {
 		t.Error("response missing 'status' field")
-	}
-}
-
-func TestHandlerEvents_EmptyArray(t *testing.T) {
-	app := setupBrainApp(t)
-	req := httptest.NewRequest(http.MethodGet, "/brain/events", nil)
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("app.Test: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("want 200, got %d", resp.StatusCode)
-	}
-	var events []activities.Event
-	json.NewDecoder(resp.Body).Decode(&events)
-	if len(events) != 0 {
-		t.Errorf("want empty array, got %d events", len(events))
 	}
 }
 
@@ -165,18 +140,3 @@ func TestHandlerStatus_TimeSavedTodayCountsHandledEvents(t *testing.T) {
 	}
 }
 
-func TestHandlerEvents_ReturnsCreatedEvents(t *testing.T) {
-	app, _, events := setupBrainAppWithStore(t)
-	events.Create(activities.Event{EventType: activities.Finance, Narrative: "test event"})
-
-	req := httptest.NewRequest(http.MethodGet, "/brain/events", nil)
-	resp, _ := app.Test(req)
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("want 200, got %d", resp.StatusCode)
-	}
-	var list []activities.Event
-	json.NewDecoder(resp.Body).Decode(&list)
-	if len(list) != 1 {
-		t.Errorf("want 1 event, got %d", len(list))
-	}
-}
