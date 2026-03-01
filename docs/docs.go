@@ -1514,6 +1514,10 @@ const docTemplate = `{
                 "category": {
                     "type": "string"
                 },
+                "color": {
+                    "description": "brand hex color, e.g. \"#4285F4\"; empty for custom services",
+                    "type": "string"
+                },
                 "created_at": {
                     "type": "string"
                 },

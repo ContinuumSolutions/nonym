@@ -25,6 +25,7 @@ func (s *Store) Migrate() error {
 			name                TEXT    NOT NULL,
 			category            TEXT    NOT NULL,
 			icon                TEXT    NOT NULL DEFAULT '',
+			color               TEXT    NOT NULL DEFAULT '',
 			description         TEXT    NOT NULL DEFAULT '',
 			auth_method         INTEGER NOT NULL DEFAULT 0,
 			status              INTEGER NOT NULL DEFAULT 0,
@@ -37,18 +38,33 @@ func (s *Store) Migrate() error {
 			updated_at          INTEGER NOT NULL DEFAULT (unixepoch())
 		);
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+	// Add color column to databases created before this field was introduced.
+	// SQLite ignores the error when the column already exists via the IF NOT EXISTS workaround,
+	// but since ALTER TABLE has no IF NOT EXISTS, we swallow the "duplicate column" error.
+	s.db.Exec(`ALTER TABLE services ADD COLUMN color TEXT NOT NULL DEFAULT ''`) //nolint:errcheck
+	return nil
 }
 
-// Seed inserts built-in services that don't yet exist in the DB.
-// Safe to call on every startup — existing rows are never touched.
+// Seed inserts built-in services that don't yet exist in the DB, and always
+// syncs the color column so upgrades from pre-color schema are handled.
 func (s *Store) Seed() error {
 	for _, def := range registry {
 		_, err := s.db.Exec(`
-			INSERT INTO services (slug, name, category, icon, description, auth_method, status, custom)
-			SELECT ?, ?, ?, ?, ?, ?, 0, 0
+			INSERT INTO services (slug, name, category, icon, color, description, auth_method, status, custom)
+			SELECT ?, ?, ?, ?, ?, ?, ?, 0, 0
 			WHERE NOT EXISTS (SELECT 1 FROM services WHERE slug = ? AND custom = 0)
-		`, def.Slug, def.Name, def.Category, def.Icon, def.Description, def.AuthMethod, def.Slug)
+		`, def.Slug, def.Name, def.Category, def.Icon, def.Color, def.Description, def.AuthMethod, def.Slug)
+		if err != nil {
+			return err
+		}
+		// Always update color so existing rows gain the field on upgrade.
+		_, err = s.db.Exec(
+			`UPDATE services SET color = ? WHERE slug = ? AND custom = 0`,
+			def.Color, def.Slug,
+		)
 		if err != nil {
 			return err
 		}
@@ -68,7 +84,7 @@ func maskKey(key string) string {
 }
 
 const selectFields = `
-	SELECT id, slug, name, category, icon, description, auth_method, status, custom,
+	SELECT id, slug, name, category, icon, color, description, auth_method, status, custom,
 	       api_key, api_endpoint,
 	       CASE WHEN oauth_access_token != '' THEN 1 ELSE 0 END,
 	       created_at, updated_at
@@ -83,7 +99,7 @@ func (s *Store) scanRow(row *sql.Row) (*Service, error) {
 	var createdAt, updatedAt int64
 
 	err := row.Scan(
-		&svc.ID, &svc.Slug, &svc.Name, &svc.Category, &svc.Icon, &svc.Description,
+		&svc.ID, &svc.Slug, &svc.Name, &svc.Category, &svc.Icon, &svc.Color, &svc.Description,
 		&svc.AuthMethod, &svc.Status, &custom,
 		&apiKeyEnc, &svc.APIEndpoint, &oauthConnected,
 		&createdAt, &updatedAt,
@@ -114,7 +130,7 @@ func (s *Store) scanRows(rows *sql.Rows) (*Service, error) {
 	var createdAt, updatedAt int64
 
 	err := rows.Scan(
-		&svc.ID, &svc.Slug, &svc.Name, &svc.Category, &svc.Icon, &svc.Description,
+		&svc.ID, &svc.Slug, &svc.Name, &svc.Category, &svc.Icon, &svc.Color, &svc.Description,
 		&svc.AuthMethod, &svc.Status, &custom,
 		&apiKeyEnc, &svc.APIEndpoint, &oauthConnected,
 		&createdAt, &updatedAt,
@@ -166,8 +182,8 @@ func (s *Store) CreateCustom(svc *Service) (*Service, error) {
 	now := time.Now().UTC().Unix()
 	res, err := s.db.Exec(`
 		INSERT INTO services
-			(slug, name, category, icon, description, auth_method, status, custom, api_key, api_endpoint, created_at, updated_at)
-		VALUES ('', ?, ?, '', ?, ?, ?, 1, ?, ?, ?, ?)
+			(slug, name, category, icon, color, description, auth_method, status, custom, api_key, api_endpoint, created_at, updated_at)
+		VALUES ('', ?, ?, '', '', ?, ?, ?, 1, ?, ?, ?, ?)
 	`, svc.Name, svc.Category, svc.Description, APIKeyAuth, Installed,
 		encKey, svc.APIEndpoint, now, now,
 	)

@@ -27,6 +27,7 @@ type Service struct {
 	Name           string           `json:"name"`
 	Category       string           `json:"category"`
 	Icon           string           `json:"icon"`
+	Color          string           `json:"color"` // brand hex color, e.g. "#4285F4"; empty for custom services
 	Description    string           `json:"description"`
 	AuthMethod     AuthMethod       `json:"auth_method" enums:"0,1"`
 	Status         ConnectionStatus `json:"status" enums:"0,1,2"`

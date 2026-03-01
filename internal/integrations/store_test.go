@@ -242,3 +242,89 @@ func TestStoreListInstalled_DecryptsCredentials(t *testing.T) {
 		t.Errorf("want raw key %q, got %q", "myrawkey", installed[0].APIKey)
 	}
 }
+
+// ── Color field ───────────────────────────────────────────────────────────────
+
+func TestStoreSeed_ColorPresentOnBuiltins(t *testing.T) {
+	s := newTestStore(t)
+	if err := s.Seed(); err != nil {
+		t.Fatalf("Seed: %v", err)
+	}
+	svcs, err := s.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	for _, svc := range svcs {
+		if svc.Color == "" {
+			t.Errorf("service %q has empty color after Seed", svc.Slug)
+		}
+	}
+}
+
+func TestStoreSeed_ColorSyncedOnReSeed(t *testing.T) {
+	s := newTestStore(t)
+	// Seed once — color column populated
+	if err := s.Seed(); err != nil {
+		t.Fatalf("first Seed: %v", err)
+	}
+	// Wipe color to simulate a pre-upgrade database
+	s.db.Exec(`UPDATE services SET color = '' WHERE custom = 0`)
+
+	// Re-seed — Seed() must restore colors
+	if err := s.Seed(); err != nil {
+		t.Fatalf("second Seed: %v", err)
+	}
+	svcs, _ := s.List()
+	for _, svc := range svcs {
+		if svc.Color == "" {
+			t.Errorf("service %q color not restored on re-seed", svc.Slug)
+		}
+	}
+}
+
+func TestStoreCreateCustom_ColorEmptyByDefault(t *testing.T) {
+	s := newTestStore(t)
+	svc, err := s.CreateCustom(&Service{
+		Name:        "My API",
+		Category:    CategoryFinance,
+		APIEndpoint: "https://api.example.com",
+		APIKey:      "key123",
+	})
+	if err != nil {
+		t.Fatalf("CreateCustom: %v", err)
+	}
+	// Custom services have no brand color; frontend falls back to category color.
+	if svc.Color != "" {
+		t.Errorf("want empty color for custom service, got %q", svc.Color)
+	}
+}
+
+func TestStoreGet_ColorRoundTrips(t *testing.T) {
+	s := newTestStore(t)
+	s.Seed()
+	svcs, _ := s.List()
+
+	// Spot-check a known service
+	var gmail *Service
+	for i := range svcs {
+		if svcs[i].Slug == "gmail" {
+			gmail = &svcs[i]
+			break
+		}
+	}
+	if gmail == nil {
+		t.Fatal("gmail not found after Seed")
+	}
+	if gmail.Color != "#EA4335" {
+		t.Errorf("gmail color: want #EA4335, got %q", gmail.Color)
+	}
+
+	// Fetch by ID and confirm color survives the scanRow path
+	fetched, err := s.Get(gmail.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if fetched.Color != "#EA4335" {
+		t.Errorf("Get gmail color: want #EA4335, got %q", fetched.Color)
+	}
+}
