@@ -1,5 +1,50 @@
 # Contribution Guide
 
+## Generating API Docs (Swagger)
+
+EK-1 uses [swaggo/swag](https://github.com/swaggo/swag) to generate its OpenAPI 2.0 spec from annotations in the source code.
+
+### Install the CLI
+
+```bash
+go install github.com/swaggo/swag/cmd/swag@latest
+```
+
+### Regenerate the docs
+
+Run this from the project root whenever you add or change a handler annotation:
+
+```bash
+swag init -g cmd/ek1/main.go --output docs
+```
+
+This overwrites `docs/docs.go`, `docs/swagger.json`, and `docs/swagger.yaml`. Commit all three files.
+
+### View the live UI
+
+Start the server and open [http://localhost:3000/swagger/index.html](http://localhost:3000/swagger/index.html).
+
+### Adding annotations to a new handler
+
+Place swag annotations in the comment block immediately above the handler function:
+
+```go
+// @Summary      Short description shown in the UI
+// @Tags         group-name
+// @Accept       json
+// @Produce      json
+// @Param        body  body      MyRequestType  true  "Description"
+// @Success      200   {object}  MyResponseType
+// @Failure      400   {object}  fiber.Map
+// @Failure      500   {object}  fiber.Map
+// @Router       /my/route [post]
+func (h *Handler) myHandler(c *fiber.Ctx) error {
+```
+
+Regenerate docs after any annotation change; the `docs/` output is committed to the repository so the spec is always up to date without requiring a build step at deploy time.
+
+---
+
 ## Running Tests
 
 All tests use the Go standard library test runner. No external services are required - every package uses in-memory SQLite and stub dependencies.

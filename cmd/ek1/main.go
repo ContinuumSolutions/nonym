@@ -20,6 +20,7 @@ import (
 	"github.com/egokernel/ek1/internal/ai"
 	"github.com/egokernel/ek1/internal/biometrics"
 	"github.com/egokernel/ek1/internal/brain"
+	"github.com/egokernel/ek1/internal/chat"
 	"github.com/egokernel/ek1/internal/datasync"
 	"github.com/egokernel/ek1/internal/harvest"
 	"github.com/egokernel/ek1/internal/integrations"
@@ -158,6 +159,7 @@ func main() {
 	harvest.NewHandler(harvestScanner, harvestStore, notifsStore).RegisterRoutes(app)
 	notifications.NewHandler(notifsStore).RegisterRoutes(app)
 	scheduler.NewHandler(sched).RegisterRoutes(app)
+	chat.NewHandler(aiClient, brainSvc, profileStore, checkInStore, eventsStore, sqliteLedger, notifsStore, harvestStore, sched, "ek1-kernel").RegisterRoutes(app)
 
 	log.Fatal(app.Listen(":3000"))
 }

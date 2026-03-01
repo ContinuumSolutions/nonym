@@ -190,6 +190,31 @@ definitions:
         format: float64
         type: number
     type: object
+  chat.Message:
+    properties:
+      content:
+        type: string
+      role:
+        type: string
+      timestamp:
+        type: string
+    type: object
+  chat.Request:
+    properties:
+      history:
+        items:
+          $ref: '#/definitions/chat.Message'
+        type: array
+      message:
+        type: string
+    type: object
+  chat.Response:
+    properties:
+      reply:
+        type: string
+      timestamp:
+        type: string
+    type: object
   harvest.ContactRecord:
     properties:
       favors_given:
@@ -620,6 +645,37 @@ paths:
       summary: Acknowledge manual sync (clears H2HI)
       tags:
       - brain
+  /chat:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Message and conversation history
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/chat.Request'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/chat.Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Chat with your EK-1 kernel
+      tags:
+      - chat
   /harvest/results:
     get:
       produces:
