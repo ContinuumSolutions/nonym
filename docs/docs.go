@@ -213,22 +213,31 @@ const docTemplate = `{
                 }
             }
         },
-        "/brain/events": {
+        "/biometrics/checkin/history": {
             "get": {
+                "description": "Returns past check-ins newest first. Default limit is 7 (one week); maximum is 90.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "brain"
+                    "biometrics"
                 ],
-                "summary": "List brain events (alias for /activities/events)",
+                "summary": "Check-in history",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Number of entries to return (1–90, default 7)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/activities.Event"
+                                "$ref": "#/definitions/biometrics.CheckIn"
                             }
                         }
                     },
@@ -1042,10 +1051,33 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "decision": {
-                    "$ref": "#/definitions/activities.Decision"
+                    "enum": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/activities.Decision"
+                        }
+                    ]
                 },
                 "event_type": {
-                    "$ref": "#/definitions/activities.EventType"
+                    "enum": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/activities.EventType"
+                        }
+                    ]
                 },
                 "gain": {
                     "$ref": "#/definitions/activities.Gain"
@@ -1054,7 +1086,16 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "importance": {
-                    "$ref": "#/definitions/activities.Importance"
+                    "enum": [
+                        0,
+                        1,
+                        2
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/activities.Importance"
+                        }
+                    ]
                 },
                 "narrative": {
                     "description": "Detail description of exactly what happened",
@@ -1099,7 +1140,15 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "type": {
-                    "$ref": "#/definitions/activities.GainType"
+                    "enum": [
+                        0,
+                        1
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/activities.GainType"
+                        }
+                    ]
                 }
             }
         },
@@ -1198,6 +1247,20 @@ const docTemplate = `{
                 }
             }
         },
+        "brain.StageProgress": {
+            "type": "object",
+            "properties": {
+                "hand": {
+                    "type": "integer"
+                },
+                "shadow": {
+                    "type": "integer"
+                },
+                "voice": {
+                    "type": "integer"
+                }
+            }
+        },
         "brain.StatusResponse": {
             "type": "object",
             "properties": {
@@ -1213,8 +1276,15 @@ const docTemplate = `{
                 "reputation_tier": {
                     "type": "string"
                 },
+                "stage_progress": {
+                    "$ref": "#/definitions/brain.StageProgress"
+                },
                 "status": {
                     "type": "string"
+                },
+                "time_saved_today": {
+                    "description": "minutes",
+                    "type": "integer"
                 },
                 "values": {
                     "$ref": "#/definitions/brain.ValueMatrix"
@@ -1431,7 +1501,15 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "auth_method": {
-                    "$ref": "#/definitions/integrations.AuthMethod"
+                    "enum": [
+                        0,
+                        1
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/integrations.AuthMethod"
+                        }
+                    ]
                 },
                 "category": {
                     "type": "string"
@@ -1461,7 +1539,16 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "status": {
-                    "$ref": "#/definitions/integrations.ConnectionStatus"
+                    "enum": [
+                        0,
+                        1,
+                        2
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/integrations.ConnectionStatus"
+                        }
+                    ]
                 },
                 "updated_at": {
                     "type": "string"

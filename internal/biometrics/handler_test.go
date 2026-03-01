@@ -82,3 +82,98 @@ func TestHandlerUpdate_400ForBadBody(t *testing.T) {
 		t.Errorf("want 400, got %d", resp.StatusCode)
 	}
 }
+
+// ── GET /biometrics/checkin/history ──────────────────────────────────────────
+
+func TestHandlerHistory_EmptyReturnsEmptyArray(t *testing.T) {
+	app := setupApp(t)
+	req := httptest.NewRequest(http.MethodGet, "/biometrics/checkin/history", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("want 200, got %d", resp.StatusCode)
+	}
+	var entries []CheckIn
+	json.NewDecoder(resp.Body).Decode(&entries)
+	if len(entries) != 0 {
+		t.Errorf("want empty array before any check-ins, got %d entries", len(entries))
+	}
+}
+
+func TestHandlerHistory_ReturnsEntriesAfterUpdate(t *testing.T) {
+	store := newTestStore(t)
+	store.Upsert(&CheckIn{Feeling: 7, StressLevel: 3, Sleep: 8, Energy: 9})
+	store.Upsert(&CheckIn{Feeling: 5, StressLevel: 6, Sleep: 6, Energy: 7})
+
+	app := fiber.New()
+	NewHandler(store).RegisterRoutes(app)
+
+	req := httptest.NewRequest(http.MethodGet, "/biometrics/checkin/history", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("want 200, got %d", resp.StatusCode)
+	}
+	var entries []CheckIn
+	json.NewDecoder(resp.Body).Decode(&entries)
+	if len(entries) != 2 {
+		t.Fatalf("want 2 history entries, got %d", len(entries))
+	}
+	// newest first
+	if entries[0].Feeling != 5 {
+		t.Errorf("want newest entry first (Feeling=5), got Feeling=%d", entries[0].Feeling)
+	}
+}
+
+func TestHandlerHistory_LimitQueryParam(t *testing.T) {
+	store := newTestStore(t)
+	for i := 0; i < 5; i++ {
+		store.Upsert(&CheckIn{Feeling: i + 1, StressLevel: 5, Sleep: 5, Energy: 5})
+	}
+
+	app := fiber.New()
+	NewHandler(store).RegisterRoutes(app)
+
+	req := httptest.NewRequest(http.MethodGet, "/biometrics/checkin/history?limit=2", nil)
+	resp, _ := app.Test(req)
+	var entries []CheckIn
+	json.NewDecoder(resp.Body).Decode(&entries)
+	if len(entries) != 2 {
+		t.Errorf("want 2 entries with ?limit=2, got %d", len(entries))
+	}
+}
+
+func TestHandlerHistory_DefaultLimitIs7(t *testing.T) {
+	store := newTestStore(t)
+	for i := 0; i < 10; i++ {
+		store.Upsert(&CheckIn{Feeling: i + 1, StressLevel: 5, Sleep: 5, Energy: 5})
+	}
+
+	app := fiber.New()
+	NewHandler(store).RegisterRoutes(app)
+
+	req := httptest.NewRequest(http.MethodGet, "/biometrics/checkin/history", nil)
+	resp, _ := app.Test(req)
+	var entries []CheckIn
+	json.NewDecoder(resp.Body).Decode(&entries)
+	if len(entries) != 7 {
+		t.Errorf("want default 7 entries, got %d", len(entries))
+	}
+}
+
+func TestHandlerHistory_InvalidLimitIgnored(t *testing.T) {
+	app := setupApp(t)
+	req := httptest.NewRequest(http.MethodGet, "/biometrics/checkin/history?limit=notanumber", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test: %v", err)
+	}
+	// Should still return 200 with the default limit applied
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("want 200 for invalid limit param, got %d", resp.StatusCode)
+	}
+}

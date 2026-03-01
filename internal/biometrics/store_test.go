@@ -80,3 +80,92 @@ func TestGet_AfterUpsert(t *testing.T) {
 		t.Errorf("want Feeling=7, got %d", got.Feeling)
 	}
 }
+
+// ── History ───────────────────────────────────────────────────────────────────
+
+func TestHistory_EmptyBeforeAnyUpsert(t *testing.T) {
+	s := newTestStore(t)
+	entries, err := s.History(7)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("want 0 entries, got %d", len(entries))
+	}
+}
+
+func TestHistory_RecordsEachUpsert(t *testing.T) {
+	s := newTestStore(t)
+	s.Upsert(&CheckIn{Feeling: 5, StressLevel: 5, Sleep: 5, Energy: 5})
+	s.Upsert(&CheckIn{Feeling: 7, StressLevel: 3, Sleep: 8, Energy: 9})
+
+	entries, err := s.History(10)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("want 2 history entries, got %d", len(entries))
+	}
+}
+
+func TestHistory_NewestFirst(t *testing.T) {
+	s := newTestStore(t)
+	s.Upsert(&CheckIn{Feeling: 3, StressLevel: 8, Sleep: 4, Energy: 3})
+	s.Upsert(&CheckIn{Feeling: 9, StressLevel: 1, Sleep: 9, Energy: 9})
+
+	entries, err := s.History(10)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if entries[0].Feeling != 9 {
+		t.Errorf("want newest entry first (Feeling=9), got Feeling=%d", entries[0].Feeling)
+	}
+}
+
+func TestHistory_LimitRespected(t *testing.T) {
+	s := newTestStore(t)
+	for i := 0; i < 5; i++ {
+		s.Upsert(&CheckIn{Feeling: i + 1, StressLevel: 5, Sleep: 5, Energy: 5})
+	}
+	entries, err := s.History(3)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(entries) != 3 {
+		t.Errorf("want 3 entries with limit=3, got %d", len(entries))
+	}
+}
+
+func TestHistory_LimitCappedAt90(t *testing.T) {
+	s := newTestStore(t)
+	entries, err := s.History(999)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// No rows, but the cap should not error
+	if len(entries) != 0 {
+		t.Errorf("want 0 entries, got %d", len(entries))
+	}
+}
+
+func TestHistory_DefaultLimitAppliedForZero(t *testing.T) {
+	s := newTestStore(t)
+	// History(0) should use the default of 7, not error
+	_, err := s.History(0)
+	if err != nil {
+		t.Fatalf("History(0) should not error, got %v", err)
+	}
+}
+
+func TestHistory_CreatedAtPopulated(t *testing.T) {
+	s := newTestStore(t)
+	s.Upsert(&CheckIn{Feeling: 6, StressLevel: 4, Sleep: 7, Energy: 8})
+
+	entries, err := s.History(1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if entries[0].CreatedAt.IsZero() {
+		t.Error("want non-zero CreatedAt in history entry")
+	}
+}
