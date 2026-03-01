@@ -21,15 +21,35 @@ definitions:
       created_at:
         type: string
       decision:
-        $ref: '#/definitions/activities.Decision'
+        allOf:
+        - $ref: '#/definitions/activities.Decision'
+        enum:
+        - 0
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
       event_type:
-        $ref: '#/definitions/activities.EventType'
+        allOf:
+        - $ref: '#/definitions/activities.EventType'
+        enum:
+        - 0
+        - 1
+        - 2
+        - 3
+        - 4
       gain:
         $ref: '#/definitions/activities.Gain'
       id:
         type: integer
       importance:
-        $ref: '#/definitions/activities.Importance'
+        allOf:
+        - $ref: '#/definitions/activities.Importance'
+        enum:
+        - 0
+        - 1
+        - 2
       narrative:
         description: Detail description of exactly what happened
         type: string
@@ -62,7 +82,11 @@ definitions:
       details:
         type: string
       type:
-        $ref: '#/definitions/activities.GainType'
+        allOf:
+        - $ref: '#/definitions/activities.GainType'
+        enum:
+        - 0
+        - 1
     type: object
   activities.GainType:
     enum:
@@ -307,7 +331,11 @@ definitions:
         description: masked on read, never raw
         type: string
       auth_method:
-        $ref: '#/definitions/integrations.AuthMethod'
+        allOf:
+        - $ref: '#/definitions/integrations.AuthMethod'
+        enum:
+        - 0
+        - 1
       category:
         type: string
       created_at:
@@ -327,7 +355,12 @@ definitions:
       slug:
         type: string
       status:
-        $ref: '#/definitions/integrations.ConnectionStatus'
+        allOf:
+        - $ref: '#/definitions/integrations.ConnectionStatus'
+        enum:
+        - 0
+        - 1
+        - 2
       updated_at:
         type: string
     type: object

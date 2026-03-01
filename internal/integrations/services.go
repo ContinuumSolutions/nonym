@@ -2,6 +2,8 @@ package integrations
 
 import "time"
 
+// ConnectionStatus represents the integration's connection state.
+// 0=Pending, 1=InProgress, 2=Installed
 type ConnectionStatus int
 
 const (
@@ -10,6 +12,8 @@ const (
 	Installed                          // connected and active
 )
 
+// AuthMethod describes how the integration authenticates.
+// 0=APIKeyAuth, 1=OAuth2Auth
 type AuthMethod int
 
 const (
@@ -24,8 +28,8 @@ type Service struct {
 	Category       string           `json:"category"`
 	Icon           string           `json:"icon"`
 	Description    string           `json:"description"`
-	AuthMethod     AuthMethod       `json:"auth_method"`
-	Status         ConnectionStatus `json:"status"`
+	AuthMethod     AuthMethod       `json:"auth_method" enums:"0,1"`
+	Status         ConnectionStatus `json:"status" enums:"0,1,2"`
 	Custom         bool             `json:"custom"`
 	APIKey         string           `json:"api_key,omitempty"` // masked on read, never raw
 	APIEndpoint    string           `json:"api_endpoint,omitempty"`

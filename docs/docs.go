@@ -1042,10 +1042,33 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "decision": {
-                    "$ref": "#/definitions/activities.Decision"
+                    "enum": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/activities.Decision"
+                        }
+                    ]
                 },
                 "event_type": {
-                    "$ref": "#/definitions/activities.EventType"
+                    "enum": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/activities.EventType"
+                        }
+                    ]
                 },
                 "gain": {
                     "$ref": "#/definitions/activities.Gain"
@@ -1054,7 +1077,16 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "importance": {
-                    "$ref": "#/definitions/activities.Importance"
+                    "enum": [
+                        0,
+                        1,
+                        2
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/activities.Importance"
+                        }
+                    ]
                 },
                 "narrative": {
                     "description": "Detail description of exactly what happened",
@@ -1099,7 +1131,15 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "type": {
-                    "$ref": "#/definitions/activities.GainType"
+                    "enum": [
+                        0,
+                        1
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/activities.GainType"
+                        }
+                    ]
                 }
             }
         },
@@ -1431,7 +1471,15 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "auth_method": {
-                    "$ref": "#/definitions/integrations.AuthMethod"
+                    "enum": [
+                        0,
+                        1
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/integrations.AuthMethod"
+                        }
+                    ]
                 },
                 "category": {
                     "type": "string"
@@ -1461,7 +1509,16 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "status": {
-                    "$ref": "#/definitions/integrations.ConnectionStatus"
+                    "enum": [
+                        0,
+                        1,
+                        2
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/integrations.ConnectionStatus"
+                        }
+                    ]
                 },
                 "updated_at": {
                     "type": "string"
