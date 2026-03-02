@@ -16,11 +16,12 @@ import (
 
 // Status is the read-only snapshot returned by GET /scheduler/status.
 type Status struct {
-	IntervalMinutes int                   `json:"interval_minutes"`
-	LastRunAt       *time.Time            `json:"last_run_at"`        // nil if never run
-	NextRunAt       *time.Time            `json:"next_run_at"`        // nil if not started
-	LastSignalCount int                   `json:"last_signal_count"`
-	LastResult      *brain.PipelineResult `json:"last_result"`        // nil if never run
+	IntervalMinutes int                      `json:"interval_minutes"`
+	LastRunAt       *time.Time               `json:"last_run_at"`        // nil if never run
+	NextRunAt       *time.Time               `json:"next_run_at"`        // nil if not started
+	LastSignalCount int                      `json:"last_signal_count"`
+	LastResult      *brain.PipelineResult    `json:"last_result"`        // nil if never run
+	Services        []datasync.ServiceStatus `json:"services"`
 }
 
 // Scheduler orchestrates periodic sync cycles.
@@ -134,6 +135,7 @@ func (s *Scheduler) run(ctx context.Context) (brain.PipelineResult, error) {
 	s.status.NextRunAt = &next
 	s.status.LastSignalCount = len(signals)
 	s.status.LastResult = &result
+	s.status.Services = s.engine.ServiceStatuses()
 	s.mu.Unlock()
 
 	return result, nil

@@ -56,6 +56,8 @@ definitions:
         type: string
       read:
         type: boolean
+      source_service:
+        type: string
       updated_at:
         type: string
     type: object
@@ -123,6 +125,16 @@ definitions:
     - Low
     - Medium
     - High
+  auth.pinReq:
+    properties:
+      pin_hash:
+        type: string
+    type: object
+  auth.unlockReq:
+    properties:
+      pin_hash:
+        type: string
+    type: object
   biometrics.CheckIn:
     properties:
       created_at:
@@ -270,6 +282,18 @@ definitions:
       timestamp:
         type: string
     type: object
+  datasync.ServiceStatus:
+    properties:
+      last_error:
+        type: string
+      last_sync_at:
+        description: nil = never synced
+        type: string
+      signal_count:
+        type: integer
+      slug:
+        type: string
+    type: object
   harvest.ContactRecord:
     properties:
       favors_given:
@@ -361,6 +385,11 @@ definitions:
       api_key:
         description: masked on read, never raw
         type: string
+      app_configured:
+        description: |-
+          AppConfigured is true once the user has saved their OAuth client_id/secret (BYOA).
+          false → show "Set Up OAuth App"; true + !OAuthConnected → show "Authorize"; true + OAuthConnected → show "Disconnect"
+        type: boolean
       auth_method:
         allOf:
         - $ref: '#/definitions/integrations.AuthMethod'
@@ -396,6 +425,20 @@ definitions:
         - 1
         - 2
       updated_at:
+        type: string
+    type: object
+  integrations.initiateOAuthResponse:
+    properties:
+      auth_url:
+        type: string
+      state:
+        type: string
+    type: object
+  integrations.oauthAppRequest:
+    properties:
+      client_id:
+        type: string
+      client_secret:
         type: string
     type: object
   ledger.HistoryEntry:
@@ -492,6 +535,8 @@ definitions:
         type: string
       created_at:
         type: string
+      has_pin:
+        type: boolean
       kernel_name:
         type: string
       preferences:
@@ -519,6 +564,10 @@ definitions:
       next_run_at:
         description: nil if not started
         type: string
+      services:
+        items:
+          $ref: '#/definitions/datasync.ServiceStatus'
+        type: array
     type: object
 host: localhost:3000
 info:
@@ -612,6 +661,56 @@ paths:
       summary: Toggle read status
       tags:
       - activities
+  /auth/session/lock:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Lock the screen session
+      tags:
+      - auth
+  /auth/session/unlock:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: SHA-256 hex of the PIN
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/auth.unlockReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "429":
+          description: Too Many Requests
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Unlock the screen session
+      tags:
+      - auth
   /biometrics/checkin:
     get:
       produces:
@@ -774,6 +873,41 @@ paths:
       summary: Get conversation history
       tags:
       - chat
+  /chat/stream:
+    post:
+      consumes:
+      - application/json
+      description: 'Returns tokens as Server-Sent Events: {"token":"<chunk>"} until
+        {"done":true,"timestamp":"..."}. Falls back to buffered JSON when streaming
+        is unavailable.'
+      parameters:
+      - description: Message and conversation history
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/chat.Request'
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Stream chat with your EK-1 kernel (SSE)
+      tags:
+      - chat
   /harvest/results:
     get:
       produces:
@@ -862,6 +996,7 @@ paths:
       - integrations
   /integrations/services/{id}/connect:
     delete:
+      description: For OAuth services, attempts token revocation before clearing credentials.
       parameters:
       - description: Service ID
         in: path
@@ -890,7 +1025,7 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Uninstall a service
+      summary: Disconnect / uninstall a service
       tags:
       - integrations
     post:
@@ -963,6 +1098,90 @@ paths:
             additionalProperties: true
             type: object
       summary: Complete connecting a service
+      tags:
+      - integrations
+  /integrations/services/{id}/oauth-app:
+    post:
+      consumes:
+      - application/json
+      description: Encrypts and stores the user's OAuth client_id and client_secret
+        at rest.
+      parameters:
+      - description: Service ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: client_id and client_secret
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/integrations.oauthAppRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: invalid_credentials
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: service_not_found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Save OAuth app credentials (BYOA — step 9a)
+      tags:
+      - integrations
+  /integrations/services/{id}/oauth/initiate:
+    post:
+      description: Generates a PKCE code_verifier/challenge and CSRF state, then returns
+        the
+      parameters:
+      - description: Service ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/integrations.initiateOAuthResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: app_not_configured
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Initiate OAuth2 authorization flow (step 9b)
       tags:
       - integrations
   /integrations/services/custom:
@@ -1113,6 +1332,31 @@ paths:
       summary: Mark all notifications as read
       tags:
       - notifications
+  /oauth/callback:
+    get:
+      description: Receives the authorization code from the third-party redirect,
+        exchanges it
+      parameters:
+      - description: Authorization code from provider
+        in: query
+        name: code
+        type: string
+      - description: CSRF state token
+        in: query
+        name: state
+        type: string
+      - description: Regional token endpoint base (Zoho)
+        in: query
+        name: accounts-server
+        type: string
+      produces:
+      - text/html
+      responses:
+        "200":
+          description: Self-closing HTML page
+      summary: OAuth2 callback handler (step 9c)
+      tags:
+      - integrations
   /profile:
     get:
       produces:
@@ -1161,6 +1405,64 @@ paths:
       summary: Update connection settings
       tags:
       - profile
+  /profile/pin:
+    delete:
+      consumes:
+      - application/json
+      parameters:
+      - description: Current PIN hash for verification
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/auth.pinReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Remove the screen lock PIN
+      tags:
+      - auth
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: SHA-256 hex of the PIN (64 chars)
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/auth.pinReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Store the screen lock PIN hash
+      tags:
+      - auth
   /profile/preferences:
     put:
       consumes:

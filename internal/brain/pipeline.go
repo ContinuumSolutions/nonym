@@ -141,11 +141,12 @@ func (p *Pipeline) Run(ctx context.Context, signals []datasync.RawSignal) (Pipel
 		}
 
 		event := activities.Event{
-			EventType:  as.EventType,
-			Decision:   decision,
-			Importance: as.Importance,
-			Narrative:  narrative,
-			Gain:       as.Gain,
+			EventType:     as.EventType,
+			Decision:      decision,
+			Importance:    as.Importance,
+			Narrative:     narrative,
+			Gain:          as.Gain,
+			SourceService: as.Signal.ServiceSlug,
 		}
 		if _, err := p.events.Create(event); err != nil {
 			log.Printf("brain/pipeline: write event for signal[%d]: %v", i, err)

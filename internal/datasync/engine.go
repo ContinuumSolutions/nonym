@@ -45,8 +45,10 @@ type Engine struct {
 	services *integrations.Store
 	adapters map[string]Adapter
 
-	mu       sync.Mutex
-	lastSync map[string]time.Time
+	mu        sync.Mutex
+	lastSync  map[string]time.Time
+	lastCount map[string]int    // signals pulled per slug in last cycle
+	lastError map[string]string // last error message per slug (empty = no error)
 }
 
 // NewEngine creates a sync engine with the given adapter registry.
@@ -56,9 +58,11 @@ func NewEngine(services *integrations.Store, adapters []Adapter) *Engine {
 		m[a.Slug()] = a
 	}
 	return &Engine{
-		services: services,
-		adapters: m,
-		lastSync: make(map[string]time.Time),
+		services:  services,
+		adapters:  m,
+		lastSync:  make(map[string]time.Time),
+		lastCount: make(map[string]int),
+		lastError: make(map[string]string),
 	}
 }
 
@@ -94,11 +98,16 @@ func (e *Engine) Run(ctx context.Context) ([]RawSignal, error) {
 		signals, err := adapter.Pull(ctx, creds, since)
 		if err != nil {
 			log.Printf("datasync: [%s] pull error: %v", svc.Slug, err)
+			e.mu.Lock()
+			e.lastError[svc.Slug] = err.Error()
+			e.mu.Unlock()
 			continue
 		}
 
 		e.mu.Lock()
 		e.lastSync[svc.Slug] = time.Now()
+		e.lastCount[svc.Slug] = len(signals)
+		e.lastError[svc.Slug] = ""
 		e.mu.Unlock()
 
 		all = append(all, signals...)
@@ -112,6 +121,35 @@ func (e *Engine) LastSync(slug string) time.Time {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.lastSync[slug]
+}
+
+// ServiceStatus is a point-in-time snapshot of one adapter's sync state.
+type ServiceStatus struct {
+	Slug        string     `json:"slug"`
+	LastSyncAt  *time.Time `json:"last_sync_at"`           // nil = never synced
+	SignalCount int        `json:"signal_count"`
+	LastError   string     `json:"last_error,omitempty"`
+}
+
+// ServiceStatuses returns a snapshot of every registered adapter's sync state.
+func (e *Engine) ServiceStatuses() []ServiceStatus {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	out := make([]ServiceStatus, 0, len(e.adapters))
+	for slug := range e.adapters {
+		ss := ServiceStatus{
+			Slug:        slug,
+			SignalCount: e.lastCount[slug],
+			LastError:   e.lastError[slug],
+		}
+		if t, ok := e.lastSync[slug]; ok {
+			ts := t
+			ss.LastSyncAt = &ts
+		}
+		out = append(out, ss)
+	}
+	return out
 }
 
 // authGet performs a GET request with a Bearer token and returns the body bytes.

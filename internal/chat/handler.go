@@ -128,6 +128,16 @@ func (h *Handler) chat(c *fiber.Ctx) error {
 	return c.JSON(Response{Reply: reply, Timestamp: time.Now().UTC()})
 }
 
+// @Summary      Stream chat with your EK-1 kernel (SSE)
+// @Description  Returns tokens as Server-Sent Events: {"token":"<chunk>"} until {"done":true,"timestamp":"..."}. Falls back to buffered JSON when streaming is unavailable.
+// @Tags         chat
+// @Accept       json
+// @Produce      text/event-stream
+// @Param        body  body      Request  true  "Message and conversation history"
+// @Success      200   {object}  map[string]interface{}
+// @Failure      400   {object}  map[string]interface{}
+// @Failure      500   {object}  map[string]interface{}
+// @Router       /chat/stream [post]
 // chatStream handles POST /chat/stream, returning tokens as Server-Sent Events.
 // Each SSE event is {"token":"<chunk>"} until the final {"done":true,"timestamp":"..."}.
 // Falls back to buffered JSON (same as POST /chat) when the ai dependency does not

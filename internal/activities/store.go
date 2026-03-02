@@ -19,19 +19,20 @@ func NewStore(db *sql.DB) *Store {
 func (s *Store) Migrate() error {
 	_, err := s.db.Exec(`
 		CREATE TABLE IF NOT EXISTS events (
-			id           INTEGER PRIMARY KEY AUTOINCREMENT,
-			event_type   INTEGER NOT NULL,
-			decision     INTEGER NOT NULL DEFAULT 0,
-			importance   INTEGER NOT NULL DEFAULT 0,
-			narrative    TEXT    NOT NULL DEFAULT '',
-			gain_type    INTEGER NOT NULL DEFAULT 0,
-			gain_kind    INTEGER NOT NULL DEFAULT 0,
-			gain_value   REAL    NOT NULL DEFAULT 0,
-			gain_symbol  TEXT    NOT NULL DEFAULT '',
-			gain_details TEXT    NOT NULL DEFAULT '',
-			read         INTEGER NOT NULL DEFAULT 0,
-			created_at   INTEGER NOT NULL DEFAULT (unixepoch()),
-			updated_at   INTEGER NOT NULL DEFAULT (unixepoch())
+			id             INTEGER PRIMARY KEY AUTOINCREMENT,
+			event_type     INTEGER NOT NULL,
+			decision       INTEGER NOT NULL DEFAULT 0,
+			importance     INTEGER NOT NULL DEFAULT 0,
+			narrative      TEXT    NOT NULL DEFAULT '',
+			gain_type      INTEGER NOT NULL DEFAULT 0,
+			gain_kind      INTEGER NOT NULL DEFAULT 0,
+			gain_value     REAL    NOT NULL DEFAULT 0,
+			gain_symbol    TEXT    NOT NULL DEFAULT '',
+			gain_details   TEXT    NOT NULL DEFAULT '',
+			source_service TEXT    NOT NULL DEFAULT '',
+			read           INTEGER NOT NULL DEFAULT 0,
+			created_at     INTEGER NOT NULL DEFAULT (unixepoch()),
+			updated_at     INTEGER NOT NULL DEFAULT (unixepoch())
 		);
 	`)
 	if err != nil {
@@ -39,13 +40,15 @@ func (s *Store) Migrate() error {
 	}
 	// Add gain_kind to existing databases that predate this column.
 	_, _ = s.db.Exec(`ALTER TABLE events ADD COLUMN gain_kind INTEGER NOT NULL DEFAULT 0`)
+	// Add source_service to existing databases that predate this column.
+	_, _ = s.db.Exec(`ALTER TABLE events ADD COLUMN source_service TEXT NOT NULL DEFAULT ''`)
 	return nil
 }
 
 const selectFields = `
 	SELECT id, event_type, decision, importance, narrative,
 	       gain_type, gain_kind, gain_value, gain_symbol, gain_details,
-	       read, created_at, updated_at
+	       source_service, read, created_at, updated_at
 	FROM events
 `
 
@@ -55,7 +58,7 @@ func scanRow(row *sql.Row) (*Event, error) {
 	err := row.Scan(
 		&e.ID, &e.EventType, &e.Decision, &e.Importance, &e.Narrative,
 		&e.Gain.Type, &e.Gain.Kind, &e.Gain.Value, &e.Gain.Symbol, &e.Gain.Details,
-		&e.Read, &createdAt, &updatedAt,
+		&e.SourceService, &e.Read, &createdAt, &updatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -82,7 +85,7 @@ func (s *Store) List() ([]Event, error) {
 		err := rows.Scan(
 			&e.ID, &e.EventType, &e.Decision, &e.Importance, &e.Narrative,
 			&e.Gain.Type, &e.Gain.Kind, &e.Gain.Value, &e.Gain.Symbol, &e.Gain.Details,
-			&e.Read, &createdAt, &updatedAt,
+			&e.SourceService, &e.Read, &createdAt, &updatedAt,
 		)
 		if err != nil {
 			return nil, err
@@ -107,11 +110,11 @@ func (s *Store) Create(e Event) (*Event, error) {
 		INSERT INTO events
 			(event_type, decision, importance, narrative,
 			 gain_type, gain_kind, gain_value, gain_symbol, gain_details,
-			 read, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+			 source_service, read, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
 	`, e.EventType, e.Decision, e.Importance, e.Narrative,
 		e.Gain.Type, e.Gain.Kind, e.Gain.Value, e.Gain.Symbol, e.Gain.Details,
-		now, now,
+		e.SourceService, now, now,
 	)
 	if err != nil {
 		return nil, err

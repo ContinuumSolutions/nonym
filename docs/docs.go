@@ -142,6 +142,81 @@ const docTemplate = `{
                 }
             }
         },
+        "/auth/session/lock": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Lock the screen session",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/session/unlock": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Unlock the screen session",
+                "parameters": [
+                    {
+                        "description": "SHA-256 hex of the PIN",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/auth.unlockReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/biometrics/checkin": {
             "get": {
                 "produces": [
@@ -375,6 +450,55 @@ const docTemplate = `{
                             "items": {
                                 "$ref": "#/definitions/chat.Message"
                             }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/chat/stream": {
+            "post": {
+                "description": "Returns tokens as Server-Sent Events: {\"token\":\"\u003cchunk\u003e\"} until {\"done\":true,\"timestamp\":\"...\"}. Falls back to buffered JSON when streaming is unavailable.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "chat"
+                ],
+                "summary": "Stream chat with your EK-1 kernel (SSE)",
+                "parameters": [
+                    {
+                        "description": "Message and conversation history",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/chat.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     },
                     "500": {
@@ -672,13 +796,14 @@ const docTemplate = `{
                 }
             },
             "delete": {
+                "description": "For OAuth services, attempts token revocation before clearing credentials.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "integrations"
                 ],
-                "summary": "Uninstall a service",
+                "summary": "Disconnect / uninstall a service",
                 "parameters": [
                     {
                         "type": "integer",
@@ -704,6 +829,126 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/integrations/services/{id}/oauth-app": {
+            "post": {
+                "description": "Encrypts and stores the user's OAuth client_id and client_secret at rest.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "integrations"
+                ],
+                "summary": "Save OAuth app credentials (BYOA — step 9a)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Service ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "client_id and client_secret",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/integrations.oauthAppRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "invalid_credentials",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "service_not_found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/integrations/services/{id}/oauth/initiate": {
+            "post": {
+                "description": "Generates a PKCE code_verifier/challenge and CSRF state, then returns the",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "integrations"
+                ],
+                "summary": "Initiate OAuth2 authorization flow (step 9b)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Service ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/integrations.initiateOAuthResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "409": {
+                        "description": "app_not_configured",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -895,6 +1140,43 @@ const docTemplate = `{
                 }
             }
         },
+        "/oauth/callback": {
+            "get": {
+                "description": "Receives the authorization code from the third-party redirect, exchanges it",
+                "produces": [
+                    "text/html"
+                ],
+                "tags": [
+                    "integrations"
+                ],
+                "summary": "OAuth2 callback handler (step 9c)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Authorization code from provider",
+                        "name": "code",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "CSRF state token",
+                        "name": "state",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Regional token endpoint base (Zoho)",
+                        "name": "accounts-server",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Self-closing HTML page"
+                    }
+                }
+            }
+        },
         "/profile": {
             "get": {
                 "produces": [
@@ -960,6 +1242,93 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/profile/pin": {
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Store the screen lock PIN hash",
+                "parameters": [
+                    {
+                        "description": "SHA-256 hex of the PIN (64 chars)",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/auth.pinReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Remove the screen lock PIN",
+                "parameters": [
+                    {
+                        "description": "Current PIN hash for verification",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/auth.pinReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -1142,6 +1511,9 @@ const docTemplate = `{
                 "read": {
                     "type": "boolean"
                 },
+                "source_service": {
+                    "type": "string"
+                },
                 "updated_at": {
                     "type": "string"
                 }
@@ -1237,6 +1609,22 @@ const docTemplate = `{
                 "Medium",
                 "High"
             ]
+        },
+        "auth.pinReq": {
+            "type": "object",
+            "properties": {
+                "pin_hash": {
+                    "type": "string"
+                }
+            }
+        },
+        "auth.unlockReq": {
+            "type": "object",
+            "properties": {
+                "pin_hash": {
+                    "type": "string"
+                }
+            }
         },
         "biometrics.CheckIn": {
             "type": "object",
@@ -1432,6 +1820,24 @@ const docTemplate = `{
                 }
             }
         },
+        "datasync.ServiceStatus": {
+            "type": "object",
+            "properties": {
+                "last_error": {
+                    "type": "string"
+                },
+                "last_sync_at": {
+                    "description": "nil = never synced",
+                    "type": "string"
+                },
+                "signal_count": {
+                    "type": "integer"
+                },
+                "slug": {
+                    "type": "string"
+                }
+            }
+        },
         "harvest.ContactRecord": {
             "type": "object",
             "properties": {
@@ -1562,6 +1968,10 @@ const docTemplate = `{
                     "description": "masked on read, never raw",
                     "type": "string"
                 },
+                "app_configured": {
+                    "description": "AppConfigured is true once the user has saved their OAuth client_id/secret (BYOA).\nfalse → show \"Set Up OAuth App\"; true + !OAuthConnected → show \"Authorize\"; true + OAuthConnected → show \"Disconnect\"",
+                    "type": "boolean"
+                },
                 "auth_method": {
                     "enum": [
                         0,
@@ -1617,6 +2027,28 @@ const docTemplate = `{
                     ]
                 },
                 "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "integrations.initiateOAuthResponse": {
+            "type": "object",
+            "properties": {
+                "auth_url": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                }
+            }
+        },
+        "integrations.oauthAppRequest": {
+            "type": "object",
+            "properties": {
+                "client_id": {
+                    "type": "string"
+                },
+                "client_secret": {
                     "type": "string"
                 }
             }
@@ -1755,6 +2187,9 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
+                "has_pin": {
+                    "type": "boolean"
+                },
                 "kernel_name": {
                     "type": "string"
                 },
@@ -1796,6 +2231,12 @@ const docTemplate = `{
                 "next_run_at": {
                     "description": "nil if not started",
                     "type": "string"
+                },
+                "services": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/datasync.ServiceStatus"
+                    }
                 }
             }
         }
