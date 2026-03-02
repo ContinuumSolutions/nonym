@@ -9,7 +9,7 @@ import (
 )
 
 // ZohoMailAdapter pulls unread messages from Zoho Mail using the Zoho Mail API v1.
-// OAuth scope required: ZohoMail.messages.READ
+// OAuth scopes required: ZohoMail.accounts.READ, ZohoMail.messages.READ
 type ZohoMailAdapter struct{}
 
 func (a *ZohoMailAdapter) Slug() string { return "zoho-mail" }
@@ -22,8 +22,9 @@ func (a *ZohoMailAdapter) Pull(ctx context.Context, creds Credentials, since tim
 	}
 
 	// Step 2: list unread messages (newest first, up to 25).
+	// Zoho uses `limit` (not `count`) and sortorder=true for descending.
 	url := fmt.Sprintf(
-		"https://mail.zoho.com/api/accounts/%s/messages/view?status=unread&count=25&sortorder=false",
+		"https://mail.zoho.com/api/accounts/%s/messages/view?status=unread&limit=25&sortorder=true",
 		accountID,
 	)
 	body, err := authGet(ctx, url, creds.OAuthAccessToken)
