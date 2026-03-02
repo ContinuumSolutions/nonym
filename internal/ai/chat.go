@@ -30,6 +30,11 @@ func (c *Client) Chat(ctx context.Context, systemPrompt string, turns []ChatTurn
 		"model":    c.model,
 		"messages": msgs,
 		"stream":   false,
+		// Low temperature keeps the model grounded on the data briefing and
+		// prevents it from drifting into generic AI assistant behaviours.
+		"options": map[string]interface{}{
+			"temperature": 0.2,
+		},
 	})
 	if err != nil {
 		return "", fmt.Errorf("ai: chat marshal: %w", err)

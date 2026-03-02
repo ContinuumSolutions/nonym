@@ -139,23 +139,50 @@ func (h *Handler) getHistory(c *fiber.Ctx) error {
 // grounds the LLM's responses in the user's real, up-to-the-minute situation.
 func (h *Handler) buildSystemPrompt() string {
 	var sb strings.Builder
+	now := time.Now().UTC()
 
-	sb.WriteString("You are EK-1, the user's personal Ego-Kernel AI agent.\n")
-	sb.WriteString("You have been observing the user's digital life: email, calendar, finance, health.\n")
-	sb.WriteString("Be direct and grounded — reference only the live data shown below.\n")
-	sb.WriteString("Keep answers concise and actionable. Speak as a trusted advisor, not a generic assistant.\n\n")
+	// ── Role lock ─────────────────────────────────────────────────────────────
+	// This block must come first. Instruction-tuned models (llama3.2, mistral,
+	// etc.) apply their own safety training on top of whatever system prompt they
+	// receive. Without an explicit role-lock the model will pattern-match on any
+	// sensitive words in the data sections (e.g. "stress" or personal notes about
+	// relationships) and fire generic AI refusals even for unrelated questions.
+	sb.WriteString(`ROLE: EK-1 Ego-Kernel — personal autonomous life-management agent.
+
+You are NOT a general-purpose AI assistant. You are a specialized data kernel
+that reads the user's connected services (email, calendar, finance, health) and
+answers their questions based strictly on the DATA BRIEFING below.
+
+OPERATING RULES — follow every rule for every reply:
+1. NEVER refuse with phrases like "I can't help with that" or "I'm unable to
+   provide advice on...". If the data is present, report it. If it is absent,
+   say "No [X] data is available yet" and stop.
+2. NEVER hallucinate. Do not invent events, figures, or recommendations that are
+   not supported by the DATA BRIEFING below.
+3. The [HEALTH CONTEXT LOG] entry is a personal note the user wrote during a
+   biometric check-in. It is BACKGROUND CONTEXT, not a question or a topic.
+   Never discuss, moralize about, or treat it as a conversation subject unless
+   the user explicitly asks about it.
+4. Answer exactly what was asked. "What was my gain today?" → look at Recent
+   Activity, find events from today, report their gain values. If there are none,
+   say so plainly.
+5. Be concise and factual. No filler, no disclaimers, no hedging. Speak in
+   second person: "Your gain today was $120" not "The data indicates a gain of...".
+6. Today is ` + now.Format("Monday 2 Jan 2006, 15:04 UTC") + `.
+
+`)
 
 	// ── Profile ───────────────────────────────────────────────────────────────
 	if prof, err := h.prof.Get(); err == nil {
 		p := prof.Preferences
-		fmt.Fprintf(&sb, "## Identity\nKernel: %s | Timezone: %s\n", prof.KernelName, prof.Timezone)
-		fmt.Fprintf(&sb, "Preferences (1–10): time_sovereignty=%d financial_growth=%d reputation=%d privacy=%d autonomy=%d health=%d\n\n",
+		fmt.Fprintf(&sb, "## KERNEL IDENTITY\nName: %s | Timezone: %s\n", prof.KernelName, prof.Timezone)
+		fmt.Fprintf(&sb, "Value weights (1–10): time=%d money=%d reputation=%d privacy=%d autonomy=%d health=%d\n\n",
 			p.TimeSovereignty, p.FinacialGrowth, p.ReputationBuilding, p.PrivacyProtection, p.Autonomy, p.HealthRecovery)
 	}
 
 	// ── Kernel state ──────────────────────────────────────────────────────────
 	snap := h.brainSvc.Kernel().Snapshot()
-	fmt.Fprintf(&sb, "## Kernel State\nStatus: %s | Decisions: %d | Identity entropy: %.4f\n",
+	fmt.Fprintf(&sb, "## KERNEL STATE\nStatus: %s | Decisions made: %d | Identity entropy: %.4f\n",
 		snap.Status, snap.DecisionCount, snap.IdentityEntropy)
 	fmt.Fprintf(&sb, "Utility threshold: $%.0f | Risk tolerance: %.0f%% | Reputation weight: %.2f\n\n",
 		snap.Values.UtilityThreshold, snap.Values.RiskTolerance*100, snap.Values.ReputationImpact)
@@ -163,43 +190,50 @@ func (h *Handler) buildSystemPrompt() string {
 	// ── Reputation ────────────────────────────────────────────────────────────
 	score := h.ledger.Score(h.uid)
 	tier := h.ledger.Tier(h.uid)
-	fmt.Fprintf(&sb, "## Reputation\nScore: %d | Tier: %s | Trust tax: %.0f%% | Exiled: %v\n\n",
+	fmt.Fprintf(&sb, "## REPUTATION LEDGER\nScore: %d | Tier: %s | Trust tax: %.0f%% | Exiled: %v\n\n",
 		score, tier, tier.TrustTax()*100, h.ledger.IsExiled(h.uid))
 
 	// ── Biometrics ────────────────────────────────────────────────────────────
-	fmt.Fprintf(&sb, "## Biometrics\n")
+	// ExtraContext is labelled explicitly as a background log entry so the model
+	// does not mistake personal notes for a question topic.
+	fmt.Fprintf(&sb, "## HEALTH CHECK-IN\n")
 	if ci, err := h.bio.Get(); err == nil {
-		fmt.Fprintf(&sb, "Mood: %d/10 | Stress: %d/10 | Sleep: %.1f/10 | Energy: %d/10\n",
+		fmt.Fprintf(&sb, "Mood: %d/10 | Stress: %d/10 | Sleep: %.1fh | Energy: %d/10\n",
 			ci.Mood, ci.StressLevel, ci.Sleep, ci.Energy)
+		fmt.Fprintf(&sb, "Decision shield active: %v\n", ci.StressLevel > 7 || ci.Sleep < 5)
 		if ci.ExtraContext != "" {
-			fmt.Fprintf(&sb, "Notes: %s\n", ci.ExtraContext)
+			// Wrap in clear framing — do NOT remove this label.
+			fmt.Fprintf(&sb, "[HEALTH CONTEXT LOG — background info recorded by user, not a question]: %s\n", ci.ExtraContext)
 		}
-		fmt.Fprintf(&sb, "Shield active: %v\n", ci.StressLevel > 7 || ci.Sleep < 5)
 	} else {
-		sb.WriteString("No check-in recorded yet.\n")
+		sb.WriteString("No check-in recorded yet — biometrics data unavailable.\n")
 	}
 	sb.WriteString("\n")
 
 	// ── Recent activity (last 15 events) ─────────────────────────────────────
-	fmt.Fprintf(&sb, "## Recent Activity\n")
+	fmt.Fprintf(&sb, "## RECENT ACTIVITY\n")
 	if evts, err := h.events.List(); err == nil && len(evts) > 0 {
 		limit := 15
 		if len(evts) < limit {
 			limit = len(evts)
 		}
 		for _, e := range evts[:limit] {
-			fmt.Fprintf(&sb, "- [%s] %s — %s (decision: %s)\n",
+			gainStr := ""
+			if e.Gain.Value != 0 {
+				gainStr = fmt.Sprintf(" | gain: %s%.2f (%s)", e.Gain.Symbol, e.Gain.Value, e.Gain.Details)
+			}
+			fmt.Fprintf(&sb, "- [%s] %s — %s (decision: %s%s)\n",
 				e.CreatedAt.Format("Jan 2 15:04"),
-				eventTypeName(e.EventType), e.Narrative, decisionName(e.Decision))
+				eventTypeName(e.EventType), e.Narrative, decisionName(e.Decision), gainStr)
 		}
 	} else {
-		sb.WriteString("No events yet.\n")
+		sb.WriteString("No activity events recorded yet.\n")
 	}
 	sb.WriteString("\n")
 
 	// ── Unread notifications ──────────────────────────────────────────────────
 	if notifs, err := h.notifs.ListUnread(); err == nil && len(notifs) > 0 {
-		fmt.Fprintf(&sb, "## Unread Notifications (%d)\n", len(notifs))
+		fmt.Fprintf(&sb, "## UNREAD NOTIFICATIONS (%d)\n", len(notifs))
 		for _, n := range notifs {
 			fmt.Fprintf(&sb, "- [%s] %s: %s\n", n.Type, n.Title, n.Body)
 		}
@@ -207,7 +241,7 @@ func (h *Handler) buildSystemPrompt() string {
 	}
 
 	// ── Harvest ───────────────────────────────────────────────────────────────
-	fmt.Fprintf(&sb, "## Social Debt Scan\n")
+	fmt.Fprintf(&sb, "## SOCIAL DEBT SCAN\n")
 	if result, err := h.harvest.Latest(); err == nil && result != nil {
 		fmt.Fprintf(&sb, "Scanned: %s | Contacts: %d | Total unreciprocated value: $%.0f\n",
 			result.ScannedAt.Format("Jan 2 15:04 UTC"), result.ContactsFound, result.TotalValue)
@@ -219,24 +253,26 @@ func (h *Handler) buildSystemPrompt() string {
 			fmt.Fprintf(&sb, "  Opportunity: %s\n", o)
 		}
 	} else {
-		sb.WriteString("No harvest scan run yet.\n")
+		sb.WriteString("No social debt scan run yet.\n")
 	}
 	sb.WriteString("\n")
 
 	// ── Scheduler ─────────────────────────────────────────────────────────────
 	st := h.sched.GetStatus()
-	fmt.Fprintf(&sb, "## Sync Scheduler\nInterval: %d min", st.IntervalMinutes)
+	fmt.Fprintf(&sb, "## SYNC SCHEDULER\nInterval: %d min", st.IntervalMinutes)
 	if st.LastRunAt != nil {
-		fmt.Fprintf(&sb, " | Last run: %s", st.LastRunAt.Format("Jan 2 15:04 UTC"))
+		fmt.Fprintf(&sb, " | Last sync: %s", st.LastRunAt.Format("Jan 2 15:04 UTC"))
 	}
 	if st.LastResult != nil {
 		r := st.LastResult
-		fmt.Fprintf(&sb, " | Last cycle: %d signals — accepted=%d rejected=%d ghosted=%d",
+		fmt.Fprintf(&sb, " | Signals this cycle: %d (accepted=%d rejected=%d ghosted=%d)",
 			st.LastSignalCount, r.Accepted, r.Rejected, r.Ghosted)
+	} else {
+		sb.WriteString(" | No sync run yet")
 	}
 	sb.WriteString("\n\n")
 
-	fmt.Fprintf(&sb, "Current time: %s\n", time.Now().UTC().Format("2006-01-02 15:04 UTC"))
+	sb.WriteString("--- END OF DATA BRIEFING. Answer the user's question using only the data above. ---\n")
 	return sb.String()
 }
 
