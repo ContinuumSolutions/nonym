@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/egokernel/ek1/internal/brain"
@@ -21,6 +22,7 @@ type RunNowResponse = brain.PipelineResult
 
 // Status is the read-only snapshot returned by GET /scheduler/status.
 type Status struct {
+	Running         bool                     `json:"running"`                 // true while a pipeline cycle is executing
 	IntervalMinutes int                      `json:"interval_minutes"`
 	LastRunAt       *time.Time               `json:"last_run_at"`             // nil if never run
 	NextRunAt       *time.Time               `json:"next_run_at"`             // nil if not started
@@ -31,8 +33,8 @@ type Status struct {
 }
 
 // Scheduler orchestrates periodic sync cycles.
-// A single goroutine runs the ticker; RunNow provides an immediate trigger.
-// TryLock prevents overlapping runs if a cycle takes longer than the interval.
+// A single goroutine runs the ticker; RunNowAsync provides an immediate non-blocking trigger.
+// runMu prevents overlapping runs if a cycle takes longer than the interval.
 type Scheduler struct {
 	engine   *datasync.Engine
 	pipeline *brain.Pipeline
@@ -44,8 +46,9 @@ type Scheduler struct {
 	status   Status
 	prevH2HI bool
 
-	runMu  sync.Mutex   // prevents concurrent pipeline runs
-	stopCh chan struct{}
+	runMu   sync.Mutex   // prevents concurrent pipeline runs
+	running atomic.Bool  // true while runLocked is executing; read by GetStatus
+	stopCh  chan struct{}
 }
 
 // NewScheduler wires the sync engine, brain pipeline, and notification store.
@@ -94,26 +97,53 @@ func (s *Scheduler) Stop() {
 	close(s.stopCh)
 }
 
-// RunNow triggers an immediate pipeline cycle. Returns when the run completes.
-// If a run is already in progress it blocks until it finishes, then runs again.
+// RunNow triggers an immediate pipeline cycle synchronously.
+// Blocks until the run completes. Used internally by tests and direct callers.
 func (s *Scheduler) RunNow(ctx context.Context) (brain.PipelineResult, error) {
 	return s.run(ctx)
 }
 
-// GetStatus returns a point-in-time snapshot of scheduler state.
-func (s *Scheduler) GetStatus() Status {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.status
+// RunNowAsync fires a pipeline cycle in the background and returns immediately.
+// Returns true if the cycle was started, false if one is already in progress.
+// Poll GET /scheduler/status for the result.
+func (s *Scheduler) RunNowAsync() bool {
+	if !s.runMu.TryLock() {
+		return false // already running
+	}
+	go func() {
+		defer s.runMu.Unlock()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+		if _, err := s.runLocked(ctx); err != nil {
+			log.Printf("scheduler: run-now error: %v", err)
+		}
+	}()
+	return true
 }
 
-// run is the core cycle: sync → pipeline → notifications.
-// runMu ensures only one cycle executes at a time.
-// Status is always updated at the end of the cycle — including on failure —
-// so GET /scheduler/status always reflects the most recent attempt.
+// GetStatus returns a point-in-time snapshot of scheduler state.
+// Running is always fresh from the atomic flag; the rest comes from the last completed cycle.
+func (s *Scheduler) GetStatus() Status {
+	s.mu.Lock()
+	st := s.status
+	s.mu.Unlock()
+	st.Running = s.running.Load()
+	return st
+}
+
+// run acquires runMu and executes the full cycle synchronously.
+// Called by the background ticker.
 func (s *Scheduler) run(ctx context.Context) (brain.PipelineResult, error) {
 	s.runMu.Lock()
 	defer s.runMu.Unlock()
+	return s.runLocked(ctx)
+}
+
+// runLocked is the core cycle body. Must be called with runMu held.
+// sync → pipeline → notifications → status update.
+func (s *Scheduler) runLocked(ctx context.Context) (brain.PipelineResult, error) {
+	s.running.Store(true)
+	defer s.running.Store(false)
 
 	log.Printf("scheduler: cycle starting")
 

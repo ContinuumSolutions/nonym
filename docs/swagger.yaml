@@ -605,26 +605,6 @@ definitions:
       updated_at:
         type: string
     type: object
-  internal_scheduler.RunNowResponse:
-    properties:
-      accepted:
-        description: 'passed Triage + Decide → Decision: Automated'
-        type: integer
-      ghosted:
-        description: 'manipulation detected → Decision: Declined (ghost)'
-        type: integer
-      rejected:
-        description: 'failed Triage or Decide → Decision: Declined'
-        type: integer
-      shield_reason:
-        description: why shield was active
-        type: string
-      shielded:
-        description: biometrics gate was active during this run
-        type: boolean
-      total:
-        type: integer
-    type: object
   internal_scheduler.Status:
     properties:
       interval_minutes:
@@ -644,6 +624,9 @@ definitions:
       next_run_at:
         description: nil if not started
         type: string
+      running:
+        description: true while a pipeline cycle is executing
+        type: boolean
       services:
         items:
           $ref: '#/definitions/github_com_egokernel_ek1_internal_datasync.ServiceStatus'
@@ -1007,19 +990,36 @@ paths:
       - harvest
   /harvest/scan:
     post:
+      description: Starts a social-debt scan in the background and returns immediately.
+        Poll GET /harvest/results for the completed result or GET /harvest/status
+        for running state.
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Trigger harvest scan (async)
+      tags:
+      - harvest
+  /harvest/status:
+    get:
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_harvest.HarvestResult'
-        "500":
-          description: Internal Server Error
-          schema:
             additionalProperties: true
             type: object
-      summary: Run harvest scan
+      summary: Get harvest scan status
       tags:
       - harvest
   /integrations/services:
@@ -1576,19 +1576,22 @@ paths:
       - profile
   /scheduler/run-now:
     post:
+      description: Starts a sync cycle in the background and returns immediately.
+        Poll GET /scheduler/status for completion (running=false + last_result populated).
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_scheduler.RunNowResponse'
-        "500":
-          description: Internal Server Error
+        "202":
+          description: Accepted
           schema:
             additionalProperties: true
             type: object
-      summary: Trigger immediate pipeline cycle
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Trigger immediate pipeline cycle (async)
       tags:
       - scheduler
   /scheduler/status:

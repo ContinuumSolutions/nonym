@@ -24,16 +24,22 @@ func (h *Handler) status(c *fiber.Ctx) error {
 	return c.JSON(h.scheduler.GetStatus())
 }
 
-// @Summary      Trigger immediate pipeline cycle
+// @Summary      Trigger immediate pipeline cycle (async)
+// @Description  Starts a sync cycle in the background and returns immediately. Poll GET /scheduler/status for completion (running=false + last_result populated).
 // @Tags         scheduler
 // @Produce      json
-// @Success      200  {object}  scheduler.RunNowResponse
-// @Failure      500  {object}  map[string]interface{}
+// @Success      202  {object}  map[string]interface{}
+// @Failure      409  {object}  map[string]interface{}
 // @Router       /scheduler/run-now [post]
 func (h *Handler) runNow(c *fiber.Ctx) error {
-	result, err := h.scheduler.RunNow(c.Context())
-	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	if !h.scheduler.RunNowAsync() {
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+			"status":  "already_running",
+			"message": "a pipeline cycle is already in progress — poll GET /scheduler/status for completion",
+		})
 	}
-	return c.JSON(result)
+	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{
+		"status":  "started",
+		"message": "pipeline cycle started — poll GET /scheduler/status for results",
+	})
 }

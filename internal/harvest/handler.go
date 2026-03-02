@@ -1,8 +1,11 @@
 package harvest
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"sync"
+	"time"
 
 	"github.com/egokernel/ek1/internal/notifications"
 	"github.com/gofiber/fiber/v2"
@@ -16,6 +19,9 @@ type Handler struct {
 	scanner *Scanner
 	store   *Store
 	notifs  *notifications.Store
+
+	mu      sync.Mutex // guards running
+	running bool       // true while a scan goroutine is executing
 }
 
 func NewHandler(scanner *Scanner, store *Store, notifs *notifications.Store) *Handler {
@@ -25,27 +31,65 @@ func NewHandler(scanner *Scanner, store *Store, notifs *notifications.Store) *Ha
 func (h *Handler) RegisterRoutes(r fiber.Router) {
 	r.Post("/harvest/scan", h.scan)
 	r.Get("/harvest/results", h.results)
+	r.Get("/harvest/status", h.status)
 }
 
-// @Summary      Run harvest scan
+// @Summary      Trigger harvest scan (async)
+// @Description  Starts a social-debt scan in the background and returns immediately. Poll GET /harvest/results for the completed result or GET /harvest/status for running state.
 // @Tags         harvest
 // @Produce      json
-// @Success      200  {object}  harvest.HarvestResult
-// @Failure      500  {object}  map[string]interface{}
+// @Success      202  {object}  map[string]interface{}
+// @Failure      409  {object}  map[string]interface{}
 // @Router       /harvest/scan [post]
 func (h *Handler) scan(c *fiber.Ctx) error {
-	result, err := h.scanner.Scan(c.Context())
-	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	h.mu.Lock()
+	if h.running {
+		h.mu.Unlock()
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+			"status":  "already_running",
+			"message": "a harvest scan is already in progress — poll GET /harvest/results for completion",
+		})
 	}
+	h.running = true
+	h.mu.Unlock()
 
-	if err := h.store.Save(result); err != nil {
-		log.Printf("harvest: save result: %v", err)
-	}
+	go func() {
+		defer func() {
+			h.mu.Lock()
+			h.running = false
+			h.mu.Unlock()
+		}()
 
-	h.createNotifications(result)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
 
-	return c.JSON(result)
+		result, err := h.scanner.Scan(ctx)
+		if err != nil {
+			log.Printf("harvest: scan error: %v", err)
+			return
+		}
+		if err := h.store.Save(result); err != nil {
+			log.Printf("harvest: save result: %v", err)
+		}
+		h.createNotifications(result)
+	}()
+
+	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{
+		"status":  "started",
+		"message": "harvest scan started — poll GET /harvest/results for the completed result",
+	})
+}
+
+// @Summary      Get harvest scan status
+// @Tags         harvest
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Router       /harvest/status [get]
+func (h *Handler) status(c *fiber.Ctx) error {
+	h.mu.Lock()
+	running := h.running
+	h.mu.Unlock()
+	return c.JSON(fiber.Map{"running": running})
 }
 
 // @Summary      Get latest harvest results

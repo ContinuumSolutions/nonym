@@ -536,22 +536,44 @@
         },
         "/harvest/scan": {
             "post": {
+                "description": "Starts a social-debt scan in the background and returns immediately. Poll GET /harvest/results for the completed result or GET /harvest/status for running state.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "harvest"
                 ],
-                "summary": "Run harvest scan",
+                "summary": "Trigger harvest scan (async)",
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/harvest/status": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "harvest"
+                ],
+                "summary": "Get harvest scan status",
                 "responses": {
                     "200": {
                         "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_harvest.HarvestResult"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -1383,22 +1405,24 @@
         },
         "/scheduler/run-now": {
             "post": {
+                "description": "Starts a sync cycle in the background and returns immediately. Poll GET /scheduler/status for completion (running=false + last_result populated).",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "scheduler"
                 ],
-                "summary": "Trigger immediate pipeline cycle",
+                "summary": "Trigger immediate pipeline cycle (async)",
                 "responses": {
-                    "200": {
-                        "description": "OK",
+                    "202": {
+                        "description": "Accepted",
                         "schema": {
-                            "$ref": "#/definitions/internal_scheduler.RunNowResponse"
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     },
-                    "500": {
-                        "description": "Internal Server Error",
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -2265,34 +2289,6 @@
                 }
             }
         },
-        "internal_scheduler.RunNowResponse": {
-            "type": "object",
-            "properties": {
-                "accepted": {
-                    "description": "passed Triage + Decide → Decision: Automated",
-                    "type": "integer"
-                },
-                "ghosted": {
-                    "description": "manipulation detected → Decision: Declined (ghost)",
-                    "type": "integer"
-                },
-                "rejected": {
-                    "description": "failed Triage or Decide → Decision: Declined",
-                    "type": "integer"
-                },
-                "shield_reason": {
-                    "description": "why shield was active",
-                    "type": "string"
-                },
-                "shielded": {
-                    "description": "biometrics gate was active during this run",
-                    "type": "boolean"
-                },
-                "total": {
-                    "type": "integer"
-                }
-            }
-        },
         "internal_scheduler.Status": {
             "type": "object",
             "properties": {
@@ -2321,6 +2317,10 @@
                 "next_run_at": {
                     "description": "nil if not started",
                     "type": "string"
+                },
+                "running": {
+                    "description": "true while a pipeline cycle is executing",
+                    "type": "boolean"
                 },
                 "services": {
                     "type": "array",
