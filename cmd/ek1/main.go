@@ -179,7 +179,15 @@ func main() {
 	ledger.NewHandler(sqliteLedger, "ek1-kernel").RegisterRoutes(app)
 	biometrics.NewHandler(checkInStore).RegisterRoutes(app)
 	activities.NewHandler(eventsStore).RegisterRoutes(app)
-	integrations.NewHandler(servicesStore).RegisterRoutes(app)
+	apiBaseURL := os.Getenv("API_BASE_URL")
+	if apiBaseURL == "" {
+		apiBaseURL = "http://localhost:3000"
+	}
+	frontendOrigin := os.Getenv("FRONTEND_ORIGIN")
+	if frontendOrigin == "" {
+		frontendOrigin = "http://localhost:8080"
+	}
+	integrations.NewHandler(servicesStore, apiBaseURL, frontendOrigin).RegisterRoutes(app)
 	harvest.NewHandler(harvestScanner, harvestStore, notifsStore).RegisterRoutes(app)
 	notifications.NewHandler(notifsStore).RegisterRoutes(app)
 	scheduler.NewHandler(sched).RegisterRoutes(app)

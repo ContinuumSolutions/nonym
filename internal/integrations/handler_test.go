@@ -15,7 +15,7 @@ func setupApp(t *testing.T) *fiber.App {
 	t.Helper()
 	store := newTestStore(t) // defined in store_test.go
 	app := fiber.New()
-	NewHandler(store).RegisterRoutes(app)
+	NewHandler(store, "http://localhost:3000", "http://localhost:8080").RegisterRoutes(app)
 	return app
 }
 
@@ -23,7 +23,7 @@ func setupAppWithStore(t *testing.T) (*fiber.App, *Store) {
 	t.Helper()
 	store := newTestStore(t)
 	app := fiber.New()
-	NewHandler(store).RegisterRoutes(app)
+	NewHandler(store, "http://localhost:3000", "http://localhost:8080").RegisterRoutes(app)
 	return app, store
 }
 

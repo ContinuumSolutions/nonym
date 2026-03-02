@@ -41,10 +41,18 @@ func (s *Store) Migrate() error {
 	if err != nil {
 		return err
 	}
-	// Add color column to databases created before this field was introduced.
-	// SQLite ignores the error when the column already exists via the IF NOT EXISTS workaround,
-	// but since ALTER TABLE has no IF NOT EXISTS, we swallow the "duplicate column" error.
-	s.db.Exec(`ALTER TABLE services ADD COLUMN color TEXT NOT NULL DEFAULT ''`) //nolint:errcheck
+	// Idempotent ALTER TABLE additions — "duplicate column" errors are swallowed intentionally.
+	for _, col := range []string{
+		`ALTER TABLE services ADD COLUMN color               TEXT    NOT NULL DEFAULT ''`,
+		`ALTER TABLE services ADD COLUMN oauth_client_id     TEXT    NOT NULL DEFAULT ''`,
+		`ALTER TABLE services ADD COLUMN oauth_client_secret TEXT    NOT NULL DEFAULT ''`,
+		`ALTER TABLE services ADD COLUMN oauth_token_expiry  INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE services ADD COLUMN oauth_state         TEXT    NOT NULL DEFAULT ''`,
+		`ALTER TABLE services ADD COLUMN oauth_state_expiry  INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE services ADD COLUMN oauth_code_verifier TEXT    NOT NULL DEFAULT ''`,
+	} {
+		s.db.Exec(col) //nolint:errcheck
+	}
 	return nil
 }
 
@@ -86,7 +94,8 @@ func maskKey(key string) string {
 const selectFields = `
 	SELECT id, slug, name, category, icon, color, description, auth_method, status, custom,
 	       api_key, api_endpoint,
-	       CASE WHEN oauth_access_token != '' THEN 1 ELSE 0 END,
+	       CASE WHEN oauth_access_token  != '' THEN 1 ELSE 0 END,
+	       CASE WHEN oauth_client_id     != '' THEN 1 ELSE 0 END,
 	       created_at, updated_at
 	FROM services
 `
@@ -95,13 +104,13 @@ const selectFields = `
 func (s *Store) scanRow(row *sql.Row) (*Service, error) {
 	var svc Service
 	var apiKeyEnc string
-	var custom, oauthConnected int
+	var custom, oauthConnected, appConfigured int
 	var createdAt, updatedAt int64
 
 	err := row.Scan(
 		&svc.ID, &svc.Slug, &svc.Name, &svc.Category, &svc.Icon, &svc.Color, &svc.Description,
 		&svc.AuthMethod, &svc.Status, &custom,
-		&apiKeyEnc, &svc.APIEndpoint, &oauthConnected,
+		&apiKeyEnc, &svc.APIEndpoint, &oauthConnected, &appConfigured,
 		&createdAt, &updatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -116,6 +125,7 @@ func (s *Store) scanRow(row *sql.Row) (*Service, error) {
 	}
 	svc.Custom = custom != 0
 	svc.OAuthConnected = oauthConnected != 0
+	svc.AppConfigured = appConfigured != 0
 	svc.APIKey = maskKey(apiKey)
 	svc.CreatedAt = time.Unix(createdAt, 0).UTC()
 	svc.UpdatedAt = time.Unix(updatedAt, 0).UTC()
@@ -126,13 +136,13 @@ func (s *Store) scanRow(row *sql.Row) (*Service, error) {
 func (s *Store) scanRows(rows *sql.Rows) (*Service, error) {
 	var svc Service
 	var apiKeyEnc string
-	var custom, oauthConnected int
+	var custom, oauthConnected, appConfigured int
 	var createdAt, updatedAt int64
 
 	err := rows.Scan(
 		&svc.ID, &svc.Slug, &svc.Name, &svc.Category, &svc.Icon, &svc.Color, &svc.Description,
 		&svc.AuthMethod, &svc.Status, &custom,
-		&apiKeyEnc, &svc.APIEndpoint, &oauthConnected,
+		&apiKeyEnc, &svc.APIEndpoint, &oauthConnected, &appConfigured,
 		&createdAt, &updatedAt,
 	)
 	if err != nil {
@@ -144,6 +154,7 @@ func (s *Store) scanRows(rows *sql.Rows) (*Service, error) {
 	}
 	svc.Custom = custom != 0
 	svc.OAuthConnected = oauthConnected != 0
+	svc.AppConfigured = appConfigured != 0
 	svc.APIKey = maskKey(apiKey)
 	svc.CreatedAt = time.Unix(createdAt, 0).UTC()
 	svc.UpdatedAt = time.Unix(updatedAt, 0).UTC()
@@ -255,7 +266,9 @@ func (s *Store) CompleteConnect(id int, input ConnectInput) (*Service, error) {
 	return s.requireAffected(res, id)
 }
 
-// Uninstall clears all credentials and resets the service to Disconnected.
+// Uninstall resets the service to Disconnected and clears all credentials except
+// OAuth client_id/client_secret — those are kept so the user can re-authorise
+// without re-entering their app credentials.
 func (s *Store) Uninstall(id int) (*Service, error) {
 	now := time.Now().UTC().Unix()
 	res, err := s.db.Exec(`
@@ -264,6 +277,10 @@ func (s *Store) Uninstall(id int) (*Service, error) {
 			api_key             = '',
 			oauth_access_token  = '',
 			oauth_refresh_token = '',
+			oauth_token_expiry  = 0,
+			oauth_state         = '',
+			oauth_state_expiry  = 0,
+			oauth_code_verifier = '',
 			updated_at          = ?
 		WHERE id = ?
 	`, Disconnected, now, id)
@@ -282,4 +299,148 @@ func (s *Store) requireAffected(res sql.Result, id int) (*Service, error) {
 		return nil, ErrNotFound
 	}
 	return s.Get(id)
+}
+
+// ── OAuth BYOA methods ────────────────────────────────────────────────────────
+
+// SaveOAuthApp encrypts and stores the user's OAuth client_id/client_secret (step 9a).
+// Clears any existing tokens so oauth_connected resets to false until re-authorised.
+func (s *Store) SaveOAuthApp(id int, clientID, clientSecret string) (*Service, error) {
+	encID, err := encrypt(s.key, clientID)
+	if err != nil {
+		return nil, err
+	}
+	encSecret, err := encrypt(s.key, clientSecret)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC().Unix()
+	res, err := s.db.Exec(`
+		UPDATE services SET
+			oauth_client_id     = ?,
+			oauth_client_secret = ?,
+			oauth_access_token  = '',
+			oauth_refresh_token = '',
+			oauth_token_expiry  = 0,
+			status              = ?,
+			updated_at          = ?
+		WHERE id = ?
+	`, encID, encSecret, Disconnected, now, id)
+	if err != nil {
+		return nil, err
+	}
+	return s.requireAffected(res, id)
+}
+
+// SetOAuthState persists the CSRF state token and PKCE code_verifier for an in-progress flow.
+// expiry is a Unix timestamp; the state is invalid after this time.
+func (s *Store) SetOAuthState(id int, state, codeVerifier string, expiry int64) error {
+	_, err := s.db.Exec(`
+		UPDATE services SET oauth_state = ?, oauth_code_verifier = ?, oauth_state_expiry = ?
+		WHERE id = ?
+	`, state, codeVerifier, expiry, id)
+	return err
+}
+
+// GetByState looks up a service by its CSRF state token, validating that it has not expired.
+// Returns (serviceID, slug, codeVerifier) or ErrNotFound if not found/expired.
+func (s *Store) GetByState(state string) (serviceID int, slug, codeVerifier string, err error) {
+	now := time.Now().Unix()
+	row := s.db.QueryRow(`
+		SELECT id, slug, oauth_code_verifier
+		FROM services
+		WHERE oauth_state = ? AND oauth_state_expiry > ?
+	`, state, now)
+	err = row.Scan(&serviceID, &slug, &codeVerifier)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, "", "", ErrNotFound
+	}
+	return
+}
+
+// GetOAuthCreds returns fully decrypted OAuth credentials for internal use only.
+// Never expose these values in API responses.
+func (s *Store) GetOAuthCreds(id int) (clientID, clientSecret, accessToken, refreshToken string, tokenExpiry int64, err error) {
+	var cIDEnc, cSecEnc, accEnc, refEnc string
+	err = s.db.QueryRow(`
+		SELECT oauth_client_id, oauth_client_secret,
+		       oauth_access_token, oauth_refresh_token, oauth_token_expiry
+		FROM services WHERE id = ?
+	`, id).Scan(&cIDEnc, &cSecEnc, &accEnc, &refEnc, &tokenExpiry)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = ErrNotFound
+		return
+	}
+	if err != nil {
+		return
+	}
+	if clientID, err = decrypt(s.key, cIDEnc); err != nil {
+		return
+	}
+	if clientSecret, err = decrypt(s.key, cSecEnc); err != nil {
+		return
+	}
+	if accessToken, err = decrypt(s.key, accEnc); err != nil {
+		return
+	}
+	refreshToken, err = decrypt(s.key, refEnc)
+	return
+}
+
+// CompleteOAuth encrypts and stores access/refresh tokens from the callback, marks Connected (step 9c).
+// Clears the ephemeral state and code_verifier.
+func (s *Store) CompleteOAuth(id int, accessToken, refreshToken string, expiry int64) (*Service, error) {
+	encAccess, err := encrypt(s.key, accessToken)
+	if err != nil {
+		return nil, err
+	}
+	encRefresh, err := encrypt(s.key, refreshToken)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC().Unix()
+	res, err := s.db.Exec(`
+		UPDATE services SET
+			status              = ?,
+			oauth_access_token  = ?,
+			oauth_refresh_token = ?,
+			oauth_token_expiry  = ?,
+			oauth_state         = '',
+			oauth_state_expiry  = 0,
+			oauth_code_verifier = '',
+			updated_at          = ?
+		WHERE id = ?
+	`, Connected, encAccess, encRefresh, expiry, now, id)
+	if err != nil {
+		return nil, err
+	}
+	return s.requireAffected(res, id)
+}
+
+// UpdateOAuthTokens replaces the access token and expiry after a background refresh (step 9d).
+func (s *Store) UpdateOAuthTokens(id int, accessToken string, expiry int64) error {
+	encAccess, err := encrypt(s.key, accessToken)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`
+		UPDATE services SET oauth_access_token = ?, oauth_token_expiry = ?, updated_at = ?
+		WHERE id = ?
+	`, encAccess, expiry, time.Now().UTC().Unix(), id)
+	return err
+}
+
+// DisconnectOAuth marks an OAuth service as Disconnected without clearing client credentials.
+// Used when a token refresh fails — the user can re-authorise without re-entering app creds.
+func (s *Store) DisconnectOAuth(id int) error {
+	_, err := s.db.Exec(`
+		UPDATE services SET
+			status             = ?,
+			oauth_access_token  = '',
+			oauth_refresh_token = '',
+			oauth_token_expiry  = 0,
+			updated_at          = ?
+		WHERE id = ?
+	`, Disconnected, time.Now().UTC().Unix(), id)
+	return err
 }

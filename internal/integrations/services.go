@@ -35,6 +35,9 @@ type Service struct {
 	APIKey         string           `json:"api_key,omitempty"` // masked on read, never raw
 	APIEndpoint    string           `json:"api_endpoint,omitempty"`
 	OAuthConnected bool             `json:"oauth_connected"`
-	CreatedAt      time.Time        `json:"created_at"`
-	UpdatedAt      time.Time        `json:"updated_at"`
+	// AppConfigured is true once the user has saved their OAuth client_id/secret (BYOA).
+	// false → show "Set Up OAuth App"; true + !OAuthConnected → show "Authorize"; true + OAuthConnected → show "Disconnect"
+	AppConfigured bool      `json:"app_configured"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }

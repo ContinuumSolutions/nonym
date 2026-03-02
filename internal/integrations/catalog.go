@@ -10,6 +10,13 @@ type ServiceDef struct {
 	Color       string // brand hex color, e.g. "#4285F4"
 	Description string
 	AuthMethod  AuthMethod
+
+	// OAuth2 only (empty/nil for APIKeyAuth services).
+	AuthURL     string            // authorization endpoint
+	TokenURL    string            // token exchange endpoint
+	RevokeURL   string            // token revocation endpoint (optional)
+	Scopes      []string          // space-joined into the scope query param
+	ExtraParams map[string]string // additional query params appended to the auth URL
 }
 
 // Categories available for both built-in and custom services.
@@ -33,6 +40,11 @@ var registry = []ServiceDef{
 		Color:       "#4285F4",
 		Description: "Sync and manage your Google Calendar events.",
 		AuthMethod:  OAuth2Auth,
+		AuthURL:     "https://accounts.google.com/o/oauth2/v2/auth",
+		TokenURL:    "https://oauth2.googleapis.com/token",
+		RevokeURL:   "https://oauth2.googleapis.com/revoke",
+		Scopes:      []string{"https://www.googleapis.com/auth/calendar.readonly"},
+		ExtraParams: map[string]string{"access_type": "offline", "prompt": "consent"},
 	},
 	{
 		Slug:        "outlook-calendar",
@@ -42,6 +54,9 @@ var registry = []ServiceDef{
 		Color:       "#0078D4",
 		Description: "Sync and manage your Microsoft Outlook Calendar.",
 		AuthMethod:  OAuth2Auth,
+		AuthURL:     "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+		TokenURL:    "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+		Scopes:      []string{"Calendars.Read", "offline_access"},
 	},
 
 	// ── Communication ────────────────────────────────────────────────────────
@@ -53,6 +68,11 @@ var registry = []ServiceDef{
 		Color:       "#EA4335",
 		Description: "Read and filter your Gmail inbox.",
 		AuthMethod:  OAuth2Auth,
+		AuthURL:     "https://accounts.google.com/o/oauth2/v2/auth",
+		TokenURL:    "https://oauth2.googleapis.com/token",
+		RevokeURL:   "https://oauth2.googleapis.com/revoke",
+		Scopes:      []string{"https://www.googleapis.com/auth/gmail.readonly"},
+		ExtraParams: map[string]string{"access_type": "offline", "prompt": "consent"},
 	},
 	{
 		Slug:        "outlook-mail",
@@ -62,6 +82,9 @@ var registry = []ServiceDef{
 		Color:       "#0078D4",
 		Description: "Read and filter your Outlook inbox.",
 		AuthMethod:  OAuth2Auth,
+		AuthURL:     "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+		TokenURL:    "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+		Scopes:      []string{"Mail.Read", "offline_access"},
 	},
 	{
 		Slug:        "slack",
@@ -71,6 +94,10 @@ var registry = []ServiceDef{
 		Color:       "#4A154B",
 		Description: "Monitor and respond to Slack messages.",
 		AuthMethod:  OAuth2Auth,
+		AuthURL:     "https://slack.com/oauth/v2/authorize",
+		TokenURL:    "https://slack.com/api/oauth.v2.access",
+		RevokeURL:   "https://slack.com/api/auth.revoke",
+		Scopes:      []string{"channels:read", "channels:history"},
 	},
 	{
 		Slug:        "telegram",
@@ -111,6 +138,14 @@ var registry = []ServiceDef{
 		Color:       "#34A853",
 		Description: "Sync health and fitness data from Google Fit.",
 		AuthMethod:  OAuth2Auth,
+		AuthURL:     "https://accounts.google.com/o/oauth2/v2/auth",
+		TokenURL:    "https://oauth2.googleapis.com/token",
+		RevokeURL:   "https://oauth2.googleapis.com/revoke",
+		Scopes: []string{
+			"https://www.googleapis.com/auth/fitness.activity.read",
+			"https://www.googleapis.com/auth/fitness.sleep.read",
+		},
+		ExtraParams: map[string]string{"access_type": "offline", "prompt": "consent"},
 	},
 	{
 		Slug:        "fitbit",
@@ -120,6 +155,10 @@ var registry = []ServiceDef{
 		Color:       "#00B0B9",
 		Description: "Sync sleep, activity, and health data from Fitbit.",
 		AuthMethod:  OAuth2Auth,
+		AuthURL:     "https://www.fitbit.com/oauth2/authorize",
+		TokenURL:    "https://api.fitbit.com/oauth2/token",
+		RevokeURL:   "https://api.fitbit.com/oauth2/revoke",
+		Scopes:      []string{"sleep", "activity", "heartrate"},
 	},
 	{
 		Slug:        "oura",
@@ -138,6 +177,9 @@ var registry = []ServiceDef{
 		Color:       "#3DFF8F",
 		Description: "Sync strain, recovery, and sleep data from WHOOP.",
 		AuthMethod:  OAuth2Auth,
+		AuthURL:     "https://api.prod.whoop.com/oauth/oauth2/auth",
+		TokenURL:    "https://api.prod.whoop.com/oauth/oauth2/token",
+		Scopes:      []string{"read:recovery", "read:sleep", "read:workout"},
 	},
 
 	// ── Billing ──────────────────────────────────────────────────────────────
