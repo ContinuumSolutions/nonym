@@ -2213,6 +2213,10 @@ const docTemplate = `{
                 "interval_minutes": {
                     "type": "integer"
                 },
+                "last_error": {
+                    "description": "non-empty when last cycle failed",
+                    "type": "string"
+                },
                 "last_result": {
                     "description": "nil if never run",
                     "allOf": [

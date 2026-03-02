@@ -17,10 +17,11 @@ import (
 // Status is the read-only snapshot returned by GET /scheduler/status.
 type Status struct {
 	IntervalMinutes int                      `json:"interval_minutes"`
-	LastRunAt       *time.Time               `json:"last_run_at"`        // nil if never run
-	NextRunAt       *time.Time               `json:"next_run_at"`        // nil if not started
+	LastRunAt       *time.Time               `json:"last_run_at"`             // nil if never run
+	NextRunAt       *time.Time               `json:"next_run_at"`             // nil if not started
 	LastSignalCount int                      `json:"last_signal_count"`
-	LastResult      *brain.PipelineResult    `json:"last_result"`        // nil if never run
+	LastResult      *brain.PipelineResult    `json:"last_result"`             // nil if never run
+	LastError       string                   `json:"last_error,omitempty"`    // non-empty when last cycle failed
 	Services        []datasync.ServiceStatus `json:"services"`
 }
 
@@ -103,41 +104,61 @@ func (s *Scheduler) GetStatus() Status {
 
 // run is the core cycle: sync → pipeline → notifications.
 // runMu ensures only one cycle executes at a time.
+// Status is always updated at the end of the cycle — including on failure —
+// so GET /scheduler/status always reflects the most recent attempt.
 func (s *Scheduler) run(ctx context.Context) (brain.PipelineResult, error) {
 	s.runMu.Lock()
 	defer s.runMu.Unlock()
 
 	log.Printf("scheduler: cycle starting")
 
+	var (
+		signals   []datasync.RawSignal
+		result    brain.PipelineResult
+		cycleErr  error
+	)
+
 	// ── 1. Pull raw signals from all installed services ──────────────────────
-	signals, err := s.engine.Run(ctx)
-	if err != nil {
-		return brain.PipelineResult{}, fmt.Errorf("scheduler: sync: %w", err)
+	signals, cycleErr = s.engine.Run(ctx)
+	if cycleErr != nil {
+		cycleErr = fmt.Errorf("sync: %w", cycleErr)
+		log.Printf("scheduler: %v", cycleErr)
+	} else {
+		log.Printf("scheduler: pulled %d signals", len(signals))
+
+		// ── 2. Brain pipeline: LLM → Triage → Decide → Events ───────────────
+		result, cycleErr = s.pipeline.Run(ctx, signals)
+		if cycleErr != nil {
+			cycleErr = fmt.Errorf("pipeline: %w", cycleErr)
+			log.Printf("scheduler: %v", cycleErr)
+		} else {
+			log.Printf("scheduler: pipeline done — accepted=%d rejected=%d ghosted=%d shielded=%v",
+				result.Accepted, result.Rejected, result.Ghosted, result.Shielded)
+
+			// ── 3. Notifications ─────────────────────────────────────────────
+			s.checkH2HI()
+		}
 	}
-	log.Printf("scheduler: pulled %d signals", len(signals))
 
-	// ── 2. Brain pipeline: LLM → Triage → Decide → Events ───────────────────
-	result, err := s.pipeline.Run(ctx, signals)
-	if err != nil {
-		return result, fmt.Errorf("scheduler: pipeline: %w", err)
-	}
-	log.Printf("scheduler: pipeline done — accepted=%d rejected=%d ghosted=%d shielded=%v",
-		result.Accepted, result.Rejected, result.Ghosted, result.Shielded)
-
-	// ── 3. Notifications ─────────────────────────────────────────────────────
-	s.checkH2HI()
-
-	// ── 4. Update status ─────────────────────────────────────────────────────
+	// ── 4. Update status — always, so failures are visible ───────────────────
 	now := time.Now()
 	next := now.Add(s.interval)
 	s.mu.Lock()
 	s.status.LastRunAt = &now
 	s.status.NextRunAt = &next
 	s.status.LastSignalCount = len(signals)
-	s.status.LastResult = &result
 	s.status.Services = s.engine.ServiceStatuses()
+	if cycleErr != nil {
+		s.status.LastError = cycleErr.Error()
+	} else {
+		s.status.LastError = ""
+		s.status.LastResult = &result
+	}
 	s.mu.Unlock()
 
+	if cycleErr != nil {
+		return result, fmt.Errorf("scheduler: %w", cycleErr)
+	}
 	return result, nil
 }
 
