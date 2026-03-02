@@ -32,15 +32,15 @@ func (a *IntaSendAdapter) Pull(ctx context.Context, creds Credentials, since tim
 			Count   int    `json:"count"`
 			Next    string `json:"next"`
 			Results []struct {
-				ID        string `json:"id"`
-				Value     string `json:"value"`   // decimal string e.g. "1500.00"
-				Currency  string `json:"currency"`
-				TransType string `json:"trans_type"`
-				Status    string `json:"status"`
-				Narrative string `json:"narrative"`
-				Account   string `json:"account"`   // counter-party identifier
-				CreatedAt string `json:"created_at"` // ISO-8601
-				UpdatedAt string `json:"updated_at"`
+				ID        string  `json:"id"`
+				Value     float64 `json:"value"`    // numeric e.g. 1500.00
+				Currency  string  `json:"currency"`
+				TransType string  `json:"trans_type"`
+				Status    string  `json:"status"`
+				Narrative string  `json:"narrative"`
+				Account   string  `json:"account"`   // counter-party identifier
+				CreatedAt string  `json:"created_at"` // ISO-8601
+				UpdatedAt string  `json:"updated_at"`
 			} `json:"results"`
 		}
 		if err := json.Unmarshal(body, &resp); err != nil {
@@ -66,17 +66,18 @@ func (a *IntaSendAdapter) Pull(ctx context.Context, creds Credentials, since tim
 				title = fmt.Sprintf("%s transaction %s", tx.TransType, tx.ID)
 			}
 
+			valueStr := fmt.Sprintf("%.2f", tx.Value)
 			signals = append(signals, RawSignal{
 				ServiceSlug: a.Slug(),
 				Category:    "Finance",
 				Title:       title,
 				Body: fmt.Sprintf(
 					"%s %s — %s (%s)",
-					tx.Value, tx.Currency, tx.Status, tx.TransType,
+					valueStr, tx.Currency, tx.Status, tx.TransType,
 				),
 				Metadata: map[string]string{
 					"transaction_id": tx.ID,
-					"amount":         tx.Value,
+					"amount":         valueStr,
 					"currency":       tx.Currency,
 					"trans_type":     tx.TransType,
 					"status":         tx.Status,

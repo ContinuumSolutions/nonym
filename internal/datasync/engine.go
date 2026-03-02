@@ -164,6 +164,9 @@ func authGet(ctx context.Context, url, token string) ([]byte, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == 401 {
+		return nil, fmt.Errorf("HTTP 401 from %s — access token was revoked or expired; re-authorize to restore sync", url)
+	}
 	if resp.StatusCode >= 400 {
 		return nil, fmt.Errorf("HTTP %d from %s", resp.StatusCode, url)
 	}
