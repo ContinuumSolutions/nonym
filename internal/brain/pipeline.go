@@ -77,6 +77,11 @@ func (p *Pipeline) Run(ctx context.Context, signals []datasync.RawSignal) (Pipel
 	// ── Step 1: LLM analysis — concurrent, capped at 3 goroutines ───────────
 	analysed, errs := p.ai.AnalyseBatch(ctx, signals)
 
+	// Snapshot the kernel matrix once (stable for this run — biometrics gate already applied).
+	p.svc.kernel.mu.RLock()
+	vals := *p.svc.kernel.Values
+	p.svc.kernel.mu.RUnlock()
+
 	// ── Step 2: Triage + Decide + Write ─────────────────────────────────────
 	for i, as := range analysed {
 		if as == nil {
@@ -92,6 +97,19 @@ func (p *Pipeline) Run(ctx context.Context, signals []datasync.RawSignal) (Pipel
 			TimeCommitment:  as.Request.TimeCommitment,
 			ManipulationPct: as.Request.ManipulationPct,
 		}
+
+		// ROI threshold mirrors Triage Gate 1 so we can surface it in analysis.
+		roiThreshold := vals.BaseHourlyRate * req.TimeCommitment * vals.TemporalSovereignty * MinROIMultiplier
+
+		analysis := activities.SignalAnalysis{
+			ServiceSlug:     as.Signal.ServiceSlug,
+			SignalTitle:     as.Signal.Title,
+			EstimatedROI:    req.EstimatedROI,
+			TimeCommitment:  req.TimeCommitment,
+			ManipulationPct: req.ManipulationPct,
+			ROIThreshold:    roiThreshold,
+		}
+
 		action, reason := p.svc.kernel.Triage(req)
 
 		var (
@@ -103,12 +121,19 @@ func (p *Pipeline) Run(ctx context.Context, signals []datasync.RawSignal) (Pipel
 		case "GHOST":
 			decision = activities.Declined
 			narrative = fmt.Sprintf("Ghosted: %s", reason)
+			analysis.TriageGate = "manipulation"
 			result.Ghosted++
+			log.Printf("brain/pipeline: [%s] %q → GHOST (manipulation=%.0f%%) %s",
+				as.Signal.ServiceSlug, as.Signal.Title, req.ManipulationPct*100, reason)
 
 		case "REJECT":
 			decision = activities.Declined
 			narrative = fmt.Sprintf("Rejected: %s", reason)
+			analysis.TriageGate = "financial_insignificance"
 			result.Rejected++
+			log.Printf("brain/pipeline: [%s] %q → REJECT (financial_insignificance) roi=%.2f roi_threshold=%.2f time=%.2fh manip=%.0f%%",
+				as.Signal.ServiceSlug, as.Signal.Title,
+				req.EstimatedROI, roiThreshold, req.TimeCommitment, req.ManipulationPct*100)
 
 		case "ACCEPT":
 			op := TradeOpportunity{
@@ -118,21 +143,40 @@ func (p *Pipeline) Run(ctx context.Context, signals []datasync.RawSignal) (Pipel
 				ReputationRisk: as.Request.ManipulationPct,
 			}
 			eval := p.svc.kernel.Decide(op)
+			analysis.DecideUtility = eval.Utility
+			analysis.DecideThreshold = vals.UtilityThreshold
 			if eval.Execute {
 				decision = activities.Automated
 				narrative = fmt.Sprintf("%s | %s", as.Narrative, eval.Reason)
+				analysis.TriageGate = "accepted"
 				p.svc.ledger.LogSuccess(p.svc.uid, int64(eval.Utility))
 				result.Accepted++
+				log.Printf("brain/pipeline: [%s] %q → ACCEPT utility=%.2f roi=%.2f time=%.2fh",
+					as.Signal.ServiceSlug, as.Signal.Title, eval.Utility, req.EstimatedROI, req.TimeCommitment)
 			} else {
 				decision = activities.Declined
 				narrative = fmt.Sprintf("Rejected post-decide: %s", eval.Reason)
+				if eval.Utility <= vals.UtilityThreshold {
+					analysis.TriageGate = "decide_utility"
+					log.Printf("brain/pipeline: [%s] %q → REJECT (decide_utility) utility=%.2f threshold=%.2f roi=%.2f time=%.2fh",
+						as.Signal.ServiceSlug, as.Signal.Title,
+						eval.Utility, vals.UtilityThreshold, req.EstimatedROI, req.TimeCommitment)
+				} else {
+					analysis.TriageGate = "decide_risk"
+					log.Printf("brain/pipeline: [%s] %q → REJECT (decide_risk) manip=%.0f%% risk_tolerance=%.2f utility=%.2f",
+						as.Signal.ServiceSlug, as.Signal.Title,
+						req.ManipulationPct*100, vals.RiskTolerance, eval.Utility)
+				}
 				result.Rejected++
 			}
 
 		default:
 			decision = activities.Declined
 			narrative = fmt.Sprintf("Unknown triage action %q: %s", action, reason)
+			analysis.TriageGate = "unknown"
 			result.Rejected++
+			log.Printf("brain/pipeline: [%s] %q → REJECT (unknown action %q): %s",
+				as.Signal.ServiceSlug, as.Signal.Title, action, reason)
 		}
 
 		// Prepend the shield annotation when the biometrics gate is active.
@@ -145,6 +189,7 @@ func (p *Pipeline) Run(ctx context.Context, signals []datasync.RawSignal) (Pipel
 			Decision:      decision,
 			Importance:    as.Importance,
 			Narrative:     narrative,
+			Analysis:      analysis,
 			Gain:          as.Gain,
 			SourceService: as.Signal.ServiceSlug,
 		}

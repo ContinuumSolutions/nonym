@@ -66,15 +66,30 @@ type Gain struct {
 	Details string   `json:"details"`
 }
 
+// SignalAnalysis records the LLM scores and triage outcome for a processed
+// signal, giving full transparency into why the kernel accepted or rejected it.
+type SignalAnalysis struct {
+	ServiceSlug     string  `json:"service_slug"`
+	SignalTitle     string  `json:"signal_title"`
+	EstimatedROI    float64 `json:"estimated_roi"`      // USD value scored by LLM
+	TimeCommitment  float64 `json:"time_commitment"`    // hours scored by LLM
+	ManipulationPct float64 `json:"manipulation_pct"`   // 0–1 manipulation score
+	ROIThreshold    float64 `json:"roi_threshold"`      // minimum ROI the kernel required at triage
+	TriageGate      string  `json:"triage_gate"`        // financial_insignificance | manipulation | decide_utility | decide_risk | accepted
+	DecideUtility   float64 `json:"decide_utility,omitempty"`   // utility computed by Decide (if reached)
+	DecideThreshold float64 `json:"decide_threshold,omitempty"` // utility threshold at time of Decide
+}
+
 type Event struct {
-	ID            int        `json:"id"`
-	EventType     EventType  `json:"event_type" enums:"0,1,2,3,4,5"`
-	Decision      Decision   `json:"decision" enums:"0,1,2,3,4,5"`
-	Importance    Importance `json:"importance" enums:"0,1,2"`
-	Narrative     string     `json:"narrative"` // Detail description of exactly what happened
-	Gain          Gain       `json:"gain"`
-	SourceService string     `json:"source_service"`
-	Read          bool       `json:"read"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
+	ID            int            `json:"id"`
+	EventType     EventType      `json:"event_type" enums:"0,1,2,3,4,5"`
+	Decision      Decision       `json:"decision" enums:"0,1,2,3,4,5"`
+	Importance    Importance     `json:"importance" enums:"0,1,2"`
+	Narrative     string         `json:"narrative"` // Detail description of exactly what happened
+	Analysis      SignalAnalysis `json:"analysis"`  // LLM scores + triage rationale
+	Gain          Gain           `json:"gain"`
+	SourceService string         `json:"source_service"`
+	Read          bool           `json:"read"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
 }
