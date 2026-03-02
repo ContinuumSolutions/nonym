@@ -29,6 +29,7 @@ import (
 	"github.com/egokernel/ek1/internal/profile"
 	"github.com/egokernel/ek1/internal/scheduler"
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	fiberswagger "github.com/swaggo/fiber-swagger"
@@ -143,6 +144,16 @@ func main() {
 	app := fiber.New(fiber.Config{AppName: "EK-1"})
 	app.Use(logger.New())
 	app.Use(recover.New())
+
+	allowedOrigins := os.Getenv("CORS_ORIGINS")
+	if allowedOrigins == "" {
+		allowedOrigins = "http://genesis.egokernel.com:8080"
+	}
+	app.Use(cors.New(cors.Config{
+		AllowOrigins: allowedOrigins,
+		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
+		AllowMethods: "GET, POST, PUT, DELETE, OPTIONS",
+	}))
 
 	// @Summary      Health check
 	// @Tags         system
