@@ -49,8 +49,13 @@ func (c *Client) ClassifyInteraction(ctx context.Context, signal datasync.RawSig
 			{"role": "system", "content": classifySystemPrompt},
 			{"role": "user", "content": buildUserMessage(signal)},
 		},
-		"stream": false,
-		"format": "json",
+		"stream":     false,
+		"format":     "json",
+		"keep_alive": -1,
+		"options": map[string]interface{}{
+			// Classify output is tiny: {"kind":"...","overlap":0.x} — 80 tokens is plenty.
+			"num_predict": 80,
+		},
 	})
 	if err != nil {
 		return InteractionClass{}, fmt.Errorf("ai: classify: marshal: %w", err)

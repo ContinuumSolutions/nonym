@@ -108,8 +108,13 @@ func (c *Client) Analyse(ctx context.Context, signal datasync.RawSignal) (*Analy
 			{"role": "system", "content": systemPrompt},
 			{"role": "user", "content": buildUserMessage(signal)},
 		},
-		"stream": false,
-		"format": "json",
+		"stream":     false,
+		"format":     "json",
+		"keep_alive": -1,
+		"options": map[string]interface{}{
+			// Signal analysis JSON is compact; cap at 350 tokens to avoid runaway generation.
+			"num_predict": 350,
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("ai: marshal request: %w", err)

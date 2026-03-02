@@ -1,7 +1,9 @@
 package chat
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -16,7 +18,14 @@ import (
 	"github.com/egokernel/ek1/internal/profile"
 	"github.com/egokernel/ek1/internal/scheduler"
 	"github.com/gofiber/fiber/v2"
+	"github.com/valyala/fasthttp"
 )
+
+// Streamer is satisfied by *ai.Client when streaming is available.
+// The handler falls back to regular Chat if the ai dependency doesn't implement it.
+type Streamer interface {
+	ChatStream(ctx context.Context, systemPrompt string, turns []ai.ChatTurn, fn func(string)) error
+}
 
 // Chatter abstracts the LLM so the handler can be tested without a real Ollama server.
 type Chatter interface {
@@ -70,6 +79,7 @@ func NewHandler(
 // RegisterRoutes mounts the chat endpoints on the given router.
 func (h *Handler) RegisterRoutes(r fiber.Router) {
 	r.Post("/chat", h.chat)
+	r.Post("/chat/stream", h.chatStream)
 	r.Get("/chat/history", h.getHistory)
 }
 
@@ -114,6 +124,72 @@ func (h *Handler) chat(c *fiber.Ctx) error {
 	_ = h.history.Append("kernel", reply)
 
 	return c.JSON(Response{Reply: reply, Timestamp: time.Now().UTC()})
+}
+
+// chatStream handles POST /chat/stream, returning tokens as Server-Sent Events.
+// Each SSE event is {"token":"<chunk>"} until the final {"done":true,"timestamp":"..."}.
+// Falls back to buffered JSON (same as POST /chat) when the ai dependency does not
+// implement the Streamer interface.
+func (h *Handler) chatStream(c *fiber.Ctx) error {
+	var req Request
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
+	}
+	if strings.TrimSpace(req.Message) == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "message is required"})
+	}
+
+	streamer, ok := h.ai.(Streamer)
+	if !ok {
+		// ai doesn't support streaming — fall back transparently.
+		return h.chat(c)
+	}
+
+	systemPrompt := h.buildSystemPrompt()
+
+	turns := make([]ai.ChatTurn, 0, len(req.History)+1)
+	for _, m := range req.History {
+		role := m.Role
+		if role == "kernel" {
+			role = "assistant"
+		}
+		turns = append(turns, ai.ChatTurn{Role: role, Content: m.Content})
+	}
+	turns = append(turns, ai.ChatTurn{Role: "user", Content: req.Message})
+
+	c.Set("Content-Type", "text/event-stream")
+	c.Set("Cache-Control", "no-cache")
+	c.Set("Connection", "keep-alive")
+
+	// Capture values needed inside the stream writer closure before returning.
+	userMsg := req.Message
+	ctx := c.Context()
+
+	ctx.SetBodyStreamWriter(fasthttp.StreamWriter(func(w *bufio.Writer) {
+		var fullReply strings.Builder
+
+		sendEvent := func(v any) {
+			data, _ := json.Marshal(v)
+			fmt.Fprintf(w, "data: %s\n\n", data)
+			w.Flush()
+		}
+
+		err := streamer.ChatStream(ctx, systemPrompt, turns, func(token string) {
+			fullReply.WriteString(token)
+			sendEvent(map[string]string{"token": token})
+		})
+		if err != nil {
+			sendEvent(map[string]string{"error": err.Error()})
+			return
+		}
+
+		reply := fullReply.String()
+		_ = h.history.Append("user", userMsg)
+		_ = h.history.Append("kernel", reply)
+
+		sendEvent(map[string]any{"done": true, "timestamp": time.Now().UTC()})
+	}))
+	return nil
 }
 
 // @Summary      Get conversation history
