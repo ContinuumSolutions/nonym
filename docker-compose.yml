@@ -34,8 +34,8 @@ services:
   # ── EK-1 Ego-Kernel ────────────────────────────────────────────────────────
   ek1:
     build: .
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     env_file:
       - .env
     environment:
