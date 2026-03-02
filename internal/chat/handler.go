@@ -114,13 +114,15 @@ func (h *Handler) chat(c *fiber.Ctx) error {
 	}
 	turns = append(turns, ai.ChatTurn{Role: "user", Content: req.Message})
 
+	// Persist the user message before calling the LLM so its timestamp is
+	// always earlier than the kernel reply, even when both land in the same second.
+	_ = h.history.Append("user", req.Message)
+
 	reply, err := h.ai.Chat(c.Context(), systemPrompt, turns)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	// Persist both sides of the turn; ignore errors so a storage hiccup never blocks the reply.
-	_ = h.history.Append("user", req.Message)
 	_ = h.history.Append("kernel", reply)
 
 	return c.JSON(Response{Reply: reply, Timestamp: time.Now().UTC()})
@@ -161,8 +163,10 @@ func (h *Handler) chatStream(c *fiber.Ctx) error {
 	c.Set("Cache-Control", "no-cache")
 	c.Set("Connection", "keep-alive")
 
-	// Capture values needed inside the stream writer closure before returning.
-	userMsg := req.Message
+	// Persist the user message now, before streaming begins, so its timestamp
+	// is always earlier than the kernel reply.
+	_ = h.history.Append("user", req.Message)
+
 	ctx := c.Context()
 
 	ctx.SetBodyStreamWriter(fasthttp.StreamWriter(func(w *bufio.Writer) {
@@ -183,10 +187,7 @@ func (h *Handler) chatStream(c *fiber.Ctx) error {
 			return
 		}
 
-		reply := fullReply.String()
-		_ = h.history.Append("user", userMsg)
-		_ = h.history.Append("kernel", reply)
-
+		_ = h.history.Append("kernel", fullReply.String())
 		sendEvent(map[string]any{"done": true, "timestamp": time.Now().UTC()})
 	}))
 	return nil

@@ -39,7 +39,7 @@ func (s *HistoryStore) List(limit int) ([]Message, error) {
 	rows, err := s.db.Query(`
 		SELECT role, content, created_at
 		FROM chat_history
-		ORDER BY created_at DESC
+		ORDER BY created_at DESC, id DESC
 		LIMIT ?
 	`, limit)
 	if err != nil {
