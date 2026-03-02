@@ -9,6 +9,7 @@ func DefaultAdapters() []Adapter {
 		&OutlookMailAdapter{},
 		&OutlookCalendarAdapter{},
 		&SlackAdapter{},
+		&ZohoMailAdapter{},
 		&PlaidAdapter{},
 		&StripeAdapter{},
 		&OuraAdapter{},
