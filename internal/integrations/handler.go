@@ -1,7 +1,9 @@
 package integrations
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/url"
 	"strconv"
@@ -195,7 +197,7 @@ func (h *Handler) uninstall(c *fiber.Ctx) error {
 	}
 	if svc.AuthMethod == OAuth2Auth && svc.OAuthConnected {
 		if def := lookupCatalog(svc.Slug); def != nil && def.RevokeURL != "" {
-			_, _, accessToken, _, _, credErr := h.store.GetOAuthCreds(id)
+			_, _, accessToken, _, _, _, credErr := h.store.GetOAuthCreds(id)
 			if credErr == nil && accessToken != "" {
 				if revokeErr := revokeToken(c.Context(), def, accessToken); revokeErr != nil {
 					log.Printf("integrations: revoke token for %s: %v (continuing disconnect)", svc.Slug, revokeErr)
@@ -303,7 +305,7 @@ func (h *Handler) initiateOAuth(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "app_not_configured"})
 	}
 
-	clientID, _, _, _, _, err := h.store.GetOAuthCreds(id)
+	clientID, _, _, _, _, _, err := h.store.GetOAuthCreds(id)
 	if err != nil || clientID == "" {
 		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "app_not_configured"})
 	}
@@ -331,67 +333,115 @@ func (h *Handler) initiateOAuth(c *fiber.Ctx) error {
 // @Summary      OAuth2 callback handler (step 9c)
 // @Description  Receives the authorization code from the third-party redirect, exchanges it
 //
-//	for tokens, stores them encrypted, and redirects the browser to the frontend.
-//	No Authorization header required — this endpoint is called by the provider.
+//	for tokens, stores them encrypted, and returns a self-closing HTML page that
+//	posts a message to the opener popup. No Authorization header required.
 //
 // @Tags         integrations
 // @Produce      html
-// @Param        code   query  string  true  "Authorization code from provider"
-// @Param        state  query  string  true  "CSRF state token"
-// @Success      302    "Redirect to frontend on success or failure"
+// @Param        code            query  string  false  "Authorization code from provider"
+// @Param        state           query  string  false  "CSRF state token"
+// @Param        accounts-server query  string  false  "Regional token endpoint base (Zoho)"
+// @Success      200             "Self-closing HTML page"
 // @Router       /oauth/callback [get]
 func (h *Handler) oauthCallback(c *fiber.Ctx) error {
-	errRedirect := func(service, reason string) error {
-		u := h.frontendOrigin + "/connectors?oauth=error"
-		if service != "" {
-			u += "&service=" + url.QueryEscape(service)
-		}
-		if reason != "" {
-			u += "&reason=" + url.QueryEscape(reason)
-		}
-		return c.Redirect(u, fiber.StatusFound)
-	}
+	c.Set("Content-Type", "text/html; charset=utf-8")
 
 	// Handle provider-level errors (e.g. user denied access).
 	if providerErr := c.Query("error"); providerErr != "" {
-		return errRedirect("", providerErr)
+		return c.SendString(h.callbackHTML("", providerErr, ""))
 	}
 
 	code := c.Query("code")
 	state := c.Query("state")
 	if code == "" || state == "" {
-		return errRedirect("", "missing_code_or_state")
+		return c.SendString(h.callbackHTML("", "missing_code_or_state", ""))
 	}
 
 	serviceID, slug, codeVerifier, err := h.store.GetByState(state)
 	if errors.Is(err, ErrNotFound) {
-		return errRedirect("", "invalid_or_expired_state")
+		return c.SendString(h.callbackHTML("", "invalid_or_expired_state", ""))
 	}
 	if err != nil {
-		return errRedirect("", "server_error")
+		return c.SendString(h.callbackHTML("", "server_error", ""))
 	}
 
 	def := lookupCatalog(slug)
 	if def == nil {
-		return errRedirect(slug, "unknown_service")
+		return c.SendString(h.callbackHTML(slug, "unknown_service", ""))
 	}
 
-	clientID, clientSecret, _, _, _, err := h.store.GetOAuthCreds(serviceID)
+	clientID, clientSecret, _, _, _, _, err := h.store.GetOAuthCreds(serviceID)
 	if err != nil || clientID == "" {
-		return errRedirect(slug, "app_not_configured")
+		return c.SendString(h.callbackHTML(slug, "app_not_configured", ""))
+	}
+
+	// Some providers (Zoho) return an accounts-server param that specifies the
+	// regional token endpoint. Use it to build the effective TokenURL so EU/India
+	// users hit the correct datacenter. Store it for future token refreshes too.
+	effectiveDef := *def
+	if accountsServer := c.Query("accounts-server"); accountsServer != "" && def.TokenURL != "" {
+		parsed, parseErr := url.Parse(def.TokenURL)
+		if parseErr == nil {
+			effectiveDef.TokenURL = accountsServer + parsed.Path
+			// Best-effort persist — don't block the flow on storage error.
+			if storeErr := h.store.SetOAuthTokenURLOverride(serviceID, effectiveDef.TokenURL); storeErr != nil {
+				log.Printf("integrations: store token url override for %s: %v", slug, storeErr)
+			}
+		}
 	}
 
 	redirectURI := h.apiBaseURL + "/oauth/callback"
-	access, refresh, expiry, err := exchangeCode(c.Context(), def, clientID, clientSecret, code, redirectURI, codeVerifier)
+	access, refresh, expiry, err := exchangeCode(c.Context(), &effectiveDef, clientID, clientSecret, code, redirectURI, codeVerifier)
 	if err != nil {
 		log.Printf("integrations: oauth code exchange for %s: %v", slug, err)
-		return errRedirect(slug, "token_exchange_failed")
+		return c.SendString(h.callbackHTML(slug, "token_exchange_failed", ""))
 	}
 
 	if _, err := h.store.CompleteOAuth(serviceID, access, refresh, expiry.Unix()); err != nil {
-		return errRedirect(slug, "storage_error")
+		return c.SendString(h.callbackHTML(slug, "storage_error", ""))
 	}
 
-	successURL := h.frontendOrigin + "/connectors?oauth=success&service=" + url.QueryEscape(slug)
-	return c.Redirect(successURL, fiber.StatusFound)
+	return c.SendString(h.callbackHTML(slug, "", h.frontendOrigin+"/connectors?oauth=success&service="+url.QueryEscape(slug)))
+}
+
+// callbackHTML returns a self-closing HTML page for the OAuth popup.
+// If errReason is empty, it's a success page; otherwise an error page.
+// The page sends a postMessage to window.opener and calls window.close().
+// If not running inside a popup, it falls back to a redirect URL.
+func (h *Handler) callbackHTML(service, errReason, fallbackURL string) string {
+	var msg map[string]string
+	if errReason == "" {
+		msg = map[string]string{"oauth": "success", "service": service}
+		if fallbackURL == "" {
+			fallbackURL = h.frontendOrigin + "/connectors?oauth=success&service=" + url.QueryEscape(service)
+		}
+	} else {
+		msg = map[string]string{"oauth": "error", "service": service, "reason": errReason}
+		fallbackURL = h.frontendOrigin + "/connectors?oauth=error&service=" + url.QueryEscape(service) + "&reason=" + url.QueryEscape(errReason)
+	}
+
+	msgJSON, _ := json.Marshal(msg)
+	fallbackJSON, _ := json.Marshal(fallbackURL)
+
+	status := "Connected successfully"
+	if errReason != "" {
+		status = fmt.Sprintf("Connection failed: %s", errReason)
+	}
+
+	return fmt.Sprintf(`<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>EK-1</title></head>
+<body>
+<p>%s — you can close this window.</p>
+<script>
+(function () {
+  var msg = %s;
+  if (window.opener) {
+    try { window.opener.postMessage(msg, '*'); } catch (_) {}
+    window.close();
+  } else {
+    window.location.replace(%s);
+  }
+})();
+</script>
+</body></html>`, status, string(msgJSON), string(fallbackJSON))
 }

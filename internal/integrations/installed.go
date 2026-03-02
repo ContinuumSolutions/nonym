@@ -9,16 +9,17 @@ import (
 // ConnectedService holds a fully decrypted service row.
 // For internal use by the sync engine only — never returned by the HTTP API.
 type ConnectedService struct {
-	ID                int
-	Slug              string
-	Name              string
-	Category          string
-	AuthMethod        AuthMethod
-	APIKey            string
-	APIEndpoint       string
-	OAuthAccessToken  string
-	OAuthRefreshToken string
-	OAuthTokenExpiry  int64 // Unix timestamp; 0 means unknown/not set
+	ID                   int
+	Slug                 string
+	Name                 string
+	Category             string
+	AuthMethod           AuthMethod
+	APIKey               string
+	APIEndpoint          string
+	OAuthAccessToken     string
+	OAuthRefreshToken    string
+	OAuthTokenExpiry     int64  // Unix timestamp; 0 means unknown/not set
+	OAuthTokenURLOverride string // non-empty for regional providers (e.g. Zoho EU)
 }
 
 // ListConnected returns every service with status = Connected, with credentials
@@ -31,7 +32,8 @@ func (s *Store) ListConnected() ([]ConnectedService, error) {
 		SELECT id, slug, name, category, auth_method,
 		       api_key, api_endpoint,
 		       oauth_access_token, oauth_refresh_token, oauth_token_expiry,
-		       oauth_client_id, oauth_client_secret
+		       oauth_client_id, oauth_client_secret,
+		       oauth_token_url_override
 		FROM services WHERE status = ?
 	`, Connected)
 	if err != nil {
@@ -49,6 +51,7 @@ func (s *Store) ListConnected() ([]ConnectedService, error) {
 			&apiKeyEnc, &svc.APIEndpoint,
 			&accessEnc, &refreshEnc, &svc.OAuthTokenExpiry,
 			&clientIDEnc, &clientSecEnc,
+			&svc.OAuthTokenURLOverride,
 		); err != nil {
 			return nil, err
 		}
@@ -71,7 +74,12 @@ func (s *Store) ListConnected() ([]ConnectedService, error) {
 				clientSecret, _ := decrypt(s.key, clientSecEnc)
 				def := lookupCatalog(svc.Slug)
 				if def != nil && clientID != "" {
-					newAccess, newExpiry, refreshErr := refreshToken(context.Background(), def, clientID, clientSecret, svc.OAuthRefreshToken)
+					// Apply regional token URL override (e.g. Zoho EU/India).
+					effectiveDef := *def
+					if svc.OAuthTokenURLOverride != "" {
+						effectiveDef.TokenURL = svc.OAuthTokenURLOverride
+					}
+					newAccess, newExpiry, refreshErr := refreshToken(context.Background(), &effectiveDef, clientID, clientSecret, svc.OAuthRefreshToken)
 					if refreshErr != nil {
 						log.Printf("integrations: token refresh for %s failed: %v — marking disconnected", svc.Slug, refreshErr)
 						s.DisconnectOAuth(svc.ID) //nolint:errcheck

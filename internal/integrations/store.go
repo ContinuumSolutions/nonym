@@ -49,7 +49,10 @@ func (s *Store) Migrate() error {
 		`ALTER TABLE services ADD COLUMN oauth_token_expiry  INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE services ADD COLUMN oauth_state         TEXT    NOT NULL DEFAULT ''`,
 		`ALTER TABLE services ADD COLUMN oauth_state_expiry  INTEGER NOT NULL DEFAULT 0`,
-		`ALTER TABLE services ADD COLUMN oauth_code_verifier TEXT    NOT NULL DEFAULT ''`,
+		`ALTER TABLE services ADD COLUMN oauth_code_verifier    TEXT    NOT NULL DEFAULT ''`,
+		// Stores the full token-endpoint URL override (e.g. Zoho regional: accounts.zoho.eu).
+		// Empty means use the catalog default. Written at callback time, read on every refresh.
+		`ALTER TABLE services ADD COLUMN oauth_token_url_override TEXT NOT NULL DEFAULT ''`,
 	} {
 		s.db.Exec(col) //nolint:errcheck
 	}
@@ -360,13 +363,15 @@ func (s *Store) GetByState(state string) (serviceID int, slug, codeVerifier stri
 
 // GetOAuthCreds returns fully decrypted OAuth credentials for internal use only.
 // Never expose these values in API responses.
-func (s *Store) GetOAuthCreds(id int) (clientID, clientSecret, accessToken, refreshToken string, tokenExpiry int64, err error) {
+// tokenURLOverride is non-empty when a regional token endpoint is stored (e.g. Zoho EU).
+func (s *Store) GetOAuthCreds(id int) (clientID, clientSecret, accessToken, refreshToken, tokenURLOverride string, tokenExpiry int64, err error) {
 	var cIDEnc, cSecEnc, accEnc, refEnc string
 	err = s.db.QueryRow(`
 		SELECT oauth_client_id, oauth_client_secret,
-		       oauth_access_token, oauth_refresh_token, oauth_token_expiry
+		       oauth_access_token, oauth_refresh_token, oauth_token_expiry,
+		       oauth_token_url_override
 		FROM services WHERE id = ?
-	`, id).Scan(&cIDEnc, &cSecEnc, &accEnc, &refEnc, &tokenExpiry)
+	`, id).Scan(&cIDEnc, &cSecEnc, &accEnc, &refEnc, &tokenExpiry, &tokenURLOverride)
 	if errors.Is(err, sql.ErrNoRows) {
 		err = ErrNotFound
 		return
@@ -385,6 +390,16 @@ func (s *Store) GetOAuthCreds(id int) (clientID, clientSecret, accessToken, refr
 	}
 	refreshToken, err = decrypt(s.key, refEnc)
 	return
+}
+
+// SetOAuthTokenURLOverride stores a regional token endpoint URL override.
+// Used for services like Zoho that return an accounts-server in the callback.
+func (s *Store) SetOAuthTokenURLOverride(id int, tokenURL string) error {
+	_, err := s.db.Exec(
+		`UPDATE services SET oauth_token_url_override = ?, updated_at = ? WHERE id = ?`,
+		tokenURL, time.Now().UTC().Unix(), id,
+	)
+	return err
 }
 
 // CompleteOAuth encrypts and stores access/refresh tokens from the callback, marks Connected (step 9c).
