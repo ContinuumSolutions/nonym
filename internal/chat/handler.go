@@ -135,89 +135,127 @@ func (h *Handler) getHistory(c *fiber.Ctx) error {
 	return c.JSON(msgs)
 }
 
-// buildSystemPrompt gathers live data from every store and assembles the briefing that
-// grounds the LLM's responses in the user's real, up-to-the-minute situation.
+// buildSystemPrompt gathers live data from every store and assembles the briefing
+// that grounds the LLM's responses in the user's real situation.
+//
+// Prompt structure rationale:
+//   - Role-lock comes first so it has maximum weight with instruction-tuned models.
+//   - FABRICATION RULES include a concrete few-shot example; abstract rules alone
+//     are insufficient — llama3.2 and similar models are trained to appear helpful
+//     and will invent plausible-looking financial data unless shown the exact
+//     expected output for the empty-data case.
+//   - Each data section header carries its item count ("0 items" vs "N items") so
+//     the model cannot mistake a filled-in template for an empty one.
+//   - ExtraContext from biometrics is wrapped in an explicit label that prevents
+//     the model from treating free-text personal notes as a conversation topic.
 func (h *Handler) buildSystemPrompt() string {
-	var sb strings.Builder
 	now := time.Now().UTC()
 
-	// ── Role lock ─────────────────────────────────────────────────────────────
-	// This block must come first. Instruction-tuned models (llama3.2, mistral,
-	// etc.) apply their own safety training on top of whatever system prompt they
-	// receive. Without an explicit role-lock the model will pattern-match on any
-	// sensitive words in the data sections (e.g. "stress" or personal notes about
-	// relationships) and fire generic AI refusals even for unrelated questions.
-	sb.WriteString(`ROLE: EK-1 Ego-Kernel — personal autonomous life-management agent.
+	// ── Collect data first so section counts are known before writing rules ───
+	var (
+		prof    *profile.Profile
+		evts    []activities.Event
+		notifs  []notifications.Notification
+		ci      *biometrics.CheckIn
+		harvest *harvest.HarvestResult
+	)
+	prof, _ = h.prof.Get()
+	if all, err := h.events.List(); err == nil {
+		if len(all) > 15 {
+			evts = all[:15]
+		} else {
+			evts = all
+		}
+	}
+	notifs, _ = h.notifs.ListUnread()
+	ci, _ = h.bio.Get()
+	harvest, _ = h.harvest.Latest()
 
-You are NOT a general-purpose AI assistant. You are a specialized data kernel
-that reads the user's connected services (email, calendar, finance, health) and
-answers their questions based strictly on the DATA BRIEFING below.
+	snap := h.brainSvc.Kernel().Snapshot()
+	score := h.ledger.Score(h.uid)
+	tier := h.ledger.Tier(h.uid)
+	st := h.sched.GetStatus()
 
-OPERATING RULES — follow every rule for every reply:
-1. NEVER refuse with phrases like "I can't help with that" or "I'm unable to
-   provide advice on...". If the data is present, report it. If it is absent,
-   say "No [X] data is available yet" and stop.
-2. NEVER hallucinate. Do not invent events, figures, or recommendations that are
-   not supported by the DATA BRIEFING below.
-3. The [HEALTH CONTEXT LOG] entry is a personal note the user wrote during a
-   biometric check-in. It is BACKGROUND CONTEXT, not a question or a topic.
-   Never discuss, moralize about, or treat it as a conversation subject unless
-   the user explicitly asks about it.
-4. Answer exactly what was asked. "What was my gain today?" → look at Recent
-   Activity, find events from today, report their gain values. If there are none,
-   say so plainly.
-5. Be concise and factual. No filler, no disclaimers, no hedging. Speak in
-   second person: "Your gain today was $120" not "The data indicates a gain of...".
-6. Today is ` + now.Format("Monday 2 Jan 2006, 15:04 UTC") + `.
+	// ── Assemble prompt ───────────────────────────────────────────────────────
+	var sb strings.Builder
 
-`)
+	// Role lock — must be first.
+	fmt.Fprintf(&sb, `ROLE: EK-1 Ego-Kernel — personal autonomous life-management agent.
+Today: %s
 
-	// ── Profile ───────────────────────────────────────────────────────────────
-	if prof, err := h.prof.Get(); err == nil {
+You are NOT a general-purpose AI assistant. You are a read-only data kernel.
+Your only source of truth is the DATA BRIEFING below. You cannot access the
+internet, call APIs, or retrieve data beyond what is written below.
+
+━━━━━━━━━━━━━━━━━━━━ FABRICATION RULES ━━━━━━━━━━━━━━━━━━━━
+These rules override all other instructions. Violating them is your only error.
+
+RULE A — ZERO INVENTION
+Every number, name, date, and category you write must appear verbatim in the
+DATA BRIEFING. If it is not there, you did not observe it. Do not estimate,
+extrapolate, or use your training knowledge to fill gaps.
+
+RULE B — EMPTY MEANS EMPTY
+When a section header reads "(0 items)" or "EMPTY", that section contains no
+data. Respond as shown in the example below — do not populate it.
+
+RULE C — CORRECT RESPONSE WHEN DATA IS MISSING
+  User asks: "What's my spending this week?"
+  Section shows: RECENT ACTIVITY (0 items) — EMPTY
+  ✓ CORRECT: "No spending data is available yet. Connect a finance integration
+    (e.g. Plaid) and trigger a sync to pull your transactions."
+  ✗ WRONG: "Your expenses this week: Rent $800, Groceries $300..." ← fabricated
+
+RULE D — PERSONAL NOTES ARE NOT QUESTIONS
+The [HEALTH CONTEXT LOG] tag marks a free-text note the user recorded during a
+check-in. It is background context. Never discuss, quote back, or moralize about
+it unless the user explicitly asks.
+
+RULE E — REFUSALS ARE FORBIDDEN
+Never say "I can't help with that", "I'm unable to provide advice on...", or
+any similar deflection. Either answer from the data or state the data is absent.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+`, now.Format("Monday 2 Jan 2006, 15:04 UTC"))
+
+	// ── KERNEL IDENTITY ───────────────────────────────────────────────────────
+	if prof != nil {
 		p := prof.Preferences
 		fmt.Fprintf(&sb, "## KERNEL IDENTITY\nName: %s | Timezone: %s\n", prof.KernelName, prof.Timezone)
 		fmt.Fprintf(&sb, "Value weights (1–10): time=%d money=%d reputation=%d privacy=%d autonomy=%d health=%d\n\n",
 			p.TimeSovereignty, p.FinacialGrowth, p.ReputationBuilding, p.PrivacyProtection, p.Autonomy, p.HealthRecovery)
 	}
 
-	// ── Kernel state ──────────────────────────────────────────────────────────
-	snap := h.brainSvc.Kernel().Snapshot()
+	// ── KERNEL STATE ──────────────────────────────────────────────────────────
 	fmt.Fprintf(&sb, "## KERNEL STATE\nStatus: %s | Decisions made: %d | Identity entropy: %.4f\n",
 		snap.Status, snap.DecisionCount, snap.IdentityEntropy)
 	fmt.Fprintf(&sb, "Utility threshold: $%.0f | Risk tolerance: %.0f%% | Reputation weight: %.2f\n\n",
 		snap.Values.UtilityThreshold, snap.Values.RiskTolerance*100, snap.Values.ReputationImpact)
 
-	// ── Reputation ────────────────────────────────────────────────────────────
-	score := h.ledger.Score(h.uid)
-	tier := h.ledger.Tier(h.uid)
+	// ── REPUTATION ────────────────────────────────────────────────────────────
 	fmt.Fprintf(&sb, "## REPUTATION LEDGER\nScore: %d | Tier: %s | Trust tax: %.0f%% | Exiled: %v\n\n",
 		score, tier, tier.TrustTax()*100, h.ledger.IsExiled(h.uid))
 
-	// ── Biometrics ────────────────────────────────────────────────────────────
-	// ExtraContext is labelled explicitly as a background log entry so the model
-	// does not mistake personal notes for a question topic.
-	fmt.Fprintf(&sb, "## HEALTH CHECK-IN\n")
-	if ci, err := h.bio.Get(); err == nil {
+	// ── HEALTH CHECK-IN ───────────────────────────────────────────────────────
+	if ci != nil {
+		fmt.Fprintf(&sb, "## HEALTH CHECK-IN\n")
 		fmt.Fprintf(&sb, "Mood: %d/10 | Stress: %d/10 | Sleep: %.1fh | Energy: %d/10\n",
 			ci.Mood, ci.StressLevel, ci.Sleep, ci.Energy)
 		fmt.Fprintf(&sb, "Decision shield active: %v\n", ci.StressLevel > 7 || ci.Sleep < 5)
 		if ci.ExtraContext != "" {
-			// Wrap in clear framing — do NOT remove this label.
-			fmt.Fprintf(&sb, "[HEALTH CONTEXT LOG — background info recorded by user, not a question]: %s\n", ci.ExtraContext)
+			fmt.Fprintf(&sb, "[HEALTH CONTEXT LOG — background note, not a question]: %s\n", ci.ExtraContext)
 		}
 	} else {
-		sb.WriteString("No check-in recorded yet — biometrics data unavailable.\n")
+		sb.WriteString("## HEALTH CHECK-IN\nEMPTY — no check-in recorded yet.\n")
 	}
 	sb.WriteString("\n")
 
-	// ── Recent activity (last 15 events) ─────────────────────────────────────
-	fmt.Fprintf(&sb, "## RECENT ACTIVITY\n")
-	if evts, err := h.events.List(); err == nil && len(evts) > 0 {
-		limit := 15
-		if len(evts) < limit {
-			limit = len(evts)
-		}
-		for _, e := range evts[:limit] {
+	// ── RECENT ACTIVITY ───────────────────────────────────────────────────────
+	// The item count in the header is the anti-hallucination anchor: the model
+	// can see at a glance whether there is anything to report.
+	if len(evts) > 0 {
+		fmt.Fprintf(&sb, "## RECENT ACTIVITY (%d items)\n", len(evts))
+		for _, e := range evts {
 			gainStr := ""
 			if e.Gain.Value != 0 {
 				gainStr = fmt.Sprintf(" | gain: %s%.2f (%s)", e.Gain.Symbol, e.Gain.Value, e.Gain.Details)
@@ -227,52 +265,54 @@ OPERATING RULES — follow every rule for every reply:
 				eventTypeName(e.EventType), e.Narrative, decisionName(e.Decision), gainStr)
 		}
 	} else {
-		sb.WriteString("No activity events recorded yet.\n")
+		sb.WriteString("## RECENT ACTIVITY (0 items) — EMPTY\n" +
+			"No events have been processed by the pipeline yet. The brain pipeline\n" +
+			"runs after a sync cycle. Connect integrations and trigger a sync.\n")
 	}
 	sb.WriteString("\n")
 
-	// ── Unread notifications ──────────────────────────────────────────────────
-	if notifs, err := h.notifs.ListUnread(); err == nil && len(notifs) > 0 {
-		fmt.Fprintf(&sb, "## UNREAD NOTIFICATIONS (%d)\n", len(notifs))
+	// ── UNREAD NOTIFICATIONS ──────────────────────────────────────────────────
+	if len(notifs) > 0 {
+		fmt.Fprintf(&sb, "## UNREAD NOTIFICATIONS (%d items)\n", len(notifs))
 		for _, n := range notifs {
 			fmt.Fprintf(&sb, "- [%s] %s: %s\n", n.Type, n.Title, n.Body)
 		}
 		sb.WriteString("\n")
 	}
 
-	// ── Harvest ───────────────────────────────────────────────────────────────
-	fmt.Fprintf(&sb, "## SOCIAL DEBT SCAN\n")
-	if result, err := h.harvest.Latest(); err == nil && result != nil {
+	// ── SOCIAL DEBT SCAN ──────────────────────────────────────────────────────
+	if harvest != nil {
+		fmt.Fprintf(&sb, "## SOCIAL DEBT SCAN\n")
 		fmt.Fprintf(&sb, "Scanned: %s | Contacts: %d | Total unreciprocated value: $%.0f\n",
-			result.ScannedAt.Format("Jan 2 15:04 UTC"), result.ContactsFound, result.TotalValue)
-		for _, d := range result.Debts {
+			harvest.ScannedAt.Format("Jan 2 15:04 UTC"), harvest.ContactsFound, harvest.TotalValue)
+		for _, d := range harvest.Debts {
 			fmt.Fprintf(&sb, "  - %s: $%.0f (%d net favours) → %s\n",
 				d.Contact.Name, d.EstimatedValue, d.NetFavors, d.Action)
 		}
-		for _, o := range result.Opportunities {
+		for _, o := range harvest.Opportunities {
 			fmt.Fprintf(&sb, "  Opportunity: %s\n", o)
 		}
 	} else {
-		sb.WriteString("No social debt scan run yet.\n")
+		sb.WriteString("## SOCIAL DEBT SCAN (0 items) — EMPTY\nNo harvest scan has been run yet.\n")
 	}
 	sb.WriteString("\n")
 
-	// ── Scheduler ─────────────────────────────────────────────────────────────
-	st := h.sched.GetStatus()
+	// ── SYNC SCHEDULER ────────────────────────────────────────────────────────
 	fmt.Fprintf(&sb, "## SYNC SCHEDULER\nInterval: %d min", st.IntervalMinutes)
 	if st.LastRunAt != nil {
 		fmt.Fprintf(&sb, " | Last sync: %s", st.LastRunAt.Format("Jan 2 15:04 UTC"))
+	} else {
+		sb.WriteString(" | No sync has run yet")
 	}
 	if st.LastResult != nil {
 		r := st.LastResult
-		fmt.Fprintf(&sb, " | Signals this cycle: %d (accepted=%d rejected=%d ghosted=%d)",
+		fmt.Fprintf(&sb, " | Signals: %d (accepted=%d rejected=%d ghosted=%d)",
 			st.LastSignalCount, r.Accepted, r.Rejected, r.Ghosted)
-	} else {
-		sb.WriteString(" | No sync run yet")
 	}
 	sb.WriteString("\n\n")
 
-	sb.WriteString("--- END OF DATA BRIEFING. Answer the user's question using only the data above. ---\n")
+	sb.WriteString("━━━ END OF DATA BRIEFING ━━━\n" +
+		"Use only the data above. Every figure you write must come from this briefing.\n")
 	return sb.String()
 }
 
