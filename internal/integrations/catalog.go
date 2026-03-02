@@ -200,18 +200,13 @@ var registry = []ServiceDef{
 
 	// ── Productivity ─────────────────────────────────────────────────────────
 	{
-		Slug:         "notion",
-		Name:         "Notion",
-		Category:     CategoryProductivity,
-		Icon:         "notion",
-		Color:        "#000000",
-		Description:  "Access and monitor your Notion pages and databases.",
-		AuthMethod:   OAuth2Auth,
-		AuthURL:      "https://api.notion.com/v1/oauth/authorize",
-		TokenURL:     "https://api.notion.com/v1/oauth/token",
-		NoPKCE:       true,
-		UseBasicAuth: true,
-		ExtraParams:  map[string]string{"owner": "user"},
+		Slug:        "notion",
+		Name:        "Notion",
+		Category:    CategoryProductivity,
+		Icon:        "notion",
+		Color:       "#000000",
+		Description: "Access and monitor your Notion pages and databases.",
+		AuthMethod:  APIKeyAuth,
 	},
 
 	// ── Billing ──────────────────────────────────────────────────────────────

@@ -38,7 +38,7 @@ func (a *NotionAdapter) Pull(ctx context.Context, creds Credentials, since time.
 	if err != nil {
 		return nil, fmt.Errorf("notion: build request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+creds.OAuthAccessToken)
+	req.Header.Set("Authorization", "Bearer "+creds.APIKey)
 	req.Header.Set("Notion-Version", "2022-06-28")
 	req.Header.Set("Content-Type", "application/json")
 
