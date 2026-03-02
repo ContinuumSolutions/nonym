@@ -211,6 +211,15 @@ var registry = []ServiceDef{
 
 	// ── Billing ──────────────────────────────────────────────────────────────
 	{
+		Slug:        "intasend",
+		Name:        "IntaSend",
+		Category:    CategoryFinance,
+		Icon:        "intasend",
+		Color:       "#0A6EBD",
+		Description: "Monitor wallet transactions via IntaSend payments platform.",
+		AuthMethod:  APIKeyAuth,
+	},
+	{
 		Slug:        "stripe",
 		Name:        "Stripe",
 		Category:    CategoryBilling,

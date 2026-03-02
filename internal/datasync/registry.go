@@ -16,5 +16,6 @@ func DefaultAdapters() []Adapter {
 		&FitbitAdapter{},
 		&WhoopAdapter{},
 		&NotionAdapter{},
+		&IntaSendAdapter{},
 	}
 }
