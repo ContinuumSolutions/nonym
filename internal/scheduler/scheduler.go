@@ -14,6 +14,11 @@ import (
 	"github.com/egokernel/ek1/internal/notifications"
 )
 
+// RunNowResponse is the result returned by POST /scheduler/run-now.
+// It is a type alias for brain.PipelineResult exposed here so that
+// swag can resolve it from within the scheduler package.
+type RunNowResponse = brain.PipelineResult
+
 // Status is the read-only snapshot returned by GET /scheduler/status.
 type Status struct {
 	IntervalMinutes int                      `json:"interval_minutes"`

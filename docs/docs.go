@@ -30,7 +30,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/activities.Event"
+                                "$ref": "#/definitions/internal_activities.Event"
                             }
                         }
                     },
@@ -66,7 +66,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/activities.Event"
+                            "$ref": "#/definitions/internal_activities.Event"
                         }
                     },
                     "400": {
@@ -115,7 +115,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/activities.Event"
+                            "$ref": "#/definitions/internal_activities.Event"
                         }
                     },
                     "400": {
@@ -181,7 +181,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/auth.unlockReq"
+                            "$ref": "#/definitions/internal_auth.unlockReq"
                         }
                     }
                 ],
@@ -230,7 +230,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/biometrics.CheckIn"
+                            "$ref": "#/definitions/internal_biometrics.CheckIn"
                         }
                     },
                     "404": {
@@ -260,7 +260,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/biometrics.CheckIn"
+                            "$ref": "#/definitions/internal_biometrics.CheckIn"
                         }
                     }
                 ],
@@ -268,7 +268,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/biometrics.CheckIn"
+                            "$ref": "#/definitions/internal_biometrics.CheckIn"
                         }
                     },
                     "400": {
@@ -312,7 +312,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/biometrics.CheckIn"
+                                "$ref": "#/definitions/internal_biometrics.CheckIn"
                             }
                         }
                     },
@@ -339,7 +339,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/brain.StatusResponse"
+                            "$ref": "#/definitions/internal_brain.StatusResponse"
                         }
                     },
                     "500": {
@@ -365,7 +365,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/brain.KernelSnapshot"
+                            "$ref": "#/definitions/internal_brain.KernelSnapshot"
                         }
                     },
                     "500": {
@@ -397,7 +397,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/chat.Request"
+                            "$ref": "#/definitions/internal_chat.Request"
                         }
                     }
                 ],
@@ -405,7 +405,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/chat.Response"
+                            "$ref": "#/definitions/internal_chat.Response"
                         }
                     },
                     "400": {
@@ -448,7 +448,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/chat.Message"
+                                "$ref": "#/definitions/internal_chat.Message"
                             }
                         }
                     },
@@ -482,7 +482,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/chat.Request"
+                            "$ref": "#/definitions/internal_chat.Request"
                         }
                     }
                 ],
@@ -524,7 +524,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/harvest.HarvestResult"
+                            "$ref": "#/definitions/internal_harvest.HarvestResult"
                         }
                     },
                     "500": {
@@ -550,7 +550,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/harvest.HarvestResult"
+                            "$ref": "#/definitions/internal_harvest.HarvestResult"
                         }
                     },
                     "500": {
@@ -578,7 +578,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/integrations.Service"
+                                "$ref": "#/definitions/internal_integrations.Service"
                             }
                         }
                     },
@@ -611,7 +611,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/integrations.Service"
+                            "$ref": "#/definitions/internal_integrations.Service"
                         }
                     }
                 ],
@@ -619,7 +619,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/integrations.Service"
+                            "$ref": "#/definitions/internal_integrations.Service"
                         }
                     },
                     "400": {
@@ -661,7 +661,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/integrations.Service"
+                            "$ref": "#/definitions/internal_integrations.Service"
                         }
                     },
                     "400": {
@@ -714,7 +714,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/integrations.ConnectInput"
+                            "$ref": "#/definitions/internal_integrations.ConnectInput"
                         }
                     }
                 ],
@@ -722,7 +722,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/integrations.Service"
+                            "$ref": "#/definitions/internal_integrations.Service"
                         }
                     },
                     "400": {
@@ -769,7 +769,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/integrations.Service"
+                            "$ref": "#/definitions/internal_integrations.Service"
                         }
                     },
                     "400": {
@@ -817,7 +817,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/integrations.Service"
+                            "$ref": "#/definitions/internal_integrations.Service"
                         }
                     },
                     "400": {
@@ -871,7 +871,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/integrations.oauthAppRequest"
+                            "$ref": "#/definitions/internal_integrations.oauthAppRequest"
                         }
                     }
                 ],
@@ -930,7 +930,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/integrations.initiateOAuthResponse"
+                            "$ref": "#/definitions/internal_integrations.initiateOAuthResponse"
                         }
                     },
                     "400": {
@@ -993,7 +993,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/ledger.HistoryEntry"
+                                "$ref": "#/definitions/internal_ledger.HistoryEntry"
                             }
                         }
                     },
@@ -1049,7 +1049,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/notifications.Notification"
+                                "$ref": "#/definitions/internal_notifications.Notification"
                             }
                         }
                     },
@@ -1190,7 +1190,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/profile.Profile"
+                            "$ref": "#/definitions/internal_profile.Profile"
                         }
                     },
                     "500": {
@@ -1222,7 +1222,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/profile.ConnectionSetting"
+                            "$ref": "#/definitions/internal_profile.ConnectionSetting"
                         }
                     }
                 ],
@@ -1230,7 +1230,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/profile.Profile"
+                            "$ref": "#/definitions/internal_profile.Profile"
                         }
                     },
                     "400": {
@@ -1269,7 +1269,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/auth.pinReq"
+                            "$ref": "#/definitions/internal_auth.pinReq"
                         }
                     }
                 ],
@@ -1308,7 +1308,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/auth.pinReq"
+                            "$ref": "#/definitions/internal_auth.pinReq"
                         }
                     }
                 ],
@@ -1356,7 +1356,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/profile.DecisionPreference"
+                            "$ref": "#/definitions/internal_profile.DecisionPreference"
                         }
                     }
                 ],
@@ -1364,7 +1364,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/profile.Profile"
+                            "$ref": "#/definitions/internal_profile.Profile"
                         }
                     },
                     "400": {
@@ -1397,7 +1397,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/brain.PipelineResult"
+                            "$ref": "#/definitions/internal_scheduler.RunNowResponse"
                         }
                     },
                     "500": {
@@ -1423,7 +1423,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/scheduler.Status"
+                            "$ref": "#/definitions/internal_scheduler.Status"
                         }
                     }
                 }
@@ -1431,245 +1431,7 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "activities.Decision": {
-            "type": "integer",
-            "enum": [
-                0,
-                1,
-                2,
-                3,
-                4,
-                5
-            ],
-            "x-enum-varnames": [
-                "Pending",
-                "Accepted",
-                "Declined",
-                "Negotiated",
-                "Automated",
-                "Cancelled"
-            ]
-        },
-        "activities.Event": {
-            "type": "object",
-            "properties": {
-                "created_at": {
-                    "type": "string"
-                },
-                "decision": {
-                    "enum": [
-                        0,
-                        1,
-                        2,
-                        3,
-                        4,
-                        5
-                    ],
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/activities.Decision"
-                        }
-                    ]
-                },
-                "event_type": {
-                    "enum": [
-                        0,
-                        1,
-                        2,
-                        3,
-                        4,
-                        5
-                    ],
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/activities.EventType"
-                        }
-                    ]
-                },
-                "gain": {
-                    "$ref": "#/definitions/activities.Gain"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "importance": {
-                    "enum": [
-                        0,
-                        1,
-                        2
-                    ],
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/activities.Importance"
-                        }
-                    ]
-                },
-                "narrative": {
-                    "description": "Detail description of exactly what happened",
-                    "type": "string"
-                },
-                "read": {
-                    "type": "boolean"
-                },
-                "source_service": {
-                    "type": "string"
-                },
-                "updated_at": {
-                    "type": "string"
-                }
-            }
-        },
-        "activities.EventType": {
-            "type": "integer",
-            "enum": [
-                0,
-                1,
-                2,
-                3,
-                4,
-                5
-            ],
-            "x-enum-varnames": [
-                "Finance",
-                "Calendar",
-                "Communication",
-                "Billing",
-                "Health",
-                "Other"
-            ]
-        },
-        "activities.Gain": {
-            "type": "object",
-            "properties": {
-                "_symbol": {
-                    "description": "How to present the gain e.g $ for money type",
-                    "type": "string"
-                },
-                "_value": {
-                    "type": "number"
-                },
-                "details": {
-                    "type": "string"
-                },
-                "kind": {
-                    "enum": [
-                        0,
-                        1
-                    ],
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/activities.GainKind"
-                        }
-                    ]
-                },
-                "type": {
-                    "enum": [
-                        0,
-                        1
-                    ],
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/activities.GainType"
-                        }
-                    ]
-                }
-            }
-        },
-        "activities.GainKind": {
-            "type": "integer",
-            "enum": [
-                0,
-                1
-            ],
-            "x-enum-varnames": [
-                "Money",
-                "Time"
-            ]
-        },
-        "activities.GainType": {
-            "type": "integer",
-            "enum": [
-                0,
-                1
-            ],
-            "x-enum-varnames": [
-                "Positive",
-                "Negative"
-            ]
-        },
-        "activities.Importance": {
-            "type": "integer",
-            "enum": [
-                0,
-                1,
-                2
-            ],
-            "x-enum-varnames": [
-                "Low",
-                "Medium",
-                "High"
-            ]
-        },
-        "auth.pinReq": {
-            "type": "object",
-            "properties": {
-                "pin_hash": {
-                    "type": "string"
-                }
-            }
-        },
-        "auth.unlockReq": {
-            "type": "object",
-            "properties": {
-                "pin_hash": {
-                    "type": "string"
-                }
-            }
-        },
-        "biometrics.CheckIn": {
-            "type": "object",
-            "properties": {
-                "created_at": {
-                    "type": "string"
-                },
-                "energy": {
-                    "type": "integer"
-                },
-                "extra_context": {
-                    "type": "string"
-                },
-                "mood": {
-                    "type": "integer"
-                },
-                "sleep": {
-                    "type": "number"
-                },
-                "stress_level": {
-                    "type": "integer"
-                },
-                "updated_at": {
-                    "type": "string"
-                }
-            }
-        },
-        "brain.KernelSnapshot": {
-            "type": "object",
-            "properties": {
-                "decision_count": {
-                    "type": "integer"
-                },
-                "identity_entropy": {
-                    "type": "number"
-                },
-                "status": {
-                    "type": "string"
-                },
-                "values": {
-                    "$ref": "#/definitions/brain.ValueMatrix"
-                }
-            }
-        },
-        "brain.PipelineResult": {
+        "github_com_egokernel_ek1_internal_brain.PipelineResult": {
             "type": "object",
             "properties": {
                 "accepted": {
@@ -1697,7 +1459,317 @@ const docTemplate = `{
                 }
             }
         },
-        "brain.StageProgress": {
+        "github_com_egokernel_ek1_internal_datasync.ServiceStatus": {
+            "type": "object",
+            "properties": {
+                "last_error": {
+                    "type": "string"
+                },
+                "last_sync_at": {
+                    "description": "nil = never synced",
+                    "type": "string"
+                },
+                "signal_count": {
+                    "type": "integer"
+                },
+                "slug": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_activities.Decision": {
+            "type": "integer",
+            "enum": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5
+            ],
+            "x-enum-varnames": [
+                "Pending",
+                "Accepted",
+                "Declined",
+                "Negotiated",
+                "Automated",
+                "Cancelled"
+            ]
+        },
+        "internal_activities.Event": {
+            "type": "object",
+            "properties": {
+                "analysis": {
+                    "description": "LLM scores + triage rationale",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/internal_activities.SignalAnalysis"
+                        }
+                    ]
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "decision": {
+                    "enum": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/internal_activities.Decision"
+                        }
+                    ]
+                },
+                "event_type": {
+                    "enum": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/internal_activities.EventType"
+                        }
+                    ]
+                },
+                "gain": {
+                    "$ref": "#/definitions/internal_activities.Gain"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "importance": {
+                    "enum": [
+                        0,
+                        1,
+                        2
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/internal_activities.Importance"
+                        }
+                    ]
+                },
+                "narrative": {
+                    "description": "Detail description of exactly what happened",
+                    "type": "string"
+                },
+                "read": {
+                    "type": "boolean"
+                },
+                "source_service": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_activities.EventType": {
+            "type": "integer",
+            "enum": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5
+            ],
+            "x-enum-varnames": [
+                "Finance",
+                "Calendar",
+                "Communication",
+                "Billing",
+                "Health",
+                "Other"
+            ]
+        },
+        "internal_activities.Gain": {
+            "type": "object",
+            "properties": {
+                "_symbol": {
+                    "description": "How to present the gain e.g $ for money type",
+                    "type": "string"
+                },
+                "_value": {
+                    "type": "number"
+                },
+                "details": {
+                    "type": "string"
+                },
+                "kind": {
+                    "enum": [
+                        0,
+                        1
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/internal_activities.GainKind"
+                        }
+                    ]
+                },
+                "type": {
+                    "enum": [
+                        0,
+                        1
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/internal_activities.GainType"
+                        }
+                    ]
+                }
+            }
+        },
+        "internal_activities.GainKind": {
+            "type": "integer",
+            "enum": [
+                0,
+                1
+            ],
+            "x-enum-varnames": [
+                "Money",
+                "Time"
+            ]
+        },
+        "internal_activities.GainType": {
+            "type": "integer",
+            "enum": [
+                0,
+                1
+            ],
+            "x-enum-varnames": [
+                "Positive",
+                "Negative"
+            ]
+        },
+        "internal_activities.Importance": {
+            "type": "integer",
+            "enum": [
+                0,
+                1,
+                2
+            ],
+            "x-enum-varnames": [
+                "Low",
+                "Medium",
+                "High"
+            ]
+        },
+        "internal_activities.SignalAnalysis": {
+            "type": "object",
+            "properties": {
+                "decide_threshold": {
+                    "description": "utility threshold at time of Decide",
+                    "type": "number"
+                },
+                "decide_utility": {
+                    "description": "utility computed by Decide (if reached)",
+                    "type": "number"
+                },
+                "estimated_roi": {
+                    "description": "USD value scored by LLM",
+                    "type": "number"
+                },
+                "manipulation_pct": {
+                    "description": "0–1 manipulation score",
+                    "type": "number"
+                },
+                "roi_threshold": {
+                    "description": "minimum ROI the kernel required at triage",
+                    "type": "number"
+                },
+                "service_slug": {
+                    "type": "string"
+                },
+                "signal_title": {
+                    "type": "string"
+                },
+                "time_commitment": {
+                    "description": "hours scored by LLM",
+                    "type": "number"
+                },
+                "triage_gate": {
+                    "description": "financial_insignificance | manipulation | decide_utility | decide_risk | accepted",
+                    "type": "string"
+                }
+            }
+        },
+        "internal_auth.pinReq": {
+            "type": "object",
+            "properties": {
+                "pin_hash": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_auth.unlockReq": {
+            "type": "object",
+            "properties": {
+                "pin_hash": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_biometrics.CheckIn": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "energy": {
+                    "type": "integer"
+                },
+                "extra_context": {
+                    "type": "string"
+                },
+                "mood": {
+                    "type": "integer"
+                },
+                "sleep": {
+                    "type": "number"
+                },
+                "stress_level": {
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_brain.KernelSnapshot": {
+            "type": "object",
+            "properties": {
+                "decision_count": {
+                    "type": "integer"
+                },
+                "identity_entropy": {
+                    "type": "number"
+                },
+                "status": {
+                    "description": "Status is the current operational mode of the kernel.\nONLINE: normal autonomous operation.\nSHIELDED: biometrics gate active — elevated stress or poor sleep; decision threshold raised.\nH2HI: identity entropy spike — manual review required; call POST /brain/sync-acknowledge to resume.\nEXILED: reputation score below exile threshold; no external processing.\nenums: ONLINE,SHIELDED,H2HI,EXILED",
+                    "type": "string",
+                    "enum": [
+                        "ONLINE",
+                        "SHIELDED",
+                        "H2HI",
+                        "EXILED"
+                    ]
+                },
+                "values": {
+                    "$ref": "#/definitions/internal_brain.ValueMatrix"
+                }
+            }
+        },
+        "internal_brain.StageProgress": {
             "type": "object",
             "properties": {
                 "hand": {
@@ -1711,7 +1783,7 @@ const docTemplate = `{
                 }
             }
         },
-        "brain.StatusResponse": {
+        "internal_brain.StatusResponse": {
             "type": "object",
             "properties": {
                 "decision_count": {
@@ -1727,21 +1799,28 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "stage_progress": {
-                    "$ref": "#/definitions/brain.StageProgress"
+                    "$ref": "#/definitions/internal_brain.StageProgress"
                 },
                 "status": {
-                    "type": "string"
+                    "description": "Status is the current operational mode of the kernel.\nONLINE: normal autonomous operation.\nSHIELDED: biometrics gate active — elevated stress or poor sleep; decision threshold raised.\nH2HI: identity entropy spike — manual review required; call POST /brain/sync-acknowledge to resume.\nEXILED: reputation score below exile threshold; no external processing.\nenums: ONLINE,SHIELDED,H2HI,EXILED",
+                    "type": "string",
+                    "enum": [
+                        "ONLINE",
+                        "SHIELDED",
+                        "H2HI",
+                        "EXILED"
+                    ]
                 },
                 "time_saved_today": {
                     "description": "minutes",
                     "type": "integer"
                 },
                 "values": {
-                    "$ref": "#/definitions/brain.ValueMatrix"
+                    "$ref": "#/definitions/internal_brain.ValueMatrix"
                 }
             }
         },
-        "brain.ValueMatrix": {
+        "internal_brain.ValueMatrix": {
             "type": "object",
             "properties": {
                 "baseHourlyRate": {
@@ -1781,7 +1860,7 @@ const docTemplate = `{
                 }
             }
         },
-        "chat.Message": {
+        "internal_chat.Message": {
             "type": "object",
             "properties": {
                 "content": {
@@ -1795,13 +1874,13 @@ const docTemplate = `{
                 }
             }
         },
-        "chat.Request": {
+        "internal_chat.Request": {
             "type": "object",
             "properties": {
                 "history": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/chat.Message"
+                        "$ref": "#/definitions/internal_chat.Message"
                     }
                 },
                 "message": {
@@ -1809,7 +1888,7 @@ const docTemplate = `{
                 }
             }
         },
-        "chat.Response": {
+        "internal_chat.Response": {
             "type": "object",
             "properties": {
                 "reply": {
@@ -1820,25 +1899,7 @@ const docTemplate = `{
                 }
             }
         },
-        "datasync.ServiceStatus": {
-            "type": "object",
-            "properties": {
-                "last_error": {
-                    "type": "string"
-                },
-                "last_sync_at": {
-                    "description": "nil = never synced",
-                    "type": "string"
-                },
-                "signal_count": {
-                    "type": "integer"
-                },
-                "slug": {
-                    "type": "string"
-                }
-            }
-        },
-        "harvest.ContactRecord": {
+        "internal_harvest.ContactRecord": {
             "type": "object",
             "properties": {
                 "favors_given": {
@@ -1864,7 +1925,7 @@ const docTemplate = `{
                 }
             }
         },
-        "harvest.HarvestResult": {
+        "internal_harvest.HarvestResult": {
             "type": "object",
             "properties": {
                 "contacts_found": {
@@ -1873,7 +1934,7 @@ const docTemplate = `{
                 "debts": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/harvest.SocialDebt"
+                        "$ref": "#/definitions/internal_harvest.SocialDebt"
                     }
                 },
                 "opportunities": {
@@ -1890,7 +1951,7 @@ const docTemplate = `{
                 }
             }
         },
-        "harvest.SocialDebt": {
+        "internal_harvest.SocialDebt": {
             "type": "object",
             "properties": {
                 "action": {
@@ -1898,7 +1959,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "contact": {
-                    "$ref": "#/definitions/harvest.ContactRecord"
+                    "$ref": "#/definitions/internal_harvest.ContactRecord"
                 },
                 "estimated_value": {
                     "description": "USD equivalent",
@@ -1910,7 +1971,7 @@ const docTemplate = `{
                 }
             }
         },
-        "integrations.AuthMethod": {
+        "internal_integrations.AuthMethod": {
             "type": "integer",
             "enum": [
                 0,
@@ -1921,7 +1982,7 @@ const docTemplate = `{
                 "OAuth2Auth"
             ]
         },
-        "integrations.ConnectInput": {
+        "internal_integrations.ConnectInput": {
             "type": "object",
             "properties": {
                 "api_key": {
@@ -1935,7 +1996,7 @@ const docTemplate = `{
                 }
             }
         },
-        "integrations.ConnectionStatus": {
+        "internal_integrations.ConnectionStatus": {
             "type": "integer",
             "enum": [
                 0,
@@ -1958,7 +2019,7 @@ const docTemplate = `{
                 "Connected"
             ]
         },
-        "integrations.Service": {
+        "internal_integrations.Service": {
             "type": "object",
             "properties": {
                 "api_endpoint": {
@@ -1979,7 +2040,7 @@ const docTemplate = `{
                     ],
                     "allOf": [
                         {
-                            "$ref": "#/definitions/integrations.AuthMethod"
+                            "$ref": "#/definitions/internal_integrations.AuthMethod"
                         }
                     ]
                 },
@@ -2022,7 +2083,7 @@ const docTemplate = `{
                     ],
                     "allOf": [
                         {
-                            "$ref": "#/definitions/integrations.ConnectionStatus"
+                            "$ref": "#/definitions/internal_integrations.ConnectionStatus"
                         }
                     ]
                 },
@@ -2031,7 +2092,7 @@ const docTemplate = `{
                 }
             }
         },
-        "integrations.initiateOAuthResponse": {
+        "internal_integrations.initiateOAuthResponse": {
             "type": "object",
             "properties": {
                 "auth_url": {
@@ -2042,7 +2103,7 @@ const docTemplate = `{
                 }
             }
         },
-        "integrations.oauthAppRequest": {
+        "internal_integrations.oauthAppRequest": {
             "type": "object",
             "properties": {
                 "client_id": {
@@ -2053,7 +2114,7 @@ const docTemplate = `{
                 }
             }
         },
-        "ledger.HistoryEntry": {
+        "internal_ledger.HistoryEntry": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -2070,7 +2131,7 @@ const docTemplate = `{
                 }
             }
         },
-        "notifications.Notification": {
+        "internal_notifications.Notification": {
             "type": "object",
             "properties": {
                 "body": {
@@ -2089,11 +2150,11 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "type": {
-                    "$ref": "#/definitions/notifications.Type"
+                    "$ref": "#/definitions/internal_notifications.Type"
                 }
             }
         },
-        "notifications.Type": {
+        "internal_notifications.Type": {
             "type": "string",
             "enum": [
                 "H2HI",
@@ -2120,7 +2181,7 @@ const docTemplate = `{
                 "TypeSoulDrift"
             ]
         },
-        "profile.ConnectionSetting": {
+        "internal_profile.ConnectionSetting": {
             "type": "object",
             "properties": {
                 "api_endpoint": {
@@ -2135,7 +2196,7 @@ const docTemplate = `{
                 }
             }
         },
-        "profile.DecisionPreference": {
+        "internal_profile.DecisionPreference": {
             "type": "object",
             "properties": {
                 "autonomy": {
@@ -2164,7 +2225,7 @@ const docTemplate = `{
                 }
             }
         },
-        "profile.EKProgress": {
+        "internal_profile.EKProgress": {
             "type": "object",
             "properties": {
                 "hand": {
@@ -2178,7 +2239,7 @@ const docTemplate = `{
                 }
             }
         },
-        "profile.Profile": {
+        "internal_profile.Profile": {
             "type": "object",
             "properties": {
                 "api_endpoint": {
@@ -2194,10 +2255,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "preferences": {
-                    "$ref": "#/definitions/profile.DecisionPreference"
+                    "$ref": "#/definitions/internal_profile.DecisionPreference"
                 },
                 "progress": {
-                    "$ref": "#/definitions/profile.EKProgress"
+                    "$ref": "#/definitions/internal_profile.EKProgress"
                 },
                 "timezone": {
                     "type": "string"
@@ -2207,7 +2268,35 @@ const docTemplate = `{
                 }
             }
         },
-        "scheduler.Status": {
+        "internal_scheduler.RunNowResponse": {
+            "type": "object",
+            "properties": {
+                "accepted": {
+                    "description": "passed Triage + Decide → Decision: Automated",
+                    "type": "integer"
+                },
+                "ghosted": {
+                    "description": "manipulation detected → Decision: Declined (ghost)",
+                    "type": "integer"
+                },
+                "rejected": {
+                    "description": "failed Triage or Decide → Decision: Declined",
+                    "type": "integer"
+                },
+                "shield_reason": {
+                    "description": "why shield was active",
+                    "type": "string"
+                },
+                "shielded": {
+                    "description": "biometrics gate was active during this run",
+                    "type": "boolean"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_scheduler.Status": {
             "type": "object",
             "properties": {
                 "interval_minutes": {
@@ -2221,7 +2310,7 @@ const docTemplate = `{
                     "description": "nil if never run",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/brain.PipelineResult"
+                            "$ref": "#/definitions/github_com_egokernel_ek1_internal_brain.PipelineResult"
                         }
                     ]
                 },
@@ -2239,7 +2328,7 @@ const docTemplate = `{
                 "services": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/datasync.ServiceStatus"
+                        "$ref": "#/definitions/github_com_egokernel_ek1_internal_datasync.ServiceStatus"
                     }
                 }
             }

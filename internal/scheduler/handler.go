@@ -27,7 +27,7 @@ func (h *Handler) status(c *fiber.Ctx) error {
 // @Summary      Trigger immediate pipeline cycle
 // @Tags         scheduler
 // @Produce      json
-// @Success      200  {object}  brain.PipelineResult
+// @Success      200  {object}  scheduler.RunNowResponse
 // @Failure      500  {object}  map[string]interface{}
 // @Router       /scheduler/run-now [post]
 func (h *Handler) runNow(c *fiber.Ctx) error {

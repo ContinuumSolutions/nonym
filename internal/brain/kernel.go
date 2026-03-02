@@ -40,7 +40,7 @@ func (s KernelStatus) String() string {
 	case StatusShielded:
 		return "SHIELDED"
 	case StatusH2HI:
-		return "H2HI — MANUAL SYNC REQUIRED"
+		return "H2HI"
 	case StatusExiled:
 		return "EXILED"
 	default:

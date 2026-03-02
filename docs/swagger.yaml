@@ -1,169 +1,6 @@
 basePath: /
 definitions:
-  activities.Decision:
-    enum:
-    - 0
-    - 1
-    - 2
-    - 3
-    - 4
-    - 5
-    type: integer
-    x-enum-varnames:
-    - Pending
-    - Accepted
-    - Declined
-    - Negotiated
-    - Automated
-    - Cancelled
-  activities.Event:
-    properties:
-      created_at:
-        type: string
-      decision:
-        allOf:
-        - $ref: '#/definitions/activities.Decision'
-        enum:
-        - 0
-        - 1
-        - 2
-        - 3
-        - 4
-        - 5
-      event_type:
-        allOf:
-        - $ref: '#/definitions/activities.EventType'
-        enum:
-        - 0
-        - 1
-        - 2
-        - 3
-        - 4
-        - 5
-      gain:
-        $ref: '#/definitions/activities.Gain'
-      id:
-        type: integer
-      importance:
-        allOf:
-        - $ref: '#/definitions/activities.Importance'
-        enum:
-        - 0
-        - 1
-        - 2
-      narrative:
-        description: Detail description of exactly what happened
-        type: string
-      read:
-        type: boolean
-      source_service:
-        type: string
-      updated_at:
-        type: string
-    type: object
-  activities.EventType:
-    enum:
-    - 0
-    - 1
-    - 2
-    - 3
-    - 4
-    - 5
-    type: integer
-    x-enum-varnames:
-    - Finance
-    - Calendar
-    - Communication
-    - Billing
-    - Health
-    - Other
-  activities.Gain:
-    properties:
-      _symbol:
-        description: How to present the gain e.g $ for money type
-        type: string
-      _value:
-        type: number
-      details:
-        type: string
-      kind:
-        allOf:
-        - $ref: '#/definitions/activities.GainKind'
-        enum:
-        - 0
-        - 1
-      type:
-        allOf:
-        - $ref: '#/definitions/activities.GainType'
-        enum:
-        - 0
-        - 1
-    type: object
-  activities.GainKind:
-    enum:
-    - 0
-    - 1
-    type: integer
-    x-enum-varnames:
-    - Money
-    - Time
-  activities.GainType:
-    enum:
-    - 0
-    - 1
-    type: integer
-    x-enum-varnames:
-    - Positive
-    - Negative
-  activities.Importance:
-    enum:
-    - 0
-    - 1
-    - 2
-    type: integer
-    x-enum-varnames:
-    - Low
-    - Medium
-    - High
-  auth.pinReq:
-    properties:
-      pin_hash:
-        type: string
-    type: object
-  auth.unlockReq:
-    properties:
-      pin_hash:
-        type: string
-    type: object
-  biometrics.CheckIn:
-    properties:
-      created_at:
-        type: string
-      energy:
-        type: integer
-      extra_context:
-        type: string
-      mood:
-        type: integer
-      sleep:
-        type: number
-      stress_level:
-        type: integer
-      updated_at:
-        type: string
-    type: object
-  brain.KernelSnapshot:
-    properties:
-      decision_count:
-        type: integer
-      identity_entropy:
-        type: number
-      status:
-        type: string
-      values:
-        $ref: '#/definitions/brain.ValueMatrix'
-    type: object
-  brain.PipelineResult:
+  github_com_egokernel_ek1_internal_brain.PipelineResult:
     properties:
       accepted:
         description: 'passed Triage + Decide → Decision: Automated'
@@ -183,7 +20,227 @@ definitions:
       total:
         type: integer
     type: object
-  brain.StageProgress:
+  github_com_egokernel_ek1_internal_datasync.ServiceStatus:
+    properties:
+      last_error:
+        type: string
+      last_sync_at:
+        description: nil = never synced
+        type: string
+      signal_count:
+        type: integer
+      slug:
+        type: string
+    type: object
+  internal_activities.Decision:
+    enum:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    type: integer
+    x-enum-varnames:
+    - Pending
+    - Accepted
+    - Declined
+    - Negotiated
+    - Automated
+    - Cancelled
+  internal_activities.Event:
+    properties:
+      analysis:
+        allOf:
+        - $ref: '#/definitions/internal_activities.SignalAnalysis'
+        description: LLM scores + triage rationale
+      created_at:
+        type: string
+      decision:
+        allOf:
+        - $ref: '#/definitions/internal_activities.Decision'
+        enum:
+        - 0
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+      event_type:
+        allOf:
+        - $ref: '#/definitions/internal_activities.EventType'
+        enum:
+        - 0
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+      gain:
+        $ref: '#/definitions/internal_activities.Gain'
+      id:
+        type: integer
+      importance:
+        allOf:
+        - $ref: '#/definitions/internal_activities.Importance'
+        enum:
+        - 0
+        - 1
+        - 2
+      narrative:
+        description: Detail description of exactly what happened
+        type: string
+      read:
+        type: boolean
+      source_service:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  internal_activities.EventType:
+    enum:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    type: integer
+    x-enum-varnames:
+    - Finance
+    - Calendar
+    - Communication
+    - Billing
+    - Health
+    - Other
+  internal_activities.Gain:
+    properties:
+      _symbol:
+        description: How to present the gain e.g $ for money type
+        type: string
+      _value:
+        type: number
+      details:
+        type: string
+      kind:
+        allOf:
+        - $ref: '#/definitions/internal_activities.GainKind'
+        enum:
+        - 0
+        - 1
+      type:
+        allOf:
+        - $ref: '#/definitions/internal_activities.GainType'
+        enum:
+        - 0
+        - 1
+    type: object
+  internal_activities.GainKind:
+    enum:
+    - 0
+    - 1
+    type: integer
+    x-enum-varnames:
+    - Money
+    - Time
+  internal_activities.GainType:
+    enum:
+    - 0
+    - 1
+    type: integer
+    x-enum-varnames:
+    - Positive
+    - Negative
+  internal_activities.Importance:
+    enum:
+    - 0
+    - 1
+    - 2
+    type: integer
+    x-enum-varnames:
+    - Low
+    - Medium
+    - High
+  internal_activities.SignalAnalysis:
+    properties:
+      decide_threshold:
+        description: utility threshold at time of Decide
+        type: number
+      decide_utility:
+        description: utility computed by Decide (if reached)
+        type: number
+      estimated_roi:
+        description: USD value scored by LLM
+        type: number
+      manipulation_pct:
+        description: 0–1 manipulation score
+        type: number
+      roi_threshold:
+        description: minimum ROI the kernel required at triage
+        type: number
+      service_slug:
+        type: string
+      signal_title:
+        type: string
+      time_commitment:
+        description: hours scored by LLM
+        type: number
+      triage_gate:
+        description: financial_insignificance | manipulation | decide_utility | decide_risk
+          | accepted
+        type: string
+    type: object
+  internal_auth.pinReq:
+    properties:
+      pin_hash:
+        type: string
+    type: object
+  internal_auth.unlockReq:
+    properties:
+      pin_hash:
+        type: string
+    type: object
+  internal_biometrics.CheckIn:
+    properties:
+      created_at:
+        type: string
+      energy:
+        type: integer
+      extra_context:
+        type: string
+      mood:
+        type: integer
+      sleep:
+        type: number
+      stress_level:
+        type: integer
+      updated_at:
+        type: string
+    type: object
+  internal_brain.KernelSnapshot:
+    properties:
+      decision_count:
+        type: integer
+      identity_entropy:
+        type: number
+      status:
+        description: |-
+          Status is the current operational mode of the kernel.
+          ONLINE: normal autonomous operation.
+          SHIELDED: biometrics gate active — elevated stress or poor sleep; decision threshold raised.
+          H2HI: identity entropy spike — manual review required; call POST /brain/sync-acknowledge to resume.
+          EXILED: reputation score below exile threshold; no external processing.
+          enums: ONLINE,SHIELDED,H2HI,EXILED
+        enum:
+        - ONLINE
+        - SHIELDED
+        - H2HI
+        - EXILED
+        type: string
+      values:
+        $ref: '#/definitions/internal_brain.ValueMatrix'
+    type: object
+  internal_brain.StageProgress:
     properties:
       hand:
         type: integer
@@ -192,7 +249,7 @@ definitions:
       voice:
         type: integer
     type: object
-  brain.StatusResponse:
+  internal_brain.StatusResponse:
     properties:
       decision_count:
         type: integer
@@ -203,16 +260,28 @@ definitions:
       reputation_tier:
         type: string
       stage_progress:
-        $ref: '#/definitions/brain.StageProgress'
+        $ref: '#/definitions/internal_brain.StageProgress'
       status:
+        description: |-
+          Status is the current operational mode of the kernel.
+          ONLINE: normal autonomous operation.
+          SHIELDED: biometrics gate active — elevated stress or poor sleep; decision threshold raised.
+          H2HI: identity entropy spike — manual review required; call POST /brain/sync-acknowledge to resume.
+          EXILED: reputation score below exile threshold; no external processing.
+          enums: ONLINE,SHIELDED,H2HI,EXILED
+        enum:
+        - ONLINE
+        - SHIELDED
+        - H2HI
+        - EXILED
         type: string
       time_saved_today:
         description: minutes
         type: integer
       values:
-        $ref: '#/definitions/brain.ValueMatrix'
+        $ref: '#/definitions/internal_brain.ValueMatrix'
     type: object
-  brain.ValueMatrix:
+  internal_brain.ValueMatrix:
     properties:
       baseHourlyRate:
         description: |-
@@ -257,7 +326,7 @@ definitions:
         format: float64
         type: number
     type: object
-  chat.Message:
+  internal_chat.Message:
     properties:
       content:
         type: string
@@ -266,35 +335,23 @@ definitions:
       timestamp:
         type: string
     type: object
-  chat.Request:
+  internal_chat.Request:
     properties:
       history:
         items:
-          $ref: '#/definitions/chat.Message'
+          $ref: '#/definitions/internal_chat.Message'
         type: array
       message:
         type: string
     type: object
-  chat.Response:
+  internal_chat.Response:
     properties:
       reply:
         type: string
       timestamp:
         type: string
     type: object
-  datasync.ServiceStatus:
-    properties:
-      last_error:
-        type: string
-      last_sync_at:
-        description: nil = never synced
-        type: string
-      signal_count:
-        type: integer
-      slug:
-        type: string
-    type: object
-  harvest.ContactRecord:
+  internal_harvest.ContactRecord:
     properties:
       favors_given:
         description: favours the contact gave to the user
@@ -312,13 +369,13 @@ definitions:
         description: max 0-1 solution/bottleneck similarity seen
         type: number
     type: object
-  harvest.HarvestResult:
+  internal_harvest.HarvestResult:
     properties:
       contacts_found:
         type: integer
       debts:
         items:
-          $ref: '#/definitions/harvest.SocialDebt'
+          $ref: '#/definitions/internal_harvest.SocialDebt'
         type: array
       opportunities:
         items:
@@ -329,13 +386,13 @@ definitions:
       total_value:
         type: number
     type: object
-  harvest.SocialDebt:
+  internal_harvest.SocialDebt:
     properties:
       action:
         description: recommended next step
         type: string
       contact:
-        $ref: '#/definitions/harvest.ContactRecord'
+        $ref: '#/definitions/internal_harvest.ContactRecord'
       estimated_value:
         description: USD equivalent
         type: number
@@ -343,7 +400,7 @@ definitions:
         description: positive = contact owes the user
         type: integer
     type: object
-  integrations.AuthMethod:
+  internal_integrations.AuthMethod:
     enum:
     - 0
     - 1
@@ -351,7 +408,7 @@ definitions:
     x-enum-varnames:
     - APIKeyAuth
     - OAuth2Auth
-  integrations.ConnectInput:
+  internal_integrations.ConnectInput:
     properties:
       api_key:
         type: string
@@ -360,7 +417,7 @@ definitions:
       oauth_refresh_token:
         type: string
     type: object
-  integrations.ConnectionStatus:
+  internal_integrations.ConnectionStatus:
     enum:
     - 0
     - 1
@@ -378,7 +435,7 @@ definitions:
     - Disconnected
     - Pending
     - Connected
-  integrations.Service:
+  internal_integrations.Service:
     properties:
       api_endpoint:
         type: string
@@ -392,7 +449,7 @@ definitions:
         type: boolean
       auth_method:
         allOf:
-        - $ref: '#/definitions/integrations.AuthMethod'
+        - $ref: '#/definitions/internal_integrations.AuthMethod'
         enum:
         - 0
         - 1
@@ -419,7 +476,7 @@ definitions:
         type: string
       status:
         allOf:
-        - $ref: '#/definitions/integrations.ConnectionStatus'
+        - $ref: '#/definitions/internal_integrations.ConnectionStatus'
         enum:
         - 0
         - 1
@@ -427,21 +484,21 @@ definitions:
       updated_at:
         type: string
     type: object
-  integrations.initiateOAuthResponse:
+  internal_integrations.initiateOAuthResponse:
     properties:
       auth_url:
         type: string
       state:
         type: string
     type: object
-  integrations.oauthAppRequest:
+  internal_integrations.oauthAppRequest:
     properties:
       client_id:
         type: string
       client_secret:
         type: string
     type: object
-  ledger.HistoryEntry:
+  internal_ledger.HistoryEntry:
     properties:
       created_at:
         type: string
@@ -452,7 +509,7 @@ definitions:
       success:
         type: boolean
     type: object
-  notifications.Notification:
+  internal_notifications.Notification:
     properties:
       body:
         type: string
@@ -465,9 +522,9 @@ definitions:
       title:
         type: string
       type:
-        $ref: '#/definitions/notifications.Type'
+        $ref: '#/definitions/internal_notifications.Type'
     type: object
-  notifications.Type:
+  internal_notifications.Type:
     enum:
     - H2HI
     - OPPORTUNITY
@@ -489,7 +546,7 @@ definitions:
     - TypeOpportunity
     - TypeHarvest
     - TypeSoulDrift
-  profile.ConnectionSetting:
+  internal_profile.ConnectionSetting:
     properties:
       api_endpoint:
         type: string
@@ -499,7 +556,7 @@ definitions:
         description: IANA timezone name e.g. "Europe/London", "UTC"
         type: string
     type: object
-  profile.DecisionPreference:
+  internal_profile.DecisionPreference:
     properties:
       autonomy:
         description: Minimise dependence on third parties
@@ -520,7 +577,7 @@ definitions:
         description: Weight given to protecting your time
         type: integer
     type: object
-  profile.EKProgress:
+  internal_profile.EKProgress:
     properties:
       hand:
         type: boolean
@@ -529,7 +586,7 @@ definitions:
       voice:
         type: boolean
     type: object
-  profile.Profile:
+  internal_profile.Profile:
     properties:
       api_endpoint:
         type: string
@@ -540,15 +597,35 @@ definitions:
       kernel_name:
         type: string
       preferences:
-        $ref: '#/definitions/profile.DecisionPreference'
+        $ref: '#/definitions/internal_profile.DecisionPreference'
       progress:
-        $ref: '#/definitions/profile.EKProgress'
+        $ref: '#/definitions/internal_profile.EKProgress'
       timezone:
         type: string
       updated_at:
         type: string
     type: object
-  scheduler.Status:
+  internal_scheduler.RunNowResponse:
+    properties:
+      accepted:
+        description: 'passed Triage + Decide → Decision: Automated'
+        type: integer
+      ghosted:
+        description: 'manipulation detected → Decision: Declined (ghost)'
+        type: integer
+      rejected:
+        description: 'failed Triage or Decide → Decision: Declined'
+        type: integer
+      shield_reason:
+        description: why shield was active
+        type: string
+      shielded:
+        description: biometrics gate was active during this run
+        type: boolean
+      total:
+        type: integer
+    type: object
+  internal_scheduler.Status:
     properties:
       interval_minutes:
         type: integer
@@ -557,7 +634,7 @@ definitions:
         type: string
       last_result:
         allOf:
-        - $ref: '#/definitions/brain.PipelineResult'
+        - $ref: '#/definitions/github_com_egokernel_ek1_internal_brain.PipelineResult'
         description: nil if never run
       last_run_at:
         description: nil if never run
@@ -569,7 +646,7 @@ definitions:
         type: string
       services:
         items:
-          $ref: '#/definitions/datasync.ServiceStatus'
+          $ref: '#/definitions/github_com_egokernel_ek1_internal_datasync.ServiceStatus'
         type: array
     type: object
 host: localhost:3000
@@ -588,7 +665,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/activities.Event'
+              $ref: '#/definitions/internal_activities.Event'
             type: array
         "500":
           description: Internal Server Error
@@ -612,7 +689,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/activities.Event'
+            $ref: '#/definitions/internal_activities.Event'
         "400":
           description: Bad Request
           schema:
@@ -645,7 +722,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/activities.Event'
+            $ref: '#/definitions/internal_activities.Event'
         "400":
           description: Bad Request
           schema:
@@ -687,7 +764,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/auth.unlockReq'
+          $ref: '#/definitions/internal_auth.unlockReq'
       produces:
       - application/json
       responses:
@@ -722,7 +799,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/biometrics.CheckIn'
+            $ref: '#/definitions/internal_biometrics.CheckIn'
         "404":
           description: Not Found
           schema:
@@ -740,14 +817,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/biometrics.CheckIn'
+          $ref: '#/definitions/internal_biometrics.CheckIn'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/biometrics.CheckIn'
+            $ref: '#/definitions/internal_biometrics.CheckIn'
         "400":
           description: Bad Request
           schema:
@@ -777,7 +854,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/biometrics.CheckIn'
+              $ref: '#/definitions/internal_biometrics.CheckIn'
             type: array
         "500":
           description: Internal Server Error
@@ -795,7 +872,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/brain.StatusResponse'
+            $ref: '#/definitions/internal_brain.StatusResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -812,7 +889,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/brain.KernelSnapshot'
+            $ref: '#/definitions/internal_brain.KernelSnapshot'
         "500":
           description: Internal Server Error
           schema:
@@ -831,14 +908,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/chat.Request'
+          $ref: '#/definitions/internal_chat.Request'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/chat.Response'
+            $ref: '#/definitions/internal_chat.Response'
         "400":
           description: Bad Request
           schema:
@@ -866,7 +943,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/chat.Message'
+              $ref: '#/definitions/internal_chat.Message'
             type: array
         "500":
           description: Internal Server Error
@@ -889,7 +966,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/chat.Request'
+          $ref: '#/definitions/internal_chat.Request'
       produces:
       - text/event-stream
       responses:
@@ -919,7 +996,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/harvest.HarvestResult'
+            $ref: '#/definitions/internal_harvest.HarvestResult'
         "500":
           description: Internal Server Error
           schema:
@@ -936,7 +1013,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/harvest.HarvestResult'
+            $ref: '#/definitions/internal_harvest.HarvestResult'
         "500":
           description: Internal Server Error
           schema:
@@ -954,7 +1031,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/integrations.Service'
+              $ref: '#/definitions/internal_integrations.Service'
             type: array
         "500":
           description: Internal Server Error
@@ -978,7 +1055,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/integrations.Service'
+            $ref: '#/definitions/internal_integrations.Service'
         "400":
           description: Bad Request
           schema:
@@ -1012,7 +1089,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/integrations.Service'
+            $ref: '#/definitions/internal_integrations.Service'
         "400":
           description: Bad Request
           schema:
@@ -1044,7 +1121,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/integrations.Service'
+            $ref: '#/definitions/internal_integrations.Service'
         "400":
           description: Bad Request
           schema:
@@ -1077,14 +1154,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/integrations.ConnectInput'
+          $ref: '#/definitions/internal_integrations.ConnectInput'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/integrations.Service'
+            $ref: '#/definitions/internal_integrations.Service'
         "400":
           description: Bad Request
           schema:
@@ -1120,7 +1197,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/integrations.oauthAppRequest'
+          $ref: '#/definitions/internal_integrations.oauthAppRequest'
       produces:
       - application/json
       responses:
@@ -1163,7 +1240,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/integrations.initiateOAuthResponse'
+            $ref: '#/definitions/internal_integrations.initiateOAuthResponse'
         "400":
           description: Bad Request
           schema:
@@ -1197,14 +1274,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/integrations.Service'
+          $ref: '#/definitions/internal_integrations.Service'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/integrations.Service'
+            $ref: '#/definitions/internal_integrations.Service'
         "400":
           description: Bad Request
           schema:
@@ -1236,7 +1313,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/ledger.HistoryEntry'
+              $ref: '#/definitions/internal_ledger.HistoryEntry'
             type: array
         "500":
           description: Internal Server Error
@@ -1273,7 +1350,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/notifications.Notification'
+              $ref: '#/definitions/internal_notifications.Notification'
             type: array
         "500":
           description: Internal Server Error
@@ -1368,7 +1445,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/profile.Profile'
+            $ref: '#/definitions/internal_profile.Profile'
         "500":
           description: Internal Server Error
           schema:
@@ -1387,14 +1464,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/profile.ConnectionSetting'
+          $ref: '#/definitions/internal_profile.ConnectionSetting'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/profile.Profile'
+            $ref: '#/definitions/internal_profile.Profile'
         "400":
           description: Bad Request
           schema:
@@ -1418,7 +1495,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/auth.pinReq'
+          $ref: '#/definitions/internal_auth.pinReq'
       produces:
       - application/json
       responses:
@@ -1449,7 +1526,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/auth.pinReq'
+          $ref: '#/definitions/internal_auth.pinReq'
       produces:
       - application/json
       responses:
@@ -1476,14 +1553,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/profile.DecisionPreference'
+          $ref: '#/definitions/internal_profile.DecisionPreference'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/profile.Profile'
+            $ref: '#/definitions/internal_profile.Profile'
         "400":
           description: Bad Request
           schema:
@@ -1505,7 +1582,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/brain.PipelineResult'
+            $ref: '#/definitions/internal_scheduler.RunNowResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -1522,7 +1599,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/scheduler.Status'
+            $ref: '#/definitions/internal_scheduler.Status'
       summary: Get scheduler status
       tags:
       - scheduler

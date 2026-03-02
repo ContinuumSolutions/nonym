@@ -2,7 +2,13 @@ package brain
 
 // KernelSnapshot is the point-in-time state of the kernel returned by the API.
 type KernelSnapshot struct {
-	Status          string      `json:"status"`
+	// Status is the current operational mode of the kernel.
+	// ONLINE: normal autonomous operation.
+	// SHIELDED: biometrics gate active — elevated stress or poor sleep; decision threshold raised.
+	// H2HI: identity entropy spike — manual review required; call POST /brain/sync-acknowledge to resume.
+	// EXILED: reputation score below exile threshold; no external processing.
+	// enums: ONLINE,SHIELDED,H2HI,EXILED
+	Status          string      `json:"status" enums:"ONLINE,SHIELDED,H2HI,EXILED"`
 	DecisionCount   int64       `json:"decision_count"`
 	IdentityEntropy float64     `json:"identity_entropy"`
 	Values          ValueMatrix `json:"values"`
