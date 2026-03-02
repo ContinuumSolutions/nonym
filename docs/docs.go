@@ -1486,7 +1486,12 @@ const docTemplate = `{
         "github_com_egokernel_ek1_internal_datasync.ServiceStatus": {
             "type": "object",
             "properties": {
+                "active": {
+                    "description": "true while this adapter is being pulled right now",
+                    "type": "boolean"
+                },
                 "last_error": {
+                    "description": "non-empty = last pull failed",
                     "type": "string"
                 },
                 "last_sync_at": {
@@ -1494,6 +1499,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "signal_count": {
+                    "description": "signals pulled in the last completed cycle",
                     "type": "integer"
                 },
                 "slug": {

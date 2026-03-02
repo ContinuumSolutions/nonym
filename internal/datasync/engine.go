@@ -45,10 +45,11 @@ type Engine struct {
 	services *integrations.Store
 	adapters map[string]Adapter
 
-	mu        sync.Mutex
-	lastSync  map[string]time.Time
-	lastCount map[string]int    // signals pulled per slug in last cycle
-	lastError map[string]string // last error message per slug (empty = no error)
+	mu           sync.Mutex
+	lastSync     map[string]time.Time
+	lastCount    map[string]int    // signals pulled per slug in last cycle
+	lastError    map[string]string // last error message per slug (empty = no error)
+	currentSlug  string            // slug of the adapter currently being pulled ("" = idle)
 }
 
 // NewEngine creates a sync engine with the given adapter registry.
@@ -95,16 +96,20 @@ func (e *Engine) Run(ctx context.Context) ([]RawSignal, error) {
 			OAuthRefreshToken: svc.OAuthRefreshToken,
 		}
 
+		e.mu.Lock()
+		e.currentSlug = svc.Slug
+		e.mu.Unlock()
+
 		signals, err := adapter.Pull(ctx, creds, since)
-		if err != nil {
-			log.Printf("datasync: [%s] pull error: %v", svc.Slug, err)
-			e.mu.Lock()
-			e.lastError[svc.Slug] = err.Error()
-			e.mu.Unlock()
-			continue
-		}
 
 		e.mu.Lock()
+		e.currentSlug = ""
+		if err != nil {
+			e.lastError[svc.Slug] = err.Error()
+			e.mu.Unlock()
+			log.Printf("datasync: [%s] pull error: %v", svc.Slug, err)
+			continue
+		}
 		e.lastSync[svc.Slug] = time.Now()
 		e.lastCount[svc.Slug] = len(signals)
 		e.lastError[svc.Slug] = ""
@@ -126,12 +131,14 @@ func (e *Engine) LastSync(slug string) time.Time {
 // ServiceStatus is a point-in-time snapshot of one adapter's sync state.
 type ServiceStatus struct {
 	Slug        string     `json:"slug"`
+	Active      bool       `json:"active"`                 // true while this adapter is being pulled right now
 	LastSyncAt  *time.Time `json:"last_sync_at"`           // nil = never synced
-	SignalCount int        `json:"signal_count"`
-	LastError   string     `json:"last_error,omitempty"`
+	SignalCount int        `json:"signal_count"`           // signals pulled in the last completed cycle
+	LastError   string     `json:"last_error,omitempty"`   // non-empty = last pull failed
 }
 
-// ServiceStatuses returns a snapshot of every registered adapter's sync state.
+// ServiceStatuses returns a live snapshot of every registered adapter's sync state.
+// Active reflects whether that adapter is being pulled at the moment of the call.
 func (e *Engine) ServiceStatuses() []ServiceStatus {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -140,6 +147,7 @@ func (e *Engine) ServiceStatuses() []ServiceStatus {
 	for slug := range e.adapters {
 		ss := ServiceStatus{
 			Slug:        slug,
+			Active:      slug == e.currentSlug,
 			SignalCount: e.lastCount[slug],
 			LastError:   e.lastError[slug],
 		}

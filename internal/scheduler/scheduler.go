@@ -122,12 +122,13 @@ func (s *Scheduler) RunNowAsync() bool {
 }
 
 // GetStatus returns a point-in-time snapshot of scheduler state.
-// Running is always fresh from the atomic flag; the rest comes from the last completed cycle.
+// Running and Services are always live; the rest comes from the last completed cycle.
 func (s *Scheduler) GetStatus() Status {
 	s.mu.Lock()
 	st := s.status
 	s.mu.Unlock()
 	st.Running = s.running.Load()
+	st.Services = s.engine.ServiceStatuses() // always live — shows Active flag per adapter
 	return st
 }
 
@@ -182,7 +183,6 @@ func (s *Scheduler) runLocked(ctx context.Context) (brain.PipelineResult, error)
 	s.status.LastRunAt = &now
 	s.status.NextRunAt = &next
 	s.status.LastSignalCount = len(signals)
-	s.status.Services = s.engine.ServiceStatuses()
 	if cycleErr != nil {
 		s.status.LastError = cycleErr.Error()
 	} else {
