@@ -314,9 +314,14 @@ func (h *Handler) initiateOAuth(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	verifier, challenge, err := generatePKCE()
-	if err != nil {
-		return err
+
+	// NoPKCE services (e.g. Notion) don't support the PKCE extension.
+	var verifier, challenge string
+	if !def.NoPKCE {
+		verifier, challenge, err = generatePKCE()
+		if err != nil {
+			return err
+		}
 	}
 
 	stateExpiry := time.Now().Add(10 * time.Minute).Unix()
@@ -397,7 +402,13 @@ func (h *Handler) oauthCallback(c *fiber.Ctx) error {
 		return c.SendString(h.callbackHTML(slug, "token_exchange_failed", ""))
 	}
 
-	if _, err := h.store.CompleteOAuth(serviceID, access, refresh, expiry.Unix()); err != nil {
+	// expiry is zero for non-expiring tokens (e.g. Notion). Store 0 so the
+	// refresh loop skips them (it only refreshes when OAuthTokenExpiry != 0).
+	var expiryUnix int64
+	if !expiry.IsZero() {
+		expiryUnix = expiry.Unix()
+	}
+	if _, err := h.store.CompleteOAuth(serviceID, access, refresh, expiryUnix); err != nil {
 		return c.SendString(h.callbackHTML(slug, "storage_error", ""))
 	}
 

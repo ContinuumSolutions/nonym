@@ -12,11 +12,13 @@ type ServiceDef struct {
 	AuthMethod  AuthMethod
 
 	// OAuth2 only (empty/nil for APIKeyAuth services).
-	AuthURL     string            // authorization endpoint
-	TokenURL    string            // token exchange endpoint
-	RevokeURL   string            // token revocation endpoint (optional)
-	Scopes      []string          // space-joined into the scope query param
-	ExtraParams map[string]string // additional query params appended to the auth URL
+	AuthURL      string            // authorization endpoint
+	TokenURL     string            // token exchange endpoint
+	RevokeURL    string            // token revocation endpoint (optional)
+	Scopes       []string          // space-joined into the scope query param
+	ExtraParams  map[string]string // additional query params appended to the auth URL
+	NoPKCE       bool              // skip code_challenge/code_verifier (e.g. Notion)
+	UseBasicAuth bool              // send client_id:client_secret as HTTP Basic auth on token exchange (e.g. Notion)
 }
 
 // Categories available for both built-in and custom services.
@@ -26,6 +28,7 @@ const (
 	CategoryFinance       = "Finance"
 	CategoryHealth        = "Health"
 	CategoryBilling       = "Billing"
+	CategoryProductivity  = "Productivity"
 )
 
 // registry is the single source of truth for built-in services.
@@ -193,6 +196,22 @@ var registry = []ServiceDef{
 		AuthURL:     "https://api.prod.whoop.com/oauth/oauth2/auth",
 		TokenURL:    "https://api.prod.whoop.com/oauth/oauth2/token",
 		Scopes:      []string{"read:recovery", "read:sleep", "read:workout"},
+	},
+
+	// ── Productivity ─────────────────────────────────────────────────────────
+	{
+		Slug:         "notion",
+		Name:         "Notion",
+		Category:     CategoryProductivity,
+		Icon:         "notion",
+		Color:        "#000000",
+		Description:  "Access and monitor your Notion pages and databases.",
+		AuthMethod:   OAuth2Auth,
+		AuthURL:      "https://api.notion.com/v1/oauth/authorize",
+		TokenURL:     "https://api.notion.com/v1/oauth/token",
+		NoPKCE:       true,
+		UseBasicAuth: true,
+		ExtraParams:  map[string]string{"owner": "user"},
 	},
 
 	// ── Billing ──────────────────────────────────────────────────────────────

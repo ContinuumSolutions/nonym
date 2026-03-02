@@ -13,6 +13,11 @@ import (
 	"time"
 )
 
+// basicAuthHeader encodes client_id:client_secret as an HTTP Basic auth value.
+func basicAuthHeader(clientID, clientSecret string) string {
+	return "Basic " + base64.StdEncoding.EncodeToString([]byte(clientID+":"+clientSecret))
+}
+
 // generateState creates a cryptographically random CSRF state token (32 bytes, base64url).
 func generateState() (string, error) {
 	b := make([]byte, 32)
@@ -46,16 +51,21 @@ func lookupCatalog(slug string) *ServiceDef {
 	return nil
 }
 
-// buildAuthURL constructs the full OAuth2 authorization URL including PKCE and CSRF params.
+// buildAuthURL constructs the full OAuth2 authorization URL including CSRF params.
+// PKCE (code_challenge/code_challenge_method) is omitted when def.NoPKCE is true (e.g. Notion).
 func buildAuthURL(def *ServiceDef, clientID, redirectURI, state, challenge string) string {
 	params := url.Values{
-		"client_id":             {clientID},
-		"redirect_uri":          {redirectURI},
-		"response_type":         {"code"},
-		"scope":                 {strings.Join(def.Scopes, " ")},
-		"state":                 {state},
-		"code_challenge":        {challenge},
-		"code_challenge_method": {"S256"},
+		"client_id":     {clientID},
+		"redirect_uri":  {redirectURI},
+		"response_type": {"code"},
+		"state":         {state},
+	}
+	if len(def.Scopes) > 0 {
+		params.Set("scope", strings.Join(def.Scopes, " "))
+	}
+	if !def.NoPKCE && challenge != "" {
+		params.Set("code_challenge", challenge)
+		params.Set("code_challenge_method", "S256")
 	}
 	// Merge service-specific extra query params (e.g. access_type=offline for Google).
 	for k, v := range def.ExtraParams {
@@ -74,16 +84,24 @@ type tokenResponse struct {
 }
 
 // exchangeCode exchanges an authorization code for access/refresh tokens.
+// When def.UseBasicAuth is true, client credentials go in the Authorization header (e.g. Notion).
+// When def.NoPKCE is true, code_verifier is omitted from the body.
+// Returns a zero expiry (time.Time{}) when the provider omits expires_in and NoPKCE is true
+// (Notion tokens don't expire and have no refresh_token).
 func exchangeCode(ctx context.Context, def *ServiceDef, clientID, clientSecret, code, redirectURI, codeVerifier string) (access, refresh string, expiry time.Time, err error) {
 	body := url.Values{
-		"grant_type":    {"authorization_code"},
-		"code":          {code},
-		"redirect_uri":  {redirectURI},
-		"client_id":     {clientID},
-		"code_verifier": {codeVerifier},
+		"grant_type":   {"authorization_code"},
+		"code":         {code},
+		"redirect_uri": {redirectURI},
 	}
-	if clientSecret != "" {
-		body.Set("client_secret", clientSecret)
+	if !def.UseBasicAuth {
+		body.Set("client_id", clientID)
+		if clientSecret != "" {
+			body.Set("client_secret", clientSecret)
+		}
+	}
+	if !def.NoPKCE && codeVerifier != "" {
+		body.Set("code_verifier", codeVerifier)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, def.TokenURL, strings.NewReader(body.Encode()))
@@ -92,6 +110,9 @@ func exchangeCode(ctx context.Context, def *ServiceDef, clientID, clientSecret, 
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
+	if def.UseBasicAuth {
+		req.Header.Set("Authorization", basicAuthHeader(clientID, clientSecret))
+	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -110,10 +131,14 @@ func exchangeCode(ctx context.Context, def *ServiceDef, clientID, clientSecret, 
 		return "", "", time.Time{}, fmt.Errorf("exchange code: empty access_token in response")
 	}
 
-	exp := time.Now().Add(time.Duration(tr.ExpiresIn) * time.Second)
-	if tr.ExpiresIn == 0 {
-		exp = time.Now().Add(time.Hour) // default 1h when provider omits expires_in
+	var exp time.Time
+	if tr.ExpiresIn > 0 {
+		exp = time.Now().Add(time.Duration(tr.ExpiresIn) * time.Second)
+	} else if !def.NoPKCE {
+		// Provider omitted expires_in but uses standard refresh flow — default 1h.
+		exp = time.Now().Add(time.Hour)
 	}
+	// NoPKCE services (e.g. Notion) return non-expiring tokens; exp stays zero.
 	return tr.AccessToken, tr.RefreshToken, exp, nil
 }
 

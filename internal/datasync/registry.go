@@ -15,5 +15,6 @@ func DefaultAdapters() []Adapter {
 		&OuraAdapter{},
 		&FitbitAdapter{},
 		&WhoopAdapter{},
+		&NotionAdapter{},
 	}
 }
