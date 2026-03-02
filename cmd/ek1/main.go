@@ -18,6 +18,7 @@ import (
 	_ "github.com/egokernel/ek1/docs"
 	"github.com/egokernel/ek1/internal/activities"
 	"github.com/egokernel/ek1/internal/ai"
+	"github.com/egokernel/ek1/internal/auth"
 	"github.com/egokernel/ek1/internal/biometrics"
 	"github.com/egokernel/ek1/internal/brain"
 	"github.com/egokernel/ek1/internal/chat"
@@ -29,7 +30,8 @@ import (
 	"github.com/egokernel/ek1/internal/profile"
 	"github.com/egokernel/ek1/internal/scheduler"
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/cors"
+
+	// "github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	fiberswagger "github.com/swaggo/fiber-swagger"
@@ -106,6 +108,11 @@ func main() {
 		log.Fatalf("integrations seed failed: %v", err)
 	}
 
+	authStore := auth.NewStore(db)
+	if err := authStore.Migrate(); err != nil {
+		log.Fatalf("auth migration failed: %v", err)
+	}
+
 	harvestStore := harvest.NewStore(db)
 	if err := harvestStore.Migrate(); err != nil {
 		log.Fatalf("harvest migration failed: %v", err)
@@ -145,15 +152,15 @@ func main() {
 	app.Use(logger.New())
 	app.Use(recover.New())
 
-	allowedOrigins := os.Getenv("CORS_ORIGINS")
-	if allowedOrigins == "" {
-		allowedOrigins = "http://genesis.egokernel.com:8080"
-	}
-	app.Use(cors.New(cors.Config{
-		AllowOrigins: allowedOrigins,
-		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
-		AllowMethods: "GET, POST, PUT, DELETE, OPTIONS",
-	}))
+	// allowedOrigins := os.Getenv("CORS_ORIGINS")
+	// if allowedOrigins == "" {
+	// 	allowedOrigins = "http://genesis.egokernel.com:8080"
+	// }
+	// app.Use(cors.New(cors.Config{
+	// 	AllowOrigins: allowedOrigins,
+	// 	AllowHeaders: "Origin, Content-Type, Accept, Authorization",
+	// 	AllowMethods: "GET, POST, PUT, DELETE, OPTIONS",
+	// }))
 
 	// @Summary      Health check
 	// @Tags         system
@@ -167,6 +174,7 @@ func main() {
 	app.Get("/swagger/*", fiberswagger.WrapHandler)
 
 	profile.NewHandler(profileStore).RegisterRoutes(app)
+	auth.NewHandler(authStore, profileStore).RegisterRoutes(app)
 	brain.NewHandler(brainSvc, eventsStore).RegisterRoutes(app)
 	ledger.NewHandler(sqliteLedger, "ek1-kernel").RegisterRoutes(app)
 	biometrics.NewHandler(checkInStore).RegisterRoutes(app)
