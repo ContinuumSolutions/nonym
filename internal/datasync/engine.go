@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -104,12 +105,30 @@ func (e *Engine) Run(ctx context.Context) ([]RawSignal, error) {
 
 		e.mu.Lock()
 		e.currentSlug = ""
+		e.mu.Unlock()
+
+		// On 401 from an OAuth service: attempt a token refresh and retry once.
+		// If the refresh fails, TryRefresh marks the service Disconnected automatically.
+		if err != nil && strings.Contains(err.Error(), "HTTP 401") && svc.AuthMethod == integrations.OAuth2Auth {
+			log.Printf("datasync: [%s] 401 — attempting token refresh", svc.Slug)
+			newToken, refreshErr := e.services.TryRefresh(svc.ID, svc.Slug)
+			if refreshErr != nil {
+				log.Printf("datasync: [%s] token refresh failed: %v — service marked disconnected", svc.Slug, refreshErr)
+			} else {
+				creds.OAuthAccessToken = newToken
+				signals, err = adapter.Pull(ctx, creds, since)
+			}
+		}
+
 		if err != nil {
+			log.Printf("datasync: [%s] pull error: %v", svc.Slug, err)
+			e.mu.Lock()
 			e.lastError[svc.Slug] = err.Error()
 			e.mu.Unlock()
-			log.Printf("datasync: [%s] pull error: %v", svc.Slug, err)
 			continue
 		}
+
+		e.mu.Lock()
 		e.lastSync[svc.Slug] = time.Now()
 		e.lastCount[svc.Slug] = len(signals)
 		e.lastError[svc.Slug] = ""

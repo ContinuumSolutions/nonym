@@ -1,8 +1,11 @@
 package integrations
 
 import (
+	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"log"
 	"time"
 )
 
@@ -443,6 +446,41 @@ func (s *Store) UpdateOAuthTokens(id int, accessToken string, expiry int64) erro
 		WHERE id = ?
 	`, encAccess, expiry, time.Now().UTC().Unix(), id)
 	return err
+}
+
+// TryRefresh attempts to exchange the stored refresh token for a new access token.
+// On success it persists the new token and returns it, ready to be passed to the adapter.
+// On any failure it marks the service as Disconnected (so the user sees "re-authorize")
+// and returns an error. Safe to call from any goroutine.
+func (s *Store) TryRefresh(id int, slug string) (string, error) {
+	clientID, clientSecret, _, refreshTok, tokenURLOverride, _, err := s.GetOAuthCreds(id)
+	if err != nil {
+		s.DisconnectOAuth(id) //nolint:errcheck
+		return "", fmt.Errorf("read creds: %w", err)
+	}
+	if refreshTok == "" {
+		s.DisconnectOAuth(id) //nolint:errcheck
+		return "", fmt.Errorf("no refresh token stored — re-authorization required")
+	}
+	def := lookupCatalog(slug)
+	if def == nil {
+		s.DisconnectOAuth(id) //nolint:errcheck
+		return "", fmt.Errorf("no catalog entry for slug %q", slug)
+	}
+	effectiveDef := *def
+	if tokenURLOverride != "" {
+		effectiveDef.TokenURL = tokenURLOverride
+	}
+	newToken, newExpiry, err := refreshToken(context.Background(), &effectiveDef, clientID, clientSecret, refreshTok)
+	if err != nil {
+		s.DisconnectOAuth(id) //nolint:errcheck
+		return "", fmt.Errorf("refresh token exchange failed: %w", err)
+	}
+	if err := s.UpdateOAuthTokens(id, newToken, newExpiry.Unix()); err != nil {
+		log.Printf("integrations: persist refreshed token for %s (id=%d): %v", slug, id, err)
+	}
+	log.Printf("integrations: token refreshed for %s (id=%d) — new expiry %s", slug, id, newExpiry.Format("2006-01-02 15:04 UTC"))
+	return newToken, nil
 }
 
 // DisconnectOAuth marks an OAuth service as Disconnected without clearing client credentials.
