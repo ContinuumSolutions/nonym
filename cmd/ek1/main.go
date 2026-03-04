@@ -55,6 +55,27 @@ func initDB() (*sql.DB, error) {
 	return db, err
 }
 
+// newAIClient builds an ai.Client from environment variables.
+//
+// Tuning knobs (all optional):
+//
+//	OLLAMA_HOST         Ollama base URL          (default http://localhost:11434)
+//	OLLAMA_MODEL        Model name               (default llama3.2)
+//	OLLAMA_NUM_CTX      Context window in tokens (default: Ollama model default)
+//	                    Smaller = faster on CPU; try 2048 for quick replies.
+//	OLLAMA_NUM_PREDICT  Max tokens to generate   (default 400)
+//	                    Reduce to 200 for faster but shorter replies.
+func newAIClient() *ai.Client {
+	c := ai.NewClient(os.Getenv("OLLAMA_HOST"), os.Getenv("OLLAMA_MODEL"))
+	if v, _ := strconv.Atoi(os.Getenv("OLLAMA_NUM_CTX")); v > 0 {
+		c.WithNumCtx(v)
+	}
+	if v, _ := strconv.Atoi(os.Getenv("OLLAMA_NUM_PREDICT")); v > 0 {
+		c.WithNumPredict(v)
+	}
+	return c
+}
+
 func syncInterval() time.Duration {
 	mins, _ := strconv.Atoi(os.Getenv("SYNC_INTERVAL_MINUTES"))
 	if mins <= 0 {
@@ -167,7 +188,7 @@ func main() {
 	)
 
 	// ── Pipeline ─────────────────────────────────────────────────────────────
-	aiClient := ai.NewClient(os.Getenv("OLLAMA_HOST"), os.Getenv("OLLAMA_MODEL"))
+	aiClient := newAIClient()
 	syncEngine := datasync.NewEngine(servicesStore, datasync.DefaultAdapters())
 	pipeline := brain.NewPipeline(brainSvc, aiClient, eventsStore, checkInStore, execEngine)
 

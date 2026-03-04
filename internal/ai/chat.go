@@ -27,17 +27,16 @@ func (c *Client) Chat(ctx context.Context, systemPrompt string, turns []ChatTurn
 		msgs = append(msgs, map[string]string{"role": t.Role, "content": t.Content})
 	}
 
-	payload, err := json.Marshal(map[string]interface{}{
+	opts := c.ollamaOptions(0.2)
+	if _, set := opts["num_predict"]; !set {
+		opts["num_predict"] = 400 // chat replies are rarely >400 tokens
+	}
+	payload, err := json.Marshal(map[string]any{
 		"model":      c.model,
 		"messages":   msgs,
 		"stream":     false,
 		"keep_alive": -1,
-		// Low temperature keeps the model grounded on the data briefing and
-		// prevents it from drifting into generic AI assistant behaviours.
-		"options": map[string]interface{}{
-			"temperature": 0.2,
-			"num_predict": 800,
-		},
+		"options":    opts,
 	})
 	if err != nil {
 		return "", fmt.Errorf("ai: chat marshal: %w", err)
@@ -86,15 +85,16 @@ func (c *Client) ChatStream(ctx context.Context, systemPrompt string, turns []Ch
 		msgs = append(msgs, map[string]string{"role": t.Role, "content": t.Content})
 	}
 
-	payload, err := json.Marshal(map[string]interface{}{
+	opts := c.ollamaOptions(0.2)
+	if _, set := opts["num_predict"]; !set {
+		opts["num_predict"] = 400
+	}
+	payload, err := json.Marshal(map[string]any{
 		"model":      c.model,
 		"messages":   msgs,
 		"stream":     true,
 		"keep_alive": -1,
-		"options": map[string]interface{}{
-			"temperature": 0.2,
-			"num_predict": 800,
-		},
+		"options":    opts,
 	})
 	if err != nil {
 		return fmt.Errorf("ai: chat stream marshal: %w", err)

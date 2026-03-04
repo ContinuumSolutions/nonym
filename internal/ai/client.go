@@ -19,8 +19,10 @@ import (
 
 // Client talks to a locally running Ollama instance.
 type Client struct {
-	host  string
-	model string
+	host      string
+	model     string
+	numCtx    int // context window size (tokens); 0 = Ollama default
+	numPredict int // max tokens to generate; 0 = Ollama default
 }
 
 // NewClient creates a client pointing at host with the given model.
@@ -33,6 +35,26 @@ func NewClient(host, model string) *Client {
 		model = "llama3.2"
 	}
 	return &Client{host: host, model: model}
+}
+
+// WithNumCtx sets the context window size (in tokens).
+// Smaller values reduce memory use and speed up inference on CPU.
+// A good starting point is 2048; increase if conversations feel truncated.
+func (c *Client) WithNumCtx(n int) *Client    { c.numCtx = n; return c }
+
+// WithNumPredict caps the maximum tokens the model will generate per reply.
+func (c *Client) WithNumPredict(n int) *Client { c.numPredict = n; return c }
+
+// ollamaOptions builds the options map for the Ollama API request.
+func (c *Client) ollamaOptions(temperature float64) map[string]any {
+	opts := map[string]any{"temperature": temperature}
+	if c.numCtx > 0 {
+		opts["num_ctx"] = c.numCtx
+	}
+	if c.numPredict > 0 {
+		opts["num_predict"] = c.numPredict
+	}
+	return opts
 }
 
 // SignalRequest carries the triage inputs derived from the LLM analysis.

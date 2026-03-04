@@ -128,7 +128,7 @@ func (h *Handler) chat(c *fiber.Ctx) error {
 		reply string
 		err   error
 	)
-	if tc, ok := h.ai.(ToolChatter); ok {
+	if tc, ok := h.ai.(ToolChatter); ok && needsTools(req.Message) {
 		reply, err = tc.ChatWithTools(c.Context(), systemPrompt, turns, h.buildTools())
 	} else {
 		reply, err = h.ai.Chat(c.Context(), systemPrompt, turns)
@@ -204,7 +204,7 @@ func (h *Handler) chatStream(c *fiber.Ctx) error {
 		}
 
 		// Tool-calling path: resolve tools, then stream the final answer.
-		if canUseTools {
+		if canUseTools && needsTools(req.Message) {
 			reply, err := tc.ChatWithTools(ctx, systemPrompt, turns, h.buildTools())
 			if err != nil {
 				sendEvent(map[string]string{"error": err.Error()})

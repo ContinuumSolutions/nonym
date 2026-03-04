@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 )
 
 // Tool describes one callable function the LLM can invoke during a chat turn.
@@ -123,9 +124,20 @@ func (c *Client) ChatWithTools(ctx context.Context, systemPrompt string, turns [
 			ToolCalls: toolCalls,
 		})
 
-		// Execute each requested tool and append the result.
-		for _, tc := range toolCalls {
-			result := executeToolCall(ctx, index, tc)
+		// Execute all requested tools in parallel — DB queries are cheap, but
+		// the model may request several at once, so no reason to serialise.
+		results := make([]string, len(toolCalls))
+		var wg sync.WaitGroup
+		for i, tc := range toolCalls {
+			wg.Add(1)
+			go func(i int, tc ollamaToolCall) {
+				defer wg.Done()
+				results[i] = executeToolCall(ctx, index, tc)
+			}(i, tc)
+		}
+		wg.Wait()
+
+		for _, result := range results {
 			msgs = append(msgs, ollamaMessage{Role: "tool", Content: result})
 		}
 	}
@@ -139,15 +151,16 @@ func (c *Client) ChatWithTools(ctx context.Context, systemPrompt string, turns [
 // chatRound posts one request to Ollama and returns the response text and any
 // tool calls the model requested. wireTools may be nil to disable tool use.
 func (c *Client) chatRound(ctx context.Context, msgs []ollamaMessage, wireTools []map[string]any) (string, []ollamaToolCall, error) {
+	opts := c.ollamaOptions(0.2)
+	if _, set := opts["num_predict"]; !set {
+		opts["num_predict"] = 400
+	}
 	body := map[string]any{
 		"model":      c.model,
 		"messages":   msgs,
 		"stream":     false,
 		"keep_alive": -1,
-		"options": map[string]any{
-			"temperature": 0.2,
-			"num_predict": 800,
-		},
+		"options":    opts,
 	}
 	if len(wireTools) > 0 {
 		body["tools"] = wireTools
