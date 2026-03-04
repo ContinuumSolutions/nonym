@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -18,7 +19,7 @@ func (a *GmailAdapter) Pull(ctx context.Context, creds Credentials, since time.T
 	query := fmt.Sprintf("is:unread after:%d", since.Unix())
 	listURL := fmt.Sprintf(
 		"https://gmail.googleapis.com/gmail/v1/users/me/messages?q=%s&maxResults=25",
-		query,
+		url.QueryEscape(query),
 	)
 
 	listBody, err := authGet(ctx, listURL, creds.OAuthAccessToken)
