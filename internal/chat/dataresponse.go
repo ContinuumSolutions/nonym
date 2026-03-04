@@ -106,7 +106,8 @@ func (h *Handler) replyDecisions(ctx context.Context) (string, bool) {
 		return "", false // let LLM handle DB errors gracefully
 	}
 	if len(events) == 0 {
-gmail: list messages: HTTP 400 from https://gmail.googleapis.com/gmail/v1/users/me/messages?q=is:unread after:1772564227&maxResults=25		return "No decisions recorded yet. Connect your integrations and trigger a sync to start.", true
+		
+		return "No decisions recorded yet. Connect your integrations and trigger a sync to start.", true
 	}
 
 	limit := 10
