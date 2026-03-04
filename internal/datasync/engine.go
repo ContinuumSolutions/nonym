@@ -19,17 +19,20 @@ import (
 // It carries just enough information for the LLM (step 5) to classify
 // and score it before the brain (step 6) turns it into an Event.
 type RawSignal struct {
-	ServiceSlug string
-	Category    string            // "Calendar", "Communication", "Finance", "Health", "Billing"
-	Title       string
-	Body        string
-	Metadata    map[string]string // service-specific fields (sender, amount, channel, etc.)
-	OccurredAt  time.Time
+	ServiceSlug    string
+	ServicePurpose string            // what this service is and what it's used for (injected by engine)
+	Category       string            // "Calendar", "Communication", "Finance", "Health", "Billing"
+	Title          string
+	Body           string
+	Metadata       map[string]string // service-specific fields (sender, amount, channel, etc.)
+	OccurredAt     time.Time
 }
 
 // Credentials holds decrypted auth material passed to each adapter.
 type Credentials struct {
 	APIKey            string
+	APIEndpoint       string // regional API base URL, if stored (e.g. "https://mail.zoho.eu")
+	TokenURLOverride  string // regional token endpoint URL, if stored (e.g. Zoho EU/India)
 	OAuthAccessToken  string
 	OAuthRefreshToken string
 }
@@ -93,6 +96,8 @@ func (e *Engine) Run(ctx context.Context) ([]RawSignal, error) {
 
 		creds := Credentials{
 			APIKey:            svc.APIKey,
+			APIEndpoint:       svc.APIEndpoint,
+			TokenURLOverride:  svc.OAuthTokenURLOverride,
 			OAuthAccessToken:  svc.OAuthAccessToken,
 			OAuthRefreshToken: svc.OAuthRefreshToken,
 		}
@@ -126,6 +131,13 @@ func (e *Engine) Run(ctx context.Context) ([]RawSignal, error) {
 			e.lastError[svc.Slug] = err.Error()
 			e.mu.Unlock()
 			continue
+		}
+
+		// Stamp each signal with the service purpose so the LLM has full context.
+		if svc.Description != "" {
+			for i := range signals {
+				signals[i].ServicePurpose = svc.Description
+			}
 		}
 
 		e.mu.Lock()

@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -15,8 +17,14 @@ type ZohoMailAdapter struct{}
 func (a *ZohoMailAdapter) Slug() string { return "zoho-mail" }
 
 func (a *ZohoMailAdapter) Pull(ctx context.Context, creds Credentials, since time.Time) ([]RawSignal, error) {
+	// Resolve the regional Zoho Mail API base URL.
+	// Priority: explicit api_endpoint stored at OAuth callback time (new connections)
+	// → derived from token URL override (existing connections without re-auth)
+	// → global default.
+	apiBase := zohoMailAPIBase(creds)
+
 	// Step 1: resolve the user's primary Zoho account ID.
-	accountID, err := zohoAccountID(ctx, creds.OAuthAccessToken)
+	accountID, err := zohoAccountID(ctx, creds.OAuthAccessToken, apiBase)
 	if err != nil {
 		return nil, fmt.Errorf("zoho-mail: get account id: %w", err)
 	}
@@ -24,8 +32,8 @@ func (a *ZohoMailAdapter) Pull(ctx context.Context, creds Credentials, since tim
 	// Step 2: list unread messages (newest first, up to 25).
 	// Zoho uses `limit` (not `count`) and sortorder=true for descending.
 	url := fmt.Sprintf(
-		"https://mail.zoho.com/api/accounts/%s/messages/view?status=unread&limit=25&sortorder=true",
-		accountID,
+		"%s/api/accounts/%s/messages/view?status=unread&limit=25&sortorder=true",
+		apiBase, accountID,
 	)
 	body, err := authGet(ctx, url, creds.OAuthAccessToken)
 	if err != nil {
@@ -67,9 +75,29 @@ func (a *ZohoMailAdapter) Pull(ctx context.Context, creds Credentials, since tim
 	return signals, nil
 }
 
+// zohoMailAPIBase returns the correct regional Zoho Mail API base URL.
+// Priority:
+//  1. Explicit api_endpoint stored at OAuth callback time.
+//  2. Derived from the token URL override (for connections made before api_endpoint was stored).
+//  3. Global default "https://mail.zoho.com".
+func zohoMailAPIBase(creds Credentials) string {
+	if creds.APIEndpoint != "" {
+		return creds.APIEndpoint
+	}
+	if creds.TokenURLOverride != "" {
+		// e.g. "https://accounts.zoho.eu/oauth/v2/token" → "https://mail.zoho.eu"
+		if u, err := url.Parse(creds.TokenURLOverride); err == nil {
+			if mailHost := strings.Replace(u.Hostname(), "accounts.", "mail.", 1); mailHost != u.Hostname() {
+				return "https://" + mailHost
+			}
+		}
+	}
+	return "https://mail.zoho.com"
+}
+
 // zohoAccountID fetches the user's primary Zoho Mail account ID.
-func zohoAccountID(ctx context.Context, token string) (string, error) {
-	body, err := authGet(ctx, "https://mail.zoho.com/api/accounts", token)
+func zohoAccountID(ctx context.Context, token, apiBase string) (string, error) {
+	body, err := authGet(ctx, apiBase+"/api/accounts", token)
 	if err != nil {
 		return "", err
 	}

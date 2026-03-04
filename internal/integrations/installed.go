@@ -9,16 +9,17 @@ import (
 // ConnectedService holds a fully decrypted service row.
 // For internal use by the sync engine only — never returned by the HTTP API.
 type ConnectedService struct {
-	ID                   int
-	Slug                 string
-	Name                 string
-	Category             string
-	AuthMethod           AuthMethod
-	APIKey               string
-	APIEndpoint          string
-	OAuthAccessToken     string
-	OAuthRefreshToken    string
-	OAuthTokenExpiry     int64  // Unix timestamp; 0 means unknown/not set
+	ID                    int
+	Slug                  string
+	Name                  string
+	Category              string
+	Description           string // what this service is and what it's used for
+	AuthMethod            AuthMethod
+	APIKey                string
+	APIEndpoint           string
+	OAuthAccessToken      string
+	OAuthRefreshToken     string
+	OAuthTokenExpiry      int64  // Unix timestamp; 0 means unknown/not set
 	OAuthTokenURLOverride string // non-empty for regional providers (e.g. Zoho EU)
 }
 
@@ -29,7 +30,7 @@ type ConnectedService struct {
 // The caller must treat all returned values as secrets.
 func (s *Store) ListConnected() ([]ConnectedService, error) {
 	rows, err := s.db.Query(`
-		SELECT id, slug, name, category, auth_method,
+		SELECT id, slug, name, category, description, auth_method,
 		       api_key, api_endpoint,
 		       oauth_access_token, oauth_refresh_token, oauth_token_expiry,
 		       oauth_client_id, oauth_client_secret,
@@ -47,7 +48,7 @@ func (s *Store) ListConnected() ([]ConnectedService, error) {
 		var apiKeyEnc, accessEnc, refreshEnc, clientIDEnc, clientSecEnc string
 
 		if err := rows.Scan(
-			&svc.ID, &svc.Slug, &svc.Name, &svc.Category, &svc.AuthMethod,
+			&svc.ID, &svc.Slug, &svc.Name, &svc.Category, &svc.Description, &svc.AuthMethod,
 			&apiKeyEnc, &svc.APIEndpoint,
 			&accessEnc, &refreshEnc, &svc.OAuthTokenExpiry,
 			&clientIDEnc, &clientSecEnc,

@@ -185,6 +185,9 @@ func (c *Client) AnalyseBatch(ctx context.Context, signals []datasync.RawSignal)
 func buildUserMessage(signal datasync.RawSignal) string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "Service: %s\n", signal.ServiceSlug)
+	if signal.ServicePurpose != "" {
+		fmt.Fprintf(&sb, "Service Purpose: %s\n", signal.ServicePurpose)
+	}
 	fmt.Fprintf(&sb, "Category: %s\n", signal.Category)
 	fmt.Fprintf(&sb, "Title: %s\n", signal.Title)
 	if signal.Body != "" {

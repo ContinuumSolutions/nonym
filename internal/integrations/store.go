@@ -74,10 +74,10 @@ func (s *Store) Seed() error {
 		if err != nil {
 			return err
 		}
-		// Always update color so existing rows gain the field on upgrade.
+		// Always sync color and description so existing rows gain updates on upgrade.
 		_, err = s.db.Exec(
-			`UPDATE services SET color = ? WHERE slug = ? AND custom = 0`,
-			def.Color, def.Slug,
+			`UPDATE services SET color = ?, description = ? WHERE slug = ? AND custom = 0`,
+			def.Color, def.Description, def.Slug,
 		)
 		if err != nil {
 			return err
@@ -393,6 +393,16 @@ func (s *Store) GetOAuthCreds(id int) (clientID, clientSecret, accessToken, refr
 	}
 	refreshToken, err = decrypt(s.key, refEnc)
 	return
+}
+
+// SetAPIEndpoint stores a regional API base URL for OAuth services (e.g. "https://mail.zoho.eu").
+// Used when the OAuth callback reveals the user's regional datacenter.
+func (s *Store) SetAPIEndpoint(id int, endpoint string) error {
+	_, err := s.db.Exec(
+		`UPDATE services SET api_endpoint = ?, updated_at = ? WHERE id = ?`,
+		endpoint, time.Now().UTC().Unix(), id,
+	)
+	return err
 }
 
 // SetOAuthTokenURLOverride stores a regional token endpoint URL override.

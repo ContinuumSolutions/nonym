@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -383,6 +384,8 @@ func (h *Handler) oauthCallback(c *fiber.Ctx) error {
 	// Some providers (Zoho) return an accounts-server param that specifies the
 	// regional token endpoint. Use it to build the effective TokenURL so EU/India
 	// users hit the correct datacenter. Store it for future token refreshes too.
+	// Also derive and store the regional API base (accounts.zoho.X → mail.zoho.X)
+	// so the datasync adapter hits the correct mail endpoint.
 	effectiveDef := *def
 	if accountsServer := c.Query("accounts-server"); accountsServer != "" && def.TokenURL != "" {
 		parsed, parseErr := url.Parse(def.TokenURL)
@@ -391,6 +394,12 @@ func (h *Handler) oauthCallback(c *fiber.Ctx) error {
 			// Best-effort persist — don't block the flow on storage error.
 			if storeErr := h.store.SetOAuthTokenURLOverride(serviceID, effectiveDef.TokenURL); storeErr != nil {
 				log.Printf("integrations: store token url override for %s: %v", slug, storeErr)
+			}
+		}
+		// Derive regional mail API base: https://accounts.zoho.eu → https://mail.zoho.eu
+		if mailBase := strings.Replace(accountsServer, "//accounts.", "//mail.", 1); mailBase != accountsServer {
+			if storeErr := h.store.SetAPIEndpoint(serviceID, mailBase); storeErr != nil {
+				log.Printf("integrations: store api endpoint for %s: %v", slug, storeErr)
 			}
 		}
 	}
