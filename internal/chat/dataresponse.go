@@ -106,7 +106,6 @@ func (h *Handler) replyDecisions(ctx context.Context) (string, bool) {
 		return "", false // let LLM handle DB errors gracefully
 	}
 	if len(events) == 0 {
-		
 		return "No decisions recorded yet. Connect your integrations and trigger a sync to start.", true
 	}
 
