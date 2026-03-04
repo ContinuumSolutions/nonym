@@ -11,6 +11,7 @@ COPY . .
 
 # modernc.org/sqlite is pure Go — CGO is not needed
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /ek1 ./cmd/ek1
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /unghost ./scripts/unghost
 
 
 # ── Stage 2: Runtime ─────────────────────────────────────────────────────────
@@ -25,6 +26,7 @@ RUN apk add --no-cache ca-certificates tzdata
 RUN mkdir /data
 
 COPY --from=builder /ek1 /usr/local/bin/ek1
+COPY --from=builder /unghost /usr/local/bin/unghost
 
 WORKDIR /data
 EXPOSE 3000
