@@ -3,13 +3,20 @@ package chat
 import "strings"
 
 // dataKeywords are lower-cased substrings that signal the user is asking about
-// live kernel data. When none match, we skip the tool-calling round trip and
-// rely solely on the pre-loaded system prompt data briefing.
+// live kernel data. When any match, we pre-fetch and inject fresh tool results
+// directly into the system prompt before calling the LLM.
 var dataKeywords = []string{
-	// gains / savings
+	// financial / spending
+	"spend", "spending", "spent", "expense", "expenses",
+	"transaction", "transactions", "purchase", "purchases",
+	"cost", "costs", "bill", "bills", "payment", "payments",
+	"charge", "charges", "invoice", "invoices",
+	"balance", "bank", "bank account",
 	"how much", "how many", "total", "sum",
-	"time saved", "time have you", "hours saved",
 	"money", "earned", "saved me", "made me",
+	"income", "revenue", "profit", "loss",
+	// time savings
+	"time saved", "time have you", "hours saved",
 	// events / activity
 	"events", "recent", "activity", "decisions",
 	"accepted", "declined", "automated", "ghosted",
@@ -27,14 +34,13 @@ var dataKeywords = []string{
 	"status", "stats", "statistics", "numbers", "data",
 	"what have you done", "what did you do",
 	"show me", "give me", "tell me my",
+	"this week", "this month", "today", "yesterday",
+	"last week", "last month",
 }
 
-// needsTools returns true when the message appears to be asking for live
-// kernel data that may not be fully covered by the static system prompt.
-// False positives are fine — they just add one extra round trip.
-// False negatives skip tool calling for data questions, falling back to the
-// system prompt which already contains recent aggregates.
-func needsTools(message string) bool {
+// needsLiveData returns true when the message appears to be asking about
+// live kernel data. Used to decide whether to pre-fetch and inject tool results.
+func needsLiveData(message string) bool {
 	msg := strings.ToLower(message)
 	for _, kw := range dataKeywords {
 		if strings.Contains(msg, kw) {

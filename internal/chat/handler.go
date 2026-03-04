@@ -128,7 +128,10 @@ func (h *Handler) chat(c *fiber.Ctx) error {
 		reply string
 		err   error
 	)
-	if tc, ok := h.ai.(ToolChatter); ok && needsTools(req.Message) {
+	if needsLiveData(req.Message) {
+		systemPrompt += h.buildLiveContext(c.Context())
+	}
+	if tc, ok := h.ai.(ToolChatter); ok && needsLiveData(req.Message) {
 		reply, err = tc.ChatWithTools(c.Context(), systemPrompt, turns, h.buildTools())
 	} else {
 		reply, err = h.ai.Chat(c.Context(), systemPrompt, turns)
@@ -183,9 +186,13 @@ func (h *Handler) chatStream(c *fiber.Ctx) error {
 	}
 	turns = append(turns, ai.ChatTurn{Role: "user", Content: req.Message})
 
-	// When tool calling is available, resolve any tool calls first (non-streaming),
-	// then stream only the final reply. This ensures tools are always executed even
-	// on the streaming endpoint.
+	// Pre-inject live DB context when the message is data-related.
+	// This guarantees fresh data is in-context regardless of whether the model
+	// supports tool calling.
+	if needsLiveData(req.Message) {
+		systemPrompt += h.buildLiveContext(c.Context())
+	}
+
 	tc, canUseTools := h.ai.(ToolChatter)
 
 	c.Set("Content-Type", "text/event-stream")
@@ -204,7 +211,7 @@ func (h *Handler) chatStream(c *fiber.Ctx) error {
 		}
 
 		// Tool-calling path: resolve tools, then stream the final answer.
-		if canUseTools && needsTools(req.Message) {
+		if canUseTools && needsLiveData(req.Message) {
 			reply, err := tc.ChatWithTools(ctx, systemPrompt, turns, h.buildTools())
 			if err != nil {
 				sendEvent(map[string]string{"error": err.Error()})

@@ -3,12 +3,52 @@ package chat
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egokernel/ek1/internal/activities"
 	"github.com/egokernel/ek1/internal/ai"
 )
+
+// buildLiveContext runs all tools concurrently and returns a formatted string
+// that is appended to the system prompt. This guarantees fresh data is always
+// in-context without relying on the model to call tools itself.
+func (h *Handler) buildLiveContext(ctx context.Context) string {
+	tools := h.buildTools()
+
+	type result struct {
+		name string
+		data string
+	}
+	results := make([]result, len(tools))
+	var wg sync.WaitGroup
+	for i, t := range tools {
+		wg.Add(1)
+		go func(i int, t ai.Tool) {
+			defer wg.Done()
+			data, err := t.Execute(ctx, map[string]any{"kind": "all"})
+			if err != nil {
+				data = `{"error":"` + err.Error() + `"}`
+			} else if data == "" || data == "null" || data == "[]" {
+				data = `{"message":"no data recorded yet"}`
+			}
+			results[i] = result{name: t.Name, data: data}
+		}(i, t)
+	}
+	wg.Wait()
+
+	var sb strings.Builder
+	sb.WriteString("\n\n━━━ LIVE QUERY RESULTS — answer data questions from these ━━━\n")
+	sb.WriteString("These were fetched RIGHT NOW from the database. They override the briefing above.\n")
+	for _, r := range results {
+		fmt.Fprintf(&sb, "\n[%s]\n%s\n", r.name, r.data)
+	}
+	sb.WriteString("\n━━━ END LIVE QUERY RESULTS ━━━\n")
+	sb.WriteString("If a section shows no data, tell the user to connect the relevant integration and trigger a sync.\n")
+	return sb.String()
+}
 
 // buildTools returns Ollama tool definitions wired to the handler's live stores.
 // Each tool's Execute func queries the DB directly and returns a JSON string.
