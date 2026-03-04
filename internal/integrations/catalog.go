@@ -114,6 +114,7 @@ var registry = []ServiceDef{
 		TokenURL:    "https://accounts.zoho.com/oauth/v2/token",
 		RevokeURL:   "https://accounts.zoho.com/oauth/v2/token/revoke",
 		Scopes:      []string{"ZohoMail.accounts.READ", "ZohoMail.messages.READ"},
+		ExtraParams: map[string]string{"access_type": "offline"},
 	},
 	{
 		Slug:        "telegram",

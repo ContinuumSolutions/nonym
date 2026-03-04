@@ -53,6 +53,18 @@ func (a *NotionAdapter) Pull(ctx context.Context, creds Credentials, since time.
 		return nil, fmt.Errorf("notion: read response: %w", err)
 	}
 
+	if resp.StatusCode >= 400 {
+		// Notion returns {"object":"error","status":N,"code":"...","message":"..."}
+		var apiErr struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		}
+		if jsonErr := json.Unmarshal(data, &apiErr); jsonErr == nil && apiErr.Message != "" {
+			return nil, fmt.Errorf("notion: HTTP %d %s: %s", resp.StatusCode, apiErr.Code, apiErr.Message)
+		}
+		return nil, fmt.Errorf("notion: HTTP %d", resp.StatusCode)
+	}
+
 	var result notionSearchResult
 	if err := json.Unmarshal(data, &result); err != nil {
 		return nil, fmt.Errorf("notion: decode response: %w", err)
