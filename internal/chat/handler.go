@@ -124,6 +124,12 @@ func (h *Handler) chat(c *fiber.Ctx) error {
 	// always earlier than the kernel reply, even when both land in the same second.
 	_ = h.history.Append("user", req.Message)
 
+	// Bypass LLM entirely for structured data queries — local models hallucinate.
+	if directReply, handled := h.directDataResponse(c.Context(), req.Message); handled {
+		_ = h.history.Append("kernel", directReply)
+		return c.JSON(Response{Reply: directReply, Timestamp: time.Now().UTC()})
+	}
+
 	var (
 		reply string
 		err   error
@@ -193,6 +199,25 @@ func (h *Handler) chatStream(c *fiber.Ctx) error {
 		turns = append(turns, ai.ChatTurn{Role: role, Content: m.Content})
 	}
 	turns = append(turns, ai.ChatTurn{Role: "user", Content: req.Message})
+
+	// Bypass LLM entirely for structured data queries — local models hallucinate.
+	if directReply, handled := h.directDataResponse(c.Context(), req.Message); handled {
+		_ = h.history.Append("user", req.Message)
+		c.Set("Content-Type", "text/event-stream")
+		c.Set("Cache-Control", "no-cache")
+		c.Set("Connection", "keep-alive")
+		ctx := c.Context()
+		ctx.SetBodyStreamWriter(fasthttp.StreamWriter(func(w *bufio.Writer) {
+			data, _ := json.Marshal(map[string]string{"token": directReply})
+			fmt.Fprintf(w, "data: %s\n\n", data)
+			w.Flush()
+			_ = h.history.Append("kernel", directReply)
+			done, _ := json.Marshal(map[string]any{"done": true, "timestamp": time.Now().UTC()})
+			fmt.Fprintf(w, "data: %s\n\n", done)
+			w.Flush()
+		}))
+		return nil
+	}
 
 	// Pre-inject live DB context when the message is data-related.
 	noData := false
