@@ -10,44 +10,107 @@ import (
 
 	"github.com/egokernel/ek1/internal/activities"
 	"github.com/egokernel/ek1/internal/ai"
+	"github.com/egokernel/ek1/internal/harvest"
+	"github.com/egokernel/ek1/internal/notifications"
 )
 
-// buildLiveContext runs all tools concurrently and returns a formatted string
-// that is appended to the system prompt. This guarantees fresh data is always
-// in-context without relying on the model to call tools itself.
-func (h *Handler) buildLiveContext(ctx context.Context) string {
-	tools := h.buildTools()
-
-	type result struct {
-		name string
-		data string
-	}
-	results := make([]result, len(tools))
+// buildLiveContext queries the stores directly and returns a plain-text data
+// block to append to the system prompt, plus a boolean that is true only when
+// at least one section contains real (non-zero) data.
+//
+// Plain text is used deliberately — local LLMs ignore JSON "no data" markers
+// and hallucinate numbers. Explicit English assertions are much harder to override.
+func (h *Handler) buildLiveContext(ctx context.Context) (section string, hasData bool) {
 	var wg sync.WaitGroup
-	for i, t := range tools {
-		wg.Add(1)
-		go func(i int, t ai.Tool) {
-			defer wg.Done()
-			data, err := t.Execute(ctx, map[string]any{"kind": "all"})
-			if err != nil {
-				data = `{"error":"` + err.Error() + `"}`
-			} else if data == "" || data == "null" || data == "[]" {
-				data = `{"message":"no data recorded yet"}`
-			}
-			results[i] = result{name: t.Name, data: data}
-		}(i, t)
-	}
+	var (
+		gains         []activities.GainSummary
+		events        []activities.Event
+		notifs        []notifications.Notification
+		harvestResult *harvest.HarvestResult
+	)
+
+	wg.Add(4)
+	go func() { defer wg.Done(); gains, _ = h.events.SumGains(time.Time{}) }()
+	go func() { defer wg.Done(); events, _ = h.events.List() }()
+	go func() { defer wg.Done(); notifs, _ = h.notifs.ListUnread() }()
+	go func() { defer wg.Done(); harvestResult, _ = h.harvest.Latest() }()
 	wg.Wait()
 
 	var sb strings.Builder
-	sb.WriteString("\n\n━━━ LIVE QUERY RESULTS — answer data questions from these ━━━\n")
-	sb.WriteString("These were fetched RIGHT NOW from the database. They override the briefing above.\n")
-	for _, r := range results {
-		fmt.Fprintf(&sb, "\n[%s]\n%s\n", r.name, r.data)
+	sb.WriteString("\n\n⚡ LIVE DATA SNAPSHOT — queried right now from the database\n")
+	sb.WriteString("════════════════════════════════════════════════════════\n")
+	sb.WriteString("USE ONLY THE NUMBERS BELOW. DO NOT ADD, INVENT, OR RECALL ANY OTHER FIGURES.\n\n")
+
+	// ── Gains ─────────────────────────────────────────────────────────────────
+	sb.WriteString("GAINS (all time across all kernel decisions):\n")
+	gainsByKind := map[activities.GainKind]*activities.GainSummary{}
+	for i := range gains {
+		gainsByKind[gains[i].Kind] = &gains[i]
 	}
-	sb.WriteString("\n━━━ END LIVE QUERY RESULTS ━━━\n")
-	sb.WriteString("If a section shows no data, tell the user to connect the relevant integration and trigger a sync.\n")
-	return sb.String()
+	if m := gainsByKind[activities.Money]; m != nil && m.Count > 0 {
+		hasData = true
+		fmt.Fprintf(&sb, "  Money: %s%.2f across %d events\n", m.Symbol, m.TotalValue, m.Count)
+	} else {
+		sb.WriteString("  Money: NO DATA — Plaid or Stripe not connected or no sync run yet\n")
+	}
+	if t := gainsByKind[activities.Time]; t != nil && t.Count > 0 {
+		hasData = true
+		fmt.Fprintf(&sb, "  Time:  %.2f%s across %d events\n", t.TotalValue, t.Symbol, t.Count)
+	} else {
+		sb.WriteString("  Time:  NO DATA — no events with time gains yet\n")
+	}
+
+	// ── Recent events ─────────────────────────────────────────────────────────
+	sb.WriteString("\nRECENT DECISIONS (last 10):\n")
+	shown := 0
+	for _, e := range events {
+		if shown >= 10 {
+			break
+		}
+		hasData = true
+		gainStr := ""
+		if e.Gain.Value != 0 {
+			gainStr = fmt.Sprintf(" [gain: %s%.2f]", e.Gain.Symbol, e.Gain.Value)
+		}
+		fmt.Fprintf(&sb, "  %s — %s — %s%s\n",
+			e.CreatedAt.Format("Jan 2"), eventTypeName(e.EventType), e.Narrative, gainStr)
+		shown++
+	}
+	if shown == 0 {
+		sb.WriteString("  NONE — brain pipeline has not processed any signals yet\n")
+	}
+
+	// ── Notifications ─────────────────────────────────────────────────────────
+	if len(notifs) > 0 {
+		hasData = true
+		fmt.Fprintf(&sb, "\nUNREAD NOTIFICATIONS (%d):\n", len(notifs))
+		for _, n := range notifs {
+			fmt.Fprintf(&sb, "  [%s] %s — %s\n", n.Type, n.Title, n.Body)
+		}
+	} else {
+		sb.WriteString("\nUNREAD NOTIFICATIONS: none\n")
+	}
+
+	// ── Harvest ───────────────────────────────────────────────────────────────
+	if harvestResult != nil && harvestResult.TotalValue > 0 {
+		hasData = true
+		fmt.Fprintf(&sb, "\nSOCIAL DEBT SCAN: $%.0f unreciprocated across %d contacts\n",
+			harvestResult.TotalValue, harvestResult.ContactsFound)
+	} else {
+		sb.WriteString("\nSOCIAL DEBT SCAN: NO DATA — run a harvest scan first\n")
+	}
+
+	sb.WriteString("\n════════════════════════════════════════════════════════\n")
+	if !hasData {
+		sb.WriteString("⚠️  ALL SECTIONS SHOW NO DATA.\n")
+		sb.WriteString("You MUST respond with ONLY this: \"No data yet — connect your integrations at Connectors and trigger a sync.\"\n")
+		sb.WriteString("Do NOT mention any dollar amounts, hours, or percentages.\n")
+	} else {
+		sb.WriteString("Answer using ONLY the figures above. Any number not listed above is FORBIDDEN.\n")
+	}
+	sb.WriteString("END LIVE DATA SNAPSHOT\n")
+
+	return sb.String(), hasData
 }
 
 // buildTools returns Ollama tool definitions wired to the handler's live stores.

@@ -129,7 +129,15 @@ func (h *Handler) chat(c *fiber.Ctx) error {
 		err   error
 	)
 	if needsLiveData(req.Message) {
-		systemPrompt += h.buildLiveContext(c.Context())
+		liveCtx, hasData := h.buildLiveContext(c.Context())
+		if !hasData {
+			// Short-circuit: local LLMs hallucinate numbers when data is absent.
+			// Return a direct "no data" reply without calling the model.
+			reply = "No data yet — connect your integrations at Connectors and trigger a sync first."
+			_ = h.history.Append("kernel", reply)
+			return c.JSON(Response{Reply: reply, Timestamp: time.Now().UTC()})
+		}
+		systemPrompt += liveCtx
 	}
 	if tc, ok := h.ai.(ToolChatter); ok && needsLiveData(req.Message) {
 		reply, err = tc.ChatWithTools(c.Context(), systemPrompt, turns, h.buildTools())
@@ -187,10 +195,14 @@ func (h *Handler) chatStream(c *fiber.Ctx) error {
 	turns = append(turns, ai.ChatTurn{Role: "user", Content: req.Message})
 
 	// Pre-inject live DB context when the message is data-related.
-	// This guarantees fresh data is in-context regardless of whether the model
-	// supports tool calling.
+	noData := false
 	if needsLiveData(req.Message) {
-		systemPrompt += h.buildLiveContext(c.Context())
+		liveCtx, hasData := h.buildLiveContext(c.Context())
+		if !hasData {
+			noData = true
+		} else {
+			systemPrompt += liveCtx
+		}
 	}
 
 	tc, canUseTools := h.ai.(ToolChatter)
@@ -208,6 +220,15 @@ func (h *Handler) chatStream(c *fiber.Ctx) error {
 			data, _ := json.Marshal(v)
 			fmt.Fprintf(w, "data: %s\n\n", data)
 			w.Flush()
+		}
+
+		// Short-circuit: no data in DB — skip the model entirely.
+		if noData {
+			msg := "No data yet — connect your integrations at Connectors and trigger a sync first."
+			sendEvent(map[string]string{"token": msg})
+			_ = h.history.Append("kernel", msg)
+			sendEvent(map[string]any{"done": true, "timestamp": time.Now().UTC()})
+			return
 		}
 
 		// Tool-calling path: resolve tools, then stream the final answer.
