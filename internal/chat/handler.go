@@ -21,15 +21,21 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
+// Chatter abstracts the LLM so the handler can be tested without a real Ollama server.
+type Chatter interface {
+	Chat(ctx context.Context, systemPrompt string, turns []ai.ChatTurn) (string, error)
+}
+
+// ToolChatter is implemented by ai.Client; if h.ai satisfies it, the handler
+// uses the agentic tool-calling loop instead of a single Chat call.
+type ToolChatter interface {
+	ChatWithTools(ctx context.Context, systemPrompt string, turns []ai.ChatTurn, tools []ai.Tool) (string, error)
+}
+
 // Streamer is satisfied by *ai.Client when streaming is available.
 // The handler falls back to regular Chat if the ai dependency doesn't implement it.
 type Streamer interface {
 	ChatStream(ctx context.Context, systemPrompt string, turns []ai.ChatTurn, fn func(string)) error
-}
-
-// Chatter abstracts the LLM so the handler can be tested without a real Ollama server.
-type Chatter interface {
-	Chat(ctx context.Context, systemPrompt string, turns []ai.ChatTurn) (string, error)
 }
 
 // Handler serves POST /chat and GET /chat/history.
@@ -118,7 +124,15 @@ func (h *Handler) chat(c *fiber.Ctx) error {
 	// always earlier than the kernel reply, even when both land in the same second.
 	_ = h.history.Append("user", req.Message)
 
-	reply, err := h.ai.Chat(c.Context(), systemPrompt, turns)
+	var (
+		reply string
+		err   error
+	)
+	if tc, ok := h.ai.(ToolChatter); ok {
+		reply, err = tc.ChatWithTools(c.Context(), systemPrompt, turns, h.buildTools())
+	} else {
+		reply, err = h.ai.Chat(c.Context(), systemPrompt, turns)
+	}
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -151,8 +165,8 @@ func (h *Handler) chatStream(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "message is required"})
 	}
 
-	streamer, ok := h.ai.(Streamer)
-	if !ok {
+	streamer, canStream := h.ai.(Streamer)
+	if !canStream {
 		// ai doesn't support streaming — fall back transparently.
 		return h.chat(c)
 	}
@@ -169,25 +183,42 @@ func (h *Handler) chatStream(c *fiber.Ctx) error {
 	}
 	turns = append(turns, ai.ChatTurn{Role: "user", Content: req.Message})
 
+	// When tool calling is available, resolve any tool calls first (non-streaming),
+	// then stream only the final reply. This ensures tools are always executed even
+	// on the streaming endpoint.
+	tc, canUseTools := h.ai.(ToolChatter)
+
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")
 	c.Set("Connection", "keep-alive")
 
-	// Persist the user message now, before streaming begins, so its timestamp
-	// is always earlier than the kernel reply.
 	_ = h.history.Append("user", req.Message)
 
 	ctx := c.Context()
 
 	ctx.SetBodyStreamWriter(fasthttp.StreamWriter(func(w *bufio.Writer) {
-		var fullReply strings.Builder
-
 		sendEvent := func(v any) {
 			data, _ := json.Marshal(v)
 			fmt.Fprintf(w, "data: %s\n\n", data)
 			w.Flush()
 		}
 
+		// Tool-calling path: resolve tools, then stream the final answer.
+		if canUseTools {
+			reply, err := tc.ChatWithTools(ctx, systemPrompt, turns, h.buildTools())
+			if err != nil {
+				sendEvent(map[string]string{"error": err.Error()})
+				return
+			}
+			// Emit the full reply as a single token so the frontend receives it.
+			sendEvent(map[string]string{"token": reply})
+			_ = h.history.Append("kernel", reply)
+			sendEvent(map[string]any{"done": true, "timestamp": time.Now().UTC()})
+			return
+		}
+
+		// Plain streaming path (no tool calling).
+		var fullReply strings.Builder
 		err := streamer.ChatStream(ctx, systemPrompt, turns, func(token string) {
 			fullReply.WriteString(token)
 			sendEvent(map[string]string{"token": token})
@@ -245,6 +276,7 @@ func (h *Handler) buildSystemPrompt() string {
 		notifs  []notifications.Notification
 		ci      *biometrics.CheckIn
 		harvest *harvest.HarvestResult
+		gains   []activities.GainSummary
 	)
 	prof, _ = h.prof.Get()
 	if all, err := h.events.List(); err == nil {
@@ -257,6 +289,7 @@ func (h *Handler) buildSystemPrompt() string {
 	notifs, _ = h.notifs.ListUnread()
 	ci, _ = h.bio.Get()
 	harvest, _ = h.harvest.Latest()
+	gains, _ = h.events.SumGains(time.Time{}) // all-time aggregates
 
 	snap := h.brainSvc.Kernel().Snapshot()
 	score := h.ledger.Score(h.uid)
@@ -334,6 +367,21 @@ Saying "I can't provide advice on relationships" or similar is a hard failure.
 		}
 	} else {
 		sb.WriteString("## HEALTH CHECK-IN\nEMPTY — no check-in recorded yet.\n")
+	}
+	sb.WriteString("\n")
+
+	// ── ALL-TIME GAINS ────────────────────────────────────────────────────────
+	if len(gains) > 0 {
+		sb.WriteString("## ALL-TIME GAINS (use these to answer 'how much time/money saved?')\n")
+		for _, g := range gains {
+			kind := "money"
+			if g.Kind == activities.Time {
+				kind = "time"
+			}
+			fmt.Fprintf(&sb, "- %s: %s%.2f (%d events)\n", kind, g.Symbol, g.TotalValue, g.Count)
+		}
+	} else {
+		sb.WriteString("## ALL-TIME GAINS (0 events) — EMPTY\nNo processed events with gain data yet.\n")
 	}
 	sb.WriteString("\n")
 

@@ -176,6 +176,46 @@ func (s *Store) UpdateDecision(id int, d Decision) (*Event, error) {
 	return s.Get(id)
 }
 
+// GainSummary is the aggregate result for one GainKind (Money or Time).
+type GainSummary struct {
+	Kind       GainKind `json:"kind"`
+	TotalValue float64  `json:"total_value"` // positive gains minus negative gains
+	Count      int      `json:"count"`
+	Symbol     string   `json:"symbol"` // e.g. "$" or "h"
+}
+
+// SumGains aggregates gain_value per gain_kind since the given time.
+// Negative gain_type events subtract from the total.
+// Pass zero time to aggregate all-time.
+func (s *Store) SumGains(since time.Time) ([]GainSummary, error) {
+	since_unix := since.Unix()
+	if since.IsZero() {
+		since_unix = 0
+	}
+	rows, err := s.db.Query(`
+		SELECT gain_kind,
+		       SUM(CASE gain_type WHEN 0 THEN gain_value ELSE -gain_value END),
+		       COUNT(*),
+		       MAX(gain_symbol)
+		FROM events
+		WHERE gain_value != 0 AND created_at >= ?
+		GROUP BY gain_kind
+	`, since_unix)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []GainSummary
+	for rows.Next() {
+		var g GainSummary
+		if err := rows.Scan(&g.Kind, &g.TotalValue, &g.Count, &g.Symbol); err != nil {
+			return nil, err
+		}
+		out = append(out, g)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) ToggleRead(id int) (*Event, error) {
 	now := time.Now().UTC().Unix()
 	res, err := s.db.Exec(`
