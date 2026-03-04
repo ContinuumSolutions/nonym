@@ -189,7 +189,8 @@ func main() {
 
 	// ── Pipeline ─────────────────────────────────────────────────────────────
 	aiClient := newAIClient()
-	syncEngine := datasync.NewEngine(servicesStore, datasync.DefaultAdapters())
+	allAdapters, waAdapter := datasync.NewDefaultAdapters(os.Getenv("WHATSAPP_VERIFY_TOKEN"))
+	syncEngine := datasync.NewEngine(servicesStore, allAdapters)
 	pipeline := brain.NewPipeline(brainSvc, aiClient, eventsStore, checkInStore, execEngine)
 
 	// ── Scheduler ────────────────────────────────────────────────────────────
@@ -228,6 +229,7 @@ func main() {
 
 	app.Get("/swagger/*", fiberswagger.WrapHandler)
 
+	waAdapter.RegisterRoutes(app)
 	profile.NewHandler(profileStore).RegisterRoutes(app)
 	auth.NewHandler(authStore, profileStore).RegisterRoutes(app)
 	brain.NewHandler(brainSvc, eventsStore).RegisterRoutes(app)

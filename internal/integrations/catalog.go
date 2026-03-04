@@ -117,6 +117,15 @@ var registry = []ServiceDef{
 		ExtraParams: map[string]string{"access_type": "offline"},
 	},
 	{
+		Slug:        "whatsapp",
+		Name:        "WhatsApp",
+		Category:    CategoryCommunication,
+		Icon:        "whatsapp",
+		Color:       "#25D366",
+		Description: "WhatsApp Business messages via the Meta Cloud API. Signals are inbound text messages from contacts — personal conversations, business inquiries, support requests, and follow-ups. Requires a Meta Business phone number and permanent access token. Messages are received via webhook.",
+		AuthMethod:  APIKeyAuth,
+	},
+	{
 		Slug:        "telegram",
 		Name:        "Telegram",
 		Category:    CategoryCommunication,
