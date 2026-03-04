@@ -9,6 +9,7 @@ package main
 import (
 	"database/sql"
 	"log"
+	"net/http"
 	"os"
 	"strconv"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	sentryfiber "github.com/getsentry/sentry-go/fiber"
 	"github.com/joho/godotenv"
+	"golang.org/x/crypto/acme/autocert"
 
 	_ "github.com/egokernel/ek1/docs"
 	"github.com/egokernel/ek1/internal/activities"
@@ -211,9 +213,15 @@ func main() {
 	ledger.NewHandler(sqliteLedger, "ek1-kernel").RegisterRoutes(app)
 	biometrics.NewHandler(checkInStore).RegisterRoutes(app)
 	activities.NewHandler(eventsStore).RegisterRoutes(app)
+	domain := os.Getenv("DOMAIN")
+
 	apiBaseURL := os.Getenv("API_BASE_URL")
 	if apiBaseURL == "" {
-		apiBaseURL = "http://localhost:3000"
+		if domain != "" {
+			apiBaseURL = "https://" + domain
+		} else {
+			apiBaseURL = "http://localhost:3000"
+		}
 	}
 	frontendOrigin := os.Getenv("FRONTEND_ORIGIN")
 	if frontendOrigin == "" {
@@ -226,5 +234,33 @@ func main() {
 	execution.NewHandler(execEngine, execQueueStore, eventsStore).RegisterRoutes(app)
 	chat.NewHandler(aiClient, brainSvc, profileStore, checkInStore, eventsStore, sqliteLedger, notifsStore, harvestStore, sched, chatHistoryStore, "ek1-kernel").RegisterRoutes(app)
 
-	log.Fatal(app.Listen(":3000"))
+	if domain != "" {
+		cacheDir := os.Getenv("CERT_CACHE_DIR")
+		if cacheDir == "" {
+			cacheDir = "./certs"
+		}
+
+		m := &autocert.Manager{
+			Prompt:     autocert.AcceptTOS,
+			HostPolicy: autocert.HostWhitelist(domain),
+			Cache:      autocert.DirCache(cacheDir),
+		}
+
+		// Port 80: serve ACME HTTP-01 challenges and redirect everything else to HTTPS.
+		go func() {
+			redirect := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, "https://"+r.Host+r.URL.RequestURI(), http.StatusMovedPermanently)
+			})
+			srv := &http.Server{Addr: ":80", Handler: m.HTTPHandler(redirect)}
+			log.Println("HTTP listening on :80 (ACME challenges + HTTPS redirect)")
+			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Printf("HTTP server error: %v", err)
+			}
+		}()
+
+		log.Printf("HTTPS listening on :443 for %s", domain)
+		log.Fatal(app.Listener(m.Listener()))
+	} else {
+		log.Fatal(app.Listen(":3000"))
+	}
 }
