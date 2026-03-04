@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/getsentry/sentry-go"
+	sentryfiber "github.com/getsentry/sentry-go/fiber"
 	"github.com/joho/godotenv"
 
 	_ "github.com/egokernel/ek1/docs"
@@ -62,6 +64,18 @@ func syncInterval() time.Duration {
 func main() {
 	if err := godotenv.Load(".env"); err != nil {
 		log.Println("no .env file found, falling back to environment")
+	}
+
+	if dsn := os.Getenv("SENTRY_DSN"); dsn != "" {
+		if err := sentry.Init(sentry.ClientOptions{
+			Dsn:              dsn,
+			TracesSampleRate: 1.0,
+		}); err != nil {
+			log.Printf("sentry init failed: %v", err)
+		} else {
+			log.Println("sentry enabled")
+			defer sentry.Flush(2 * time.Second)
+		}
 	}
 
 	db, err := initDB()
@@ -166,6 +180,9 @@ func main() {
 	app := fiber.New(fiber.Config{AppName: "EK-1"})
 	app.Use(logger.New())
 	app.Use(recover.New())
+	if os.Getenv("SENTRY_DSN") != "" {
+		app.Use(sentryfiber.New(sentryfiber.Options{Repanic: true}))
+	}
 
 	// allowedOrigins := os.Getenv("CORS_ORIGINS")
 	// if allowedOrigins == "" {
