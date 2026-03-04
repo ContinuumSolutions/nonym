@@ -10,6 +10,7 @@ import (
 	"github.com/egokernel/ek1/internal/ai"
 	"github.com/egokernel/ek1/internal/biometrics"
 	"github.com/egokernel/ek1/internal/datasync"
+	"github.com/egokernel/ek1/internal/execution"
 )
 
 const shieldNote = "Note: kernel operating in reduced-load mode due to elevated stress."
@@ -36,11 +37,13 @@ type Pipeline struct {
 	ai         Analyser
 	events     *activities.Store
 	biometrics *biometrics.Store
+	exec       *execution.Engine // Stage 2: execution engine (nil = shadow mode)
 }
 
-// NewPipeline wires the AI client, brain service, activities store, and biometrics store.
-func NewPipeline(svc *Service, aiClient Analyser, events *activities.Store, bio *biometrics.Store) *Pipeline {
-	return &Pipeline{svc: svc, ai: aiClient, events: events, biometrics: bio}
+// NewPipeline wires the AI client, brain service, activities store, biometrics store,
+// and optional execution engine (nil disables Stage 2 actions).
+func NewPipeline(svc *Service, aiClient Analyser, events *activities.Store, bio *biometrics.Store, exec *execution.Engine) *Pipeline {
+	return &Pipeline{svc: svc, ai: aiClient, events: events, biometrics: bio, exec: exec}
 }
 
 // Run processes a batch of raw signals end-to-end:
@@ -146,13 +149,45 @@ func (p *Pipeline) Run(ctx context.Context, signals []datasync.RawSignal) (Pipel
 			analysis.DecideUtility = eval.Utility
 			analysis.DecideThreshold = vals.UtilityThreshold
 			if eval.Execute {
-				decision = activities.Automated
 				narrative = fmt.Sprintf("%s | %s", as.Narrative, eval.Reason)
 				analysis.TriageGate = "accepted"
 				p.svc.ledger.LogSuccess(p.svc.uid, int64(eval.Utility))
 				result.Accepted++
 				log.Printf("brain/pipeline: [%s] %q → ACCEPT utility=%.2f roi=%.2f time=%.2fh",
 					as.Signal.ServiceSlug, as.Signal.Title, eval.Utility, req.EstimatedROI, req.TimeCommitment)
+
+				// Stage 2: attempt real execution via the execution engine.
+				if p.exec != nil {
+					action := execution.ClassifyAction(as.Signal, as)
+					if action.Type != execution.ActionNone {
+						if shielded {
+							narrative = fmt.Sprintf("[SHIELDED] %s | %s", shieldNote, narrative)
+						}
+						event := activities.Event{
+							EventType:     as.EventType,
+							Decision:      activities.Pending,
+							Importance:    as.Importance,
+							Narrative:     narrative,
+							Analysis:      analysis,
+							Gain:          as.Gain,
+							SourceService: as.Signal.ServiceSlug,
+						}
+						created, createErr := p.events.Create(event)
+						if createErr != nil {
+							log.Printf("brain/pipeline: write event for signal[%d]: %v", i, createErr)
+							continue
+						}
+						queued, execErr := p.exec.Process(ctx, action, created.ID)
+						if execErr != nil {
+							log.Printf("brain/pipeline: execution error for signal[%d]: %v", i, execErr)
+						} else if !queued {
+							p.events.UpdateDecision(created.ID, activities.Automated) //nolint:errcheck
+						}
+						// Event already written — skip the normal Create below.
+						continue
+					}
+				}
+				decision = activities.Automated
 			} else {
 				decision = activities.Declined
 				narrative = fmt.Sprintf("Rejected post-decide: %s", eval.Reason)

@@ -154,6 +154,28 @@ func (s *Store) CountHandledToday() (int, error) {
 	return count, err
 }
 
+// UpdateDecision updates only the decision field of an existing event.
+// Used by the execution engine to flip a Pending event to Automated or Declined
+// once the action is confirmed or rejected from the approval queue.
+func (s *Store) UpdateDecision(id int, d Decision) (*Event, error) {
+	now := time.Now().UTC().Unix()
+	res, err := s.db.Exec(
+		`UPDATE events SET decision = ?, updated_at = ? WHERE id = ?`,
+		d, now, id,
+	)
+	if err != nil {
+		return nil, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if n == 0 {
+		return nil, ErrNotFound
+	}
+	return s.Get(id)
+}
+
 func (s *Store) ToggleRead(id int) (*Event, error) {
 	now := time.Now().UTC().Unix()
 	res, err := s.db.Exec(`

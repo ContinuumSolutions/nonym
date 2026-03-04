@@ -64,7 +64,7 @@ func newTestPipeline(t *testing.T, analyser Analyser) *Pipeline {
 		t.Fatalf("biometrics Migrate: %v", err)
 	}
 
-	return NewPipeline(svc, analyser, actStore, bioStore)
+	return NewPipeline(svc, analyser, actStore, bioStore, nil)
 }
 
 func TestPipelineRun_EmptySignals(t *testing.T) {
@@ -225,7 +225,7 @@ func TestPipelineRun_ShieldedFlagSetWhenBiometricsActive(t *testing.T) {
 	// Stress=8 > 7 → shield active
 	bioStore.Upsert(&biometrics.CheckIn{Mood: 5, StressLevel: 8, Sleep: 6, Energy: 5})
 
-	p := NewPipeline(svc, &stubAnalyser{}, actStore, bioStore)
+	p := NewPipeline(svc, &stubAnalyser{}, actStore, bioStore, nil)
 	result, err := p.Run(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("Run: %v", err)

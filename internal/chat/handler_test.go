@@ -86,7 +86,7 @@ func newTestHandler(t *testing.T, chatter Chatter) *Handler {
 	intStore := integrations.NewStore(openDB(t), intKey)
 	intStore.Migrate()
 	engine := datasync.NewEngine(intStore, nil)
-	pipeline := brain.NewPipeline(brainSvc, &noopAnalyser{}, actStore, bioStore)
+	pipeline := brain.NewPipeline(brainSvc, &noopAnalyser{}, actStore, bioStore, nil)
 	sched := scheduler.NewScheduler(engine, pipeline, brainSvc, notifsStore, time.Minute)
 
 	historyStore := NewHistoryStore(openDB(t))

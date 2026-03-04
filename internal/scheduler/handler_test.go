@@ -68,7 +68,7 @@ func newTestScheduler(t *testing.T) *Scheduler {
 	bioStore.Migrate()
 
 	// pipeline with noop analyser
-	pipeline := brain.NewPipeline(svc, &noopAnalyser{}, actStore, bioStore)
+	pipeline := brain.NewPipeline(svc, &noopAnalyser{}, actStore, bioStore, nil)
 
 	// notifications store
 	notifsStore := notifications.NewStore(openDB(t))

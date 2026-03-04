@@ -15,7 +15,7 @@ func (a *OutlookCalendarAdapter) Slug() string { return "outlook-calendar" }
 func (a *OutlookCalendarAdapter) Pull(ctx context.Context, creds Credentials, since time.Time) ([]RawSignal, error) {
 	end := since.Add(72 * time.Hour)
 	url := fmt.Sprintf(
-		"https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=%s&endDateTime=%s&$select=subject,bodyPreview,start,end,attendees,organizer,location&$top=50&$orderby=start/dateTime",
+		"https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=%s&endDateTime=%s&$select=id,subject,bodyPreview,start,end,attendees,organizer,location&$top=50&$orderby=start/dateTime",
 		since.UTC().Format(time.RFC3339),
 		end.UTC().Format(time.RFC3339),
 	)
@@ -27,6 +27,7 @@ func (a *OutlookCalendarAdapter) Pull(ctx context.Context, creds Credentials, si
 
 	var resp struct {
 		Value []struct {
+			ID          string `json:"id"`
 			Subject     string `json:"subject"`
 			BodyPreview string `json:"bodyPreview"`
 			Start       struct {
@@ -79,6 +80,7 @@ func (a *OutlookCalendarAdapter) Pull(ctx context.Context, creds Credentials, si
 			Title:       item.Subject,
 			Body:        item.BodyPreview,
 			Metadata: map[string]string{
+				"event_id":  item.ID,
 				"start":     item.Start.DateTime,
 				"end":       item.End.DateTime,
 				"attendees": strings.Join(attendees, ", "),

@@ -46,7 +46,7 @@ var registry = []ServiceDef{
 		AuthURL:     "https://accounts.google.com/o/oauth2/v2/auth",
 		TokenURL:    "https://oauth2.googleapis.com/token",
 		RevokeURL:   "https://oauth2.googleapis.com/revoke",
-		Scopes:      []string{"https://www.googleapis.com/auth/calendar.readonly"},
+		Scopes:      []string{"https://www.googleapis.com/auth/calendar.events"},
 		ExtraParams: map[string]string{"access_type": "offline", "prompt": "consent"},
 	},
 	{
@@ -59,7 +59,7 @@ var registry = []ServiceDef{
 		AuthMethod:  OAuth2Auth,
 		AuthURL:     "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
 		TokenURL:    "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-		Scopes:      []string{"Calendars.Read", "offline_access"},
+		Scopes:      []string{"Calendars.ReadWrite", "offline_access"},
 	},
 
 	// ── Communication ────────────────────────────────────────────────────────
@@ -74,7 +74,7 @@ var registry = []ServiceDef{
 		AuthURL:     "https://accounts.google.com/o/oauth2/v2/auth",
 		TokenURL:    "https://oauth2.googleapis.com/token",
 		RevokeURL:   "https://oauth2.googleapis.com/revoke",
-		Scopes:      []string{"https://www.googleapis.com/auth/gmail.readonly"},
+		Scopes:      []string{"https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/gmail.modify"},
 		ExtraParams: map[string]string{"access_type": "offline", "prompt": "consent"},
 	},
 	{
@@ -87,7 +87,7 @@ var registry = []ServiceDef{
 		AuthMethod:  OAuth2Auth,
 		AuthURL:     "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
 		TokenURL:    "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-		Scopes:      []string{"Mail.Read", "offline_access"},
+		Scopes:      []string{"Mail.ReadWrite", "offline_access"},
 	},
 	{
 		Slug:        "slack",

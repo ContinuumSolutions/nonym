@@ -15,7 +15,7 @@ func (a *OutlookMailAdapter) Pull(ctx context.Context, creds Credentials, since 
 	// Microsoft Graph API: list unread messages received after `since`
 	filter := fmt.Sprintf("isRead eq false and receivedDateTime ge %s", since.UTC().Format(time.RFC3339))
 	url := fmt.Sprintf(
-		"https://graph.microsoft.com/v1.0/me/messages?$filter=%s&$select=subject,from,receivedDateTime,bodyPreview&$top=25&$orderby=receivedDateTime desc",
+		"https://graph.microsoft.com/v1.0/me/messages?$filter=%s&$select=id,subject,from,receivedDateTime,bodyPreview&$top=25&$orderby=receivedDateTime desc",
 		filter,
 	)
 
@@ -26,6 +26,7 @@ func (a *OutlookMailAdapter) Pull(ctx context.Context, creds Credentials, since 
 
 	var resp struct {
 		Value []struct {
+			ID               string `json:"id"`
 			Subject          string `json:"subject"`
 			BodyPreview      string `json:"bodyPreview"`
 			ReceivedDateTime string `json:"receivedDateTime"`
@@ -59,7 +60,8 @@ func (a *OutlookMailAdapter) Pull(ctx context.Context, creds Credentials, since 
 			Title:       msg.Subject,
 			Body:        msg.BodyPreview,
 			Metadata: map[string]string{
-				"from": from,
+				"message_id": msg.ID,
+				"from":       from,
 			},
 			OccurredAt: occurred,
 		})

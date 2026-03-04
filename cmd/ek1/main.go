@@ -23,6 +23,7 @@ import (
 	"github.com/egokernel/ek1/internal/brain"
 	"github.com/egokernel/ek1/internal/chat"
 	"github.com/egokernel/ek1/internal/datasync"
+	"github.com/egokernel/ek1/internal/execution"
 	"github.com/egokernel/ek1/internal/harvest"
 	"github.com/egokernel/ek1/internal/integrations"
 	"github.com/egokernel/ek1/internal/ledger"
@@ -128,6 +129,11 @@ func main() {
 		log.Fatalf("notifications migration failed: %v", err)
 	}
 
+	execQueueStore := execution.NewStore(db)
+	if err := execQueueStore.Migrate(); err != nil {
+		log.Fatalf("execution queue migration failed: %v", err)
+	}
+
 	// ── Brain ────────────────────────────────────────────────────────────────
 	prof, err := profileStore.Get()
 	if err != nil {
@@ -135,10 +141,19 @@ func main() {
 	}
 	brainSvc := brain.NewService("ek1-kernel", prof.Preferences, sqliteLedger)
 
+	// ── Execution engine (Stage 2) ────────────────────────────────────────────
+	execEngine := execution.NewEngine(
+		servicesStore,
+		execution.DefaultExecutors(),
+		execQueueStore,
+		notifsStore,
+		execution.MicroWalletThreshold(),
+	)
+
 	// ── Pipeline ─────────────────────────────────────────────────────────────
 	aiClient := ai.NewClient(os.Getenv("OLLAMA_HOST"), os.Getenv("OLLAMA_MODEL"))
 	syncEngine := datasync.NewEngine(servicesStore, datasync.DefaultAdapters())
-	pipeline := brain.NewPipeline(brainSvc, aiClient, eventsStore, checkInStore)
+	pipeline := brain.NewPipeline(brainSvc, aiClient, eventsStore, checkInStore, execEngine)
 
 	// ── Scheduler ────────────────────────────────────────────────────────────
 	sched := scheduler.NewScheduler(syncEngine, pipeline, brainSvc, notifsStore, syncInterval())
@@ -191,6 +206,7 @@ func main() {
 	harvest.NewHandler(harvestScanner, harvestStore, notifsStore).RegisterRoutes(app)
 	notifications.NewHandler(notifsStore).RegisterRoutes(app)
 	scheduler.NewHandler(sched).RegisterRoutes(app)
+	execution.NewHandler(execEngine, execQueueStore, eventsStore).RegisterRoutes(app)
 	chat.NewHandler(aiClient, brainSvc, profileStore, checkInStore, eventsStore, sqliteLedger, notifsStore, harvestStore, sched, chatHistoryStore, "ek1-kernel").RegisterRoutes(app)
 
 	log.Fatal(app.Listen(":3000"))

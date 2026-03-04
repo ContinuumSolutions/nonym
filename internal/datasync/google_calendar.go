@@ -26,6 +26,7 @@ func (a *GoogleCalendarAdapter) Pull(ctx context.Context, creds Credentials, sin
 
 	var resp struct {
 		Items []struct {
+			ID          string `json:"id"`
 			Summary     string `json:"summary"`
 			Description string `json:"description"`
 			Location    string `json:"location"`
@@ -70,6 +71,7 @@ func (a *GoogleCalendarAdapter) Pull(ctx context.Context, creds Credentials, sin
 			Title:       item.Summary,
 			Body:        item.Description,
 			Metadata: map[string]string{
+				"event_id":  item.ID,
 				"start":     item.Start.DateTime,
 				"end":       item.End.DateTime,
 				"attendees": strings.Join(attendees, ", "),

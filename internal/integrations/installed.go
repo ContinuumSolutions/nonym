@@ -2,6 +2,8 @@ package integrations
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"log"
 	"time"
 )
@@ -98,4 +100,73 @@ func (s *Store) ListConnected() ([]ConnectedService, error) {
 		services = append(services, svc)
 	}
 	return services, rows.Err()
+}
+
+// GetConnectedBySlug returns the decrypted credentials for a single connected service.
+// Returns ErrNotFound if the service is not in status=Connected.
+// Used by the execution engine to fetch credentials at action time.
+func (s *Store) GetConnectedBySlug(slug string) (*ConnectedService, error) {
+	var svc ConnectedService
+	var apiKeyEnc, accessEnc, refreshEnc, clientIDEnc, clientSecEnc string
+
+	err := s.db.QueryRow(`
+		SELECT id, slug, name, category, description, auth_method,
+		       api_key, api_endpoint,
+		       oauth_access_token, oauth_refresh_token, oauth_token_expiry,
+		       oauth_client_id, oauth_client_secret,
+		       oauth_token_url_override
+		FROM services WHERE slug = ? AND status = ?
+	`, slug, Connected).Scan(
+		&svc.ID, &svc.Slug, &svc.Name, &svc.Category, &svc.Description, &svc.AuthMethod,
+		&apiKeyEnc, &svc.APIEndpoint,
+		&accessEnc, &refreshEnc, &svc.OAuthTokenExpiry,
+		&clientIDEnc, &clientSecEnc,
+		&svc.OAuthTokenURLOverride,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	var decErr error
+	if svc.APIKey, decErr = decrypt(s.key, apiKeyEnc); decErr != nil {
+		return nil, decErr
+	}
+	if svc.OAuthAccessToken, decErr = decrypt(s.key, accessEnc); decErr != nil {
+		return nil, decErr
+	}
+	if svc.OAuthRefreshToken, decErr = decrypt(s.key, refreshEnc); decErr != nil {
+		return nil, decErr
+	}
+
+	// Proactively refresh expiring OAuth tokens (same logic as ListConnected).
+	if svc.AuthMethod == OAuth2Auth {
+		refreshDeadline := time.Now().Add(5 * time.Minute).Unix()
+		if svc.OAuthTokenExpiry != 0 && svc.OAuthTokenExpiry <= refreshDeadline && svc.OAuthRefreshToken != "" {
+			clientID, _ := decrypt(s.key, clientIDEnc)
+			clientSecret, _ := decrypt(s.key, clientSecEnc)
+			def := lookupCatalog(svc.Slug)
+			if def != nil && clientID != "" {
+				effectiveDef := *def
+				if svc.OAuthTokenURLOverride != "" {
+					effectiveDef.TokenURL = svc.OAuthTokenURLOverride
+				}
+				newAccess, newExpiry, refreshErr := refreshToken(context.Background(), &effectiveDef, clientID, clientSecret, svc.OAuthRefreshToken)
+				if refreshErr != nil {
+					log.Printf("integrations: token refresh for %s failed: %v — marking disconnected", svc.Slug, refreshErr)
+					s.DisconnectOAuth(svc.ID) //nolint:errcheck
+					return nil, ErrNotFound
+				}
+				if updateErr := s.UpdateOAuthTokens(svc.ID, newAccess, newExpiry.Unix()); updateErr != nil {
+					log.Printf("integrations: store refreshed token for %s: %v", svc.Slug, updateErr)
+				}
+				svc.OAuthAccessToken = newAccess
+				svc.OAuthTokenExpiry = newExpiry.Unix()
+			}
+		}
+	}
+
+	return &svc, nil
 }

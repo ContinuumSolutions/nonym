@@ -16,6 +16,7 @@ const (
 	TypeOpportunity Type = "OPPORTUNITY"  // high-value social debt detected by harvest engine
 	TypeHarvest     Type = "HARVEST"      // ghost-agreement opportunity detected
 	TypeSoulDrift   Type = "SOUL_DRIFT"   // periodic irrational-human injection event
+	TypeQueueEntry  Type = "QUEUE_ENTRY"  // action queued for human approval (Stage 2)
 )
 
 // Notification is a single in-app alert.
