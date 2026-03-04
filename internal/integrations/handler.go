@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/getsentry/sentry-go"
+	sentryfiber "github.com/getsentry/sentry-go/fiber"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -336,6 +338,24 @@ func (h *Handler) initiateOAuth(c *fiber.Ctx) error {
 	return c.JSON(initiateOAuthResponse{AuthURL: authURL, State: state})
 }
 
+// captureOAuthError logs an OAuth error locally and sends it to Sentry if configured.
+func captureOAuthError(c *fiber.Ctx, err error, slug, reason string) {
+	log.Printf("integrations: oauth %s for service %q: %v", reason, slug, err)
+	hub := sentryfiber.GetHubFromContext(c)
+	if hub == nil {
+		hub = sentry.CurrentHub()
+	}
+	hub.WithScope(func(scope *sentry.Scope) {
+		scope.SetTag("service", slug)
+		scope.SetTag("oauth_error", reason)
+		if err != nil {
+			hub.CaptureException(err)
+		} else {
+			hub.CaptureMessage(fmt.Sprintf("oauth %s for service %q", reason, slug))
+		}
+	})
+}
+
 // @Summary      OAuth2 callback handler (step 9c)
 // @Description  Receives the authorization code from the third-party redirect, exchanges it
 //
@@ -354,30 +374,37 @@ func (h *Handler) oauthCallback(c *fiber.Ctx) error {
 
 	// Handle provider-level errors (e.g. user denied access).
 	if providerErr := c.Query("error"); providerErr != "" {
+		desc := c.Query("error_description")
+		captureOAuthError(c, fmt.Errorf("provider error: %s: %s", providerErr, desc), "", "provider_denied")
 		return c.SendString(h.callbackHTML("", providerErr, ""))
 	}
 
 	code := c.Query("code")
 	state := c.Query("state")
 	if code == "" || state == "" {
+		captureOAuthError(c, fmt.Errorf("callback missing code or state params"), "", "missing_code_or_state")
 		return c.SendString(h.callbackHTML("", "missing_code_or_state", ""))
 	}
 
 	serviceID, slug, codeVerifier, err := h.store.GetByState(state)
 	if errors.Is(err, ErrNotFound) {
+		captureOAuthError(c, fmt.Errorf("state %q not found or expired", state), "", "invalid_or_expired_state")
 		return c.SendString(h.callbackHTML("", "invalid_or_expired_state", ""))
 	}
 	if err != nil {
+		captureOAuthError(c, fmt.Errorf("GetByState: %w", err), "", "server_error")
 		return c.SendString(h.callbackHTML("", "server_error", ""))
 	}
 
 	def := lookupCatalog(slug)
 	if def == nil {
+		captureOAuthError(c, fmt.Errorf("no catalog entry for slug %q", slug), slug, "unknown_service")
 		return c.SendString(h.callbackHTML(slug, "unknown_service", ""))
 	}
 
 	clientID, clientSecret, _, _, _, _, err := h.store.GetOAuthCreds(serviceID)
 	if err != nil || clientID == "" {
+		captureOAuthError(c, fmt.Errorf("GetOAuthCreds service %d: %w", serviceID, err), slug, "app_not_configured")
 		return c.SendString(h.callbackHTML(slug, "app_not_configured", ""))
 	}
 
@@ -407,7 +434,7 @@ func (h *Handler) oauthCallback(c *fiber.Ctx) error {
 	redirectURI := h.apiBaseURL + "/oauth/callback"
 	access, refresh, expiry, err := exchangeCode(c.Context(), &effectiveDef, clientID, clientSecret, code, redirectURI, codeVerifier)
 	if err != nil {
-		log.Printf("integrations: oauth code exchange for %s: %v", slug, err)
+		captureOAuthError(c, fmt.Errorf("token exchange for service %d (%s): %w", serviceID, slug, err), slug, "token_exchange_failed")
 		return c.SendString(h.callbackHTML(slug, "token_exchange_failed", ""))
 	}
 
@@ -418,10 +445,33 @@ func (h *Handler) oauthCallback(c *fiber.Ctx) error {
 		expiryUnix = expiry.Unix()
 	}
 	if _, err := h.store.CompleteOAuth(serviceID, access, refresh, expiryUnix); err != nil {
+		captureOAuthError(c, fmt.Errorf("CompleteOAuth service %d (%s): %w", serviceID, slug, err), slug, "storage_error")
 		return c.SendString(h.callbackHTML(slug, "storage_error", ""))
 	}
 
 	return c.SendString(h.callbackHTML(slug, "", h.frontendOrigin+"/connectors?oauth=success&service="+url.QueryEscape(slug)))
+}
+
+// friendlyOAuthError maps internal error codes to user-facing messages.
+func friendlyOAuthError(reason string) string {
+	switch reason {
+	case "token_exchange_failed":
+		return "Could not complete authorization — the code may have expired. Please try again."
+	case "invalid_or_expired_state":
+		return "Authorization session expired. Please start the connection again."
+	case "app_not_configured":
+		return "App credentials are missing. Add your Client ID and Secret first."
+	case "storage_error":
+		return "Authorization succeeded but could not be saved. Please try again."
+	case "missing_code_or_state":
+		return "Invalid callback — required parameters are missing."
+	case "unknown_service":
+		return "Unknown service. Please contact support."
+	case "server_error":
+		return "An unexpected error occurred. Please try again."
+	default:
+		return "Connection failed. Please try again."
+	}
 }
 
 // callbackHTML returns a self-closing HTML page for the OAuth popup.
@@ -445,7 +495,7 @@ func (h *Handler) callbackHTML(service, errReason, fallbackURL string) string {
 
 	status := "Connected successfully"
 	if errReason != "" {
-		status = fmt.Sprintf("Connection failed: %s", errReason)
+		status = friendlyOAuthError(errReason)
 	}
 
 	return fmt.Sprintf(`<!DOCTYPE html>
