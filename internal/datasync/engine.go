@@ -126,10 +126,10 @@ func (e *Engine) Run(ctx context.Context) ([]RawSignal, error) {
 			}
 		}
 
-		// On 403 from an OAuth service: the token lacks required scopes.
+		// On 403 from an OAuth service: could be missing scopes, disabled API, or access policy.
 		// A refresh won't help — mark the service as NeedsReauth so the user is prompted to re-authorize.
 		if err != nil && strings.Contains(err.Error(), "HTTP 403") && svc.AuthMethod == integrations.OAuth2Auth {
-			log.Printf("datasync: [%s] 403 — insufficient OAuth scopes; user must re-authorize", svc.Slug)
+			log.Printf("datasync: [%s] 403 — %v", svc.Slug, err)
 			if reauthErr := e.services.MarkNeedsReauth(svc.ID); reauthErr != nil {
 				log.Printf("datasync: [%s] failed to mark needs-reauth: %v", svc.Slug, reauthErr)
 			}
@@ -247,7 +247,14 @@ func authGet(ctx context.Context, url, token string) ([]byte, error) {
 		return nil, fmt.Errorf("HTTP 401 from %s — access token was revoked or expired; re-authorize to restore sync", url)
 	}
 	if resp.StatusCode == 403 {
-		return nil, fmt.Errorf("HTTP 403 from %s — missing required OAuth scopes; disconnect and re-authorize to grant full access", url)
+		// Include the provider's error message verbatim — it often contains actionable detail
+		// (e.g. "Gmail API has not been enabled", "insufficient scopes") that the generic
+		// message hides.
+		errBody := strings.TrimSpace(string(body))
+		if len(errBody) > 300 {
+			errBody = errBody[:300] + "…"
+		}
+		return nil, fmt.Errorf("HTTP 403 from %s — %s", url, errBody)
 	}
 	if resp.StatusCode >= 400 {
 		return nil, fmt.Errorf("HTTP %d from %s", resp.StatusCode, url)
