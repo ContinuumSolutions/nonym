@@ -100,7 +100,7 @@ var registry = []ServiceDef{
 		AuthURL:     "https://slack.com/oauth/v2/authorize",
 		TokenURL:    "https://slack.com/api/oauth.v2.access",
 		RevokeURL:   "https://slack.com/api/auth.revoke",
-		Scopes:      []string{"channels:read", "channels:history"},
+		Scopes:      []string{"channels:read", "channels:history", "groups:read", "groups:history", "im:read", "im:history"},
 	},
 	{
 		Slug:        "zoho-mail",
