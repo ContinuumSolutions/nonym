@@ -34,7 +34,7 @@ func (a *ZohoMailAdapter) Pull(ctx context.Context, creds Credentials, since tim
 	// No status filter — read/unread both surface as signals; the `since` window
 	// in the calling engine handles deduplication across sync cycles.
 	url := fmt.Sprintf(
-		"%s/api/accounts/%s/messages/view?limit=50&sortorder=true",
+		"%s/api/accounts/%s/messages/view?limit=50&sortorder=false",
 		apiBase, accountID,
 	)
 	body, err := authGet(ctx, url, creds.OAuthAccessToken)
@@ -47,7 +47,7 @@ func (a *ZohoMailAdapter) Pull(ctx context.Context, creds Credentials, since tim
 			MessageID    string `json:"messageId"`
 			Subject      string `json:"subject"`
 			FromAddress  string `json:"fromAddress"`
-			ReceivedTime string `json:"receivedTime"` // milliseconds since epoch as a string
+			ReceivedTime string `json:"sentDateInGMT"` // milliseconds since epoch as a string
 			Summary      string `json:"summary"`
 		} `json:"data"`
 	}
