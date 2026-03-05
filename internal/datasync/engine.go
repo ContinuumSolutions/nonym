@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -200,6 +201,17 @@ func (e *Engine) ServiceStatuses() []ServiceStatus {
 	return out
 }
 
+// debugHTTP is true when EK_DEBUG_HTTP=1 is set. Logs full request/response details.
+var debugHTTP = os.Getenv("EK_DEBUG_HTTP") == "1"
+
+// maskToken returns the last 6 chars of a token for safe log output.
+func maskToken(t string) string {
+	if len(t) <= 6 {
+		return "******"
+	}
+	return "......" + t[len(t)-6:]
+}
+
 // authGet performs a GET request with a Bearer token and returns the body bytes.
 func authGet(ctx context.Context, url, token string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -207,11 +219,30 @@ func authGet(ctx context.Context, url, token string) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
+
+	if debugHTTP {
+		log.Printf("[DEBUG] GET %s  token=%s", url, maskToken(token))
+	}
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	body, readErr := io.ReadAll(resp.Body)
+
+	if debugHTTP {
+		preview := string(body)
+		if len(preview) > 400 {
+			preview = preview[:400] + "…"
+		}
+		log.Printf("[DEBUG] → %d  body=%s", resp.StatusCode, preview)
+	}
+
+	if readErr != nil {
+		return nil, readErr
+	}
 	if resp.StatusCode == 401 {
 		return nil, fmt.Errorf("HTTP 401 from %s — access token was revoked or expired; re-authorize to restore sync", url)
 	}
@@ -221,5 +252,5 @@ func authGet(ctx context.Context, url, token string) ([]byte, error) {
 	if resp.StatusCode >= 400 {
 		return nil, fmt.Errorf("HTTP %d from %s", resp.StatusCode, url)
 	}
-	return io.ReadAll(resp.Body)
+	return body, nil
 }

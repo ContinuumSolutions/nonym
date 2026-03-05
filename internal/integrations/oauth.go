@@ -7,11 +7,25 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 )
+
+// debugOAuth is true when EK_DEBUG_HTTP=1 is set. Logs token endpoint requests/responses.
+var debugOAuth = os.Getenv("EK_DEBUG_HTTP") == "1"
+
+// maskSecret returns the last 4 chars of a secret for safe log output.
+func maskSecret(s string) string {
+	if len(s) <= 4 {
+		return "****"
+	}
+	return "****" + s[len(s)-4:]
+}
 
 // basicAuthHeader encodes client_id:client_secret as an HTTP Basic auth value.
 func basicAuthHeader(clientID, clientSecret string) string {
@@ -120,14 +134,37 @@ func exchangeCode(ctx context.Context, def *ServiceDef, clientID, clientSecret, 
 		req.Header.Set("Authorization", basicAuthHeader(clientID, clientSecret))
 	}
 
+	if debugOAuth {
+		safe := body
+		if safe.Get("client_secret") != "" {
+			safe.Set("client_secret", maskSecret(safe.Get("client_secret")))
+		}
+		if safe.Get("code_verifier") != "" {
+			safe.Set("code_verifier", maskSecret(safe.Get("code_verifier")))
+		}
+		log.Printf("[DEBUG] exchangeCode POST %s  body=%s", def.TokenURL, safe.Encode())
+	}
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "", "", time.Time{}, fmt.Errorf("exchange code: %w", err)
 	}
 	defer resp.Body.Close()
 
+	rawBody, readErr := io.ReadAll(resp.Body)
+	if debugOAuth {
+		preview := string(rawBody)
+		if len(preview) > 400 {
+			preview = preview[:400] + "…"
+		}
+		log.Printf("[DEBUG] exchangeCode → %d  body=%s", resp.StatusCode, preview)
+	}
+	if readErr != nil {
+		return "", "", time.Time{}, fmt.Errorf("exchange code: read body: %w", readErr)
+	}
+
 	var tr tokenResponse
-	if err := json.NewDecoder(resp.Body).Decode(&tr); err != nil {
+	if err := json.Unmarshal(rawBody, &tr); err != nil {
 		return "", "", time.Time{}, fmt.Errorf("exchange code: decode: %w", err)
 	}
 	if tr.Error != "" {
@@ -173,14 +210,37 @@ func refreshToken(ctx context.Context, def *ServiceDef, clientID, clientSecret, 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
 
+	if debugOAuth {
+		safe := body
+		if safe.Get("client_secret") != "" {
+			safe.Set("client_secret", maskSecret(safe.Get("client_secret")))
+		}
+		if safe.Get("refresh_token") != "" {
+			safe.Set("refresh_token", maskSecret(safe.Get("refresh_token")))
+		}
+		log.Printf("[DEBUG] refreshToken POST %s  body=%s", def.TokenURL, safe.Encode())
+	}
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "", "", time.Time{}, fmt.Errorf("refresh token: %w", err)
 	}
 	defer resp.Body.Close()
 
+	rawBody, readErr := io.ReadAll(resp.Body)
+	if debugOAuth {
+		preview := string(rawBody)
+		if len(preview) > 400 {
+			preview = preview[:400] + "…"
+		}
+		log.Printf("[DEBUG] refreshToken → %d  body=%s", resp.StatusCode, preview)
+	}
+	if readErr != nil {
+		return "", "", time.Time{}, fmt.Errorf("refresh token: read body: %w", readErr)
+	}
+
 	var tr tokenResponse
-	if err := json.NewDecoder(resp.Body).Decode(&tr); err != nil {
+	if err := json.Unmarshal(rawBody, &tr); err != nil {
 		return "", "", time.Time{}, fmt.Errorf("refresh token: decode: %w", err)
 	}
 	if tr.Error != "" {
