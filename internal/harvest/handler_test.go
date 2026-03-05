@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/egokernel/ek1/internal/activities"
 	"github.com/egokernel/ek1/internal/ai"
@@ -81,21 +82,20 @@ func TestHandlerResults_NoScanReturnsMessage(t *testing.T) {
 	}
 }
 
-func TestHandlerScan_EmptyServicesReturnsResult(t *testing.T) {
+func TestHandlerScan_EmptyServicesReturnsAccepted(t *testing.T) {
 	app := setupHarvestApp(t)
 	req := httptest.NewRequest(http.MethodPost, "/harvest/scan", nil)
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("want 200, got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusAccepted {
+		t.Errorf("want 202, got %d", resp.StatusCode)
 	}
-	var result HarvestResult
-	json.NewDecoder(resp.Body).Decode(&result)
-	// No installed services → 0 contacts found
-	if result.ContactsFound != 0 {
-		t.Errorf("want 0 contacts for empty services, got %d", result.ContactsFound)
+	var m map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&m)
+	if m["status"] != "started" {
+		t.Errorf("want status=started, got %v", m["status"])
 	}
 }
 
@@ -104,11 +104,24 @@ func TestHandlerScan_SavedResultAvailableViaResults(t *testing.T) {
 	app := fiber.New()
 	h.RegisterRoutes(app)
 
-	// Run a scan first
+	// Fire async scan
 	req1 := httptest.NewRequest(http.MethodPost, "/harvest/scan", nil)
 	resp1, _ := app.Test(req1)
-	if resp1.StatusCode != http.StatusOK {
-		t.Errorf("scan: want 200, got %d", resp1.StatusCode)
+	if resp1.StatusCode != http.StatusAccepted {
+		t.Errorf("scan: want 202, got %d", resp1.StatusCode)
+	}
+
+	// Poll /harvest/status until running=false (max 5s).
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		req := httptest.NewRequest(http.MethodGet, "/harvest/status", nil)
+		resp, _ := app.Test(req)
+		var st map[string]interface{}
+		json.NewDecoder(resp.Body).Decode(&st)
+		if running, _ := st["running"].(bool); !running {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 
 	// Now fetch the stored result
@@ -119,7 +132,6 @@ func TestHandlerScan_SavedResultAvailableViaResults(t *testing.T) {
 	}
 	var result HarvestResult
 	json.NewDecoder(resp2.Body).Decode(&result)
-	// ScannedAt should be non-zero (a real scan was run)
 	if result.ScannedAt.IsZero() {
 		t.Error("want non-zero ScannedAt in stored result")
 	}

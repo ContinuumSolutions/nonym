@@ -113,21 +113,20 @@ func TestHandlerStatus_LastRunAtNilBeforeFirstRun(t *testing.T) {
 	}
 }
 
-func TestHandlerRunNow_200(t *testing.T) {
+func TestHandlerRunNow_202(t *testing.T) {
 	app := setupSchedulerApp(t)
 	req := httptest.NewRequest(http.MethodPost, "/scheduler/run-now", nil)
-	resp, err := app.Test(req, 30000) // 30s timeout — pipeline runs synchronously
+	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("app.Test: %v", err)
 	}
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("want 200, got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusAccepted {
+		t.Errorf("want 202, got %d", resp.StatusCode)
 	}
-	var result brain.PipelineResult
-	json.NewDecoder(resp.Body).Decode(&result)
-	// No installed services → 0 signals processed
-	if result.Total != 0 {
-		t.Errorf("want Total=0 with no services, got %d", result.Total)
+	var m map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&m)
+	if m["status"] != "started" {
+		t.Errorf("want status=started, got %v", m["status"])
 	}
 }
 
@@ -136,15 +135,24 @@ func TestHandlerRunNow_UpdatesStatus(t *testing.T) {
 	app := fiber.New()
 	NewHandler(s).RegisterRoutes(app)
 
-	// Run now
+	// Fire async run-now
 	req1 := httptest.NewRequest(http.MethodPost, "/scheduler/run-now", nil)
-	app.Test(req1, 30000)
+	app.Test(req1)
 
-	// Check status is updated
-	req2 := httptest.NewRequest(http.MethodGet, "/scheduler/status", nil)
-	resp2, _ := app.Test(req2)
+	// Poll until the background goroutine completes (max 5s).
 	var m map[string]interface{}
-	json.NewDecoder(resp2.Body).Decode(&m)
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		req := httptest.NewRequest(http.MethodGet, "/scheduler/status", nil)
+		resp, _ := app.Test(req)
+		json.NewDecoder(resp.Body).Decode(&m)
+		running, _ := m["running"].(bool)
+		if !running && m["last_run_at"] != nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
 	if m["last_run_at"] == nil {
 		t.Error("want non-null last_run_at after RunNow")
 	}
