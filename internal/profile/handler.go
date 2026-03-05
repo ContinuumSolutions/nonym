@@ -80,7 +80,7 @@ func (h *Handler) updateConnection(c *fiber.Ctx) error {
 	return c.JSON(profile)
 }
 
-// validatePreferences checks each weight is in the range 1–10.
+// validatePreferences checks each weight is in the range 1–10 and base_hourly_rate is positive.
 func validatePreferences(p DecisionPreference) error {
 	fields := map[string]int{
 		"time_sovereignty":    p.TimeSovereignty,
@@ -96,6 +96,9 @@ func validatePreferences(p DecisionPreference) error {
 				name+" must be between 1 and 10",
 			)
 		}
+	}
+	if p.BaseHourlyRate < 0 {
+		return fiber.NewError(fiber.StatusBadRequest, "base_hourly_rate must be a positive number")
 	}
 	return nil
 }

@@ -65,12 +65,12 @@ type ValueMatrix struct {
 // DefaultMatrix returns a sensible sovereign default.
 func DefaultMatrix() *ValueMatrix {
 	return &ValueMatrix{
-		TemporalSovereignty: 0.80, // values time highly
+		TemporalSovereignty: 0.50, // FG=5 default
 		RiskTolerance:       0.20, // steady wins; no gambles
-		ReputationImpact:    0.90, // wants a clean ledger
+		ReputationImpact:    0.50, // FG=5 default
 		SocialEntropy:       0.10, // minimal human-friction injection
-		BaseHourlyRate:      500.0,
-		UtilityThreshold:    1000.0,
+		BaseHourlyRate:      85.0, // FG=5: 10 + 5*15
+		UtilityThreshold:    120.0, // FG=5: 220 - 5*20
 		PresentBiasDiscount: 0.05,
 	}
 }

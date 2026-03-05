@@ -1,6 +1,7 @@
 package activities
 
 import (
+	"encoding/json"
 	"time"
 )
 
@@ -81,15 +82,16 @@ type SignalAnalysis struct {
 }
 
 type Event struct {
-	ID            int            `json:"id"`
-	EventType     EventType      `json:"event_type" enums:"0,1,2,3,4,5"`
-	Decision      Decision       `json:"decision" enums:"0,1,2,3,4,5"`
-	Importance    Importance     `json:"importance" enums:"0,1,2"`
-	Narrative     string         `json:"narrative"` // Detail description of exactly what happened
-	Analysis      SignalAnalysis `json:"analysis"`  // LLM scores + triage rationale
-	Gain          Gain           `json:"gain"`
-	SourceService string         `json:"source_service"`
-	Read          bool           `json:"read"`
-	CreatedAt     time.Time      `json:"created_at"`
-	UpdatedAt     time.Time      `json:"updated_at"`
+	ID            int             `json:"id"`
+	EventType     EventType       `json:"event_type" enums:"0,1,2,3,4,5"`
+	Decision      Decision        `json:"decision" enums:"0,1,2,3,4,5"`
+	Importance    Importance      `json:"importance" enums:"0,1,2"`
+	Narrative     string          `json:"narrative"`          // Detail description of exactly what happened
+	Analysis      SignalAnalysis  `json:"analysis"`           // LLM scores + triage rationale
+	Gain          Gain            `json:"gain"`
+	SourceService string          `json:"source_service"`
+	RawData       json.RawMessage `json:"raw_data,omitempty"` // original signal payload (email, calendar item, etc.)
+	Read          bool            `json:"read"`
+	CreatedAt     time.Time       `json:"created_at"`
+	UpdatedAt     time.Time       `json:"updated_at"`
 }

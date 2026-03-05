@@ -106,21 +106,28 @@ func (s *Service) ApplyBiometricsGate(checkIn *biometrics.CheckIn) bool {
 //	PrivacyProtection(1–10) → RiskTolerance         (0.32→0.05, inverse)
 //	Autonomy         (1–10) → SocialEntropy         (0.14→0.05, inverse)
 func MatrixFromPreferences(p profile.DecisionPreference) *ValueMatrix {
+	// Use the explicit hourly rate when set; fall back to a sensible default derived
+	// from financial_growth so existing profiles without the column still work.
+	bhr := p.BaseHourlyRate
+	if bhr <= 0 {
+		bhr = 10.0 + float64(p.FinacialGrowth)*15.0 // FG=5 → $85
+	}
+
+	// UtilityThreshold scales with BaseHourlyRate so the bar is always proportional
+	// to what the user considers a meaningful return on attention.
+	// financial_growth multiplier: FG=1 → ×2.3, FG=5 → ×1.5, FG=10 → ×0.5
+	// (higher FG = lower relative threshold = more financially-active posture)
+	utMultiplier := 2.5 - float64(p.FinacialGrowth)*0.2
+
 	return &ValueMatrix{
-		// Direct mappings
+		BaseHourlyRate:      bhr,
+		UtilityThreshold:    bhr * utMultiplier,
 		TemporalSovereignty: float64(p.TimeSovereignty) / 10.0,
 		ReputationImpact:    float64(p.ReputationBuilding) / 10.0,
-
-		// Inverse mappings (higher preference = lower value)
-		// FG=5 → 1200, close to DefaultMatrix(1000); full range 200–2000
-		UtilityThreshold: 2200.0 - float64(p.FinacialGrowth)*200.0,
-		// PP=5 → 0.20, matches DefaultMatrix; range 0.05–0.32
+		// PP=5 → 0.20; range 0.05–0.32
 		RiskTolerance: 0.05 + (1.0-float64(p.PrivacyProtection)/10.0)*0.30,
-		// A=5 → 0.10, matches DefaultMatrix; range 0.05–0.14
-		SocialEntropy: 0.05 + (1.0-float64(p.Autonomy)/10.0)*0.10,
-
-		// Fixed defaults — extended in future steps
-		BaseHourlyRate:      500.0,
+		// A=5 → 0.10; range 0.05–0.14
+		SocialEntropy:       0.05 + (1.0-float64(p.Autonomy)/10.0)*0.10,
 		PresentBiasDiscount: 0.05,
 	}
 }

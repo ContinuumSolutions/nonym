@@ -46,8 +46,9 @@ func (s *Store) Migrate() error {
 	if err != nil {
 		return err
 	}
-	// Idempotent: add pin_hash column if upgrading from an older schema.
+	// Idempotent: add columns for schemas that predate them.
 	_, _ = s.db.Exec(`ALTER TABLE profile ADD COLUMN pin_hash TEXT NOT NULL DEFAULT ''`)
+	_, _ = s.db.Exec(`ALTER TABLE profile ADD COLUMN base_hourly_rate REAL NOT NULL DEFAULT 85.0`)
 	return nil
 }
 
@@ -56,7 +57,7 @@ func (s *Store) Get() (*Profile, error) {
 		SELECT kernel_name, api_endpoint, timezone,
 		       time_sovereignty, financial_growth, health_recovery,
 		       reputation_building, privacy_protection, autonomy,
-		       pin_hash, created_at, updated_at
+		       pin_hash, created_at, updated_at, base_hourly_rate
 		FROM profile WHERE id = 1
 	`)
 	return scan(row)
@@ -99,10 +100,11 @@ func (s *Store) UpdatePreferences(p DecisionPreference) (*Profile, error) {
 			reputation_building = ?,
 			privacy_protection  = ?,
 			autonomy            = ?,
+			base_hourly_rate    = ?,
 			updated_at          = ?
 		WHERE id = 1
 	`, p.TimeSovereignty, p.FinacialGrowth, p.HealthRecovery,
-		p.ReputationBuilding, p.PrivacyProtection, p.Autonomy, now,
+		p.ReputationBuilding, p.PrivacyProtection, p.Autonomy, p.BaseHourlyRate, now,
 	)
 	if err != nil {
 		return nil, err
@@ -135,7 +137,7 @@ func scan(row *sql.Row) (*Profile, error) {
 		&p.KernelName, &p.APIEndpoint, &p.Timezone,
 		&p.Preferences.TimeSovereignty, &p.Preferences.FinacialGrowth, &p.Preferences.HealthRecovery,
 		&p.Preferences.ReputationBuilding, &p.Preferences.PrivacyProtection, &p.Preferences.Autonomy,
-		&pinHash, &createdAt, &updatedAt,
+		&pinHash, &createdAt, &updatedAt, &p.Preferences.BaseHourlyRate,
 	)
 	if err != nil {
 		return nil, err

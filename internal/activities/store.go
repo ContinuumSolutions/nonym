@@ -45,24 +45,26 @@ func (s *Store) Migrate() error {
 	_, _ = s.db.Exec(`ALTER TABLE events ADD COLUMN source_service TEXT NOT NULL DEFAULT ''`)
 	// Add analysis JSON blob to existing databases that predate this column.
 	_, _ = s.db.Exec(`ALTER TABLE events ADD COLUMN analysis TEXT NOT NULL DEFAULT '{}'`)
+	// Add raw_data JSON blob to existing databases that predate this column.
+	_, _ = s.db.Exec(`ALTER TABLE events ADD COLUMN raw_data TEXT NOT NULL DEFAULT ''`)
 	return nil
 }
 
 const selectFields = `
 	SELECT id, event_type, decision, importance, narrative,
 	       gain_type, gain_kind, gain_value, gain_symbol, gain_details,
-	       source_service, read, created_at, updated_at, analysis
+	       source_service, read, created_at, updated_at, analysis, raw_data
 	FROM events
 `
 
 func scanRow(row *sql.Row) (*Event, error) {
 	var e Event
 	var createdAt, updatedAt int64
-	var analysisJSON string
+	var analysisJSON, rawData string
 	err := row.Scan(
 		&e.ID, &e.EventType, &e.Decision, &e.Importance, &e.Narrative,
 		&e.Gain.Type, &e.Gain.Kind, &e.Gain.Value, &e.Gain.Symbol, &e.Gain.Details,
-		&e.SourceService, &e.Read, &createdAt, &updatedAt, &analysisJSON,
+		&e.SourceService, &e.Read, &createdAt, &updatedAt, &analysisJSON, &rawData,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -74,6 +76,9 @@ func scanRow(row *sql.Row) (*Event, error) {
 	e.UpdatedAt = time.Unix(updatedAt, 0).UTC()
 	if analysisJSON != "" && analysisJSON != "{}" {
 		_ = json.Unmarshal([]byte(analysisJSON), &e.Analysis)
+	}
+	if rawData != "" {
+		e.RawData = json.RawMessage(rawData)
 	}
 	return &e, nil
 }
@@ -89,11 +94,11 @@ func (s *Store) List() ([]Event, error) {
 	for rows.Next() {
 		var e Event
 		var createdAt, updatedAt int64
-		var analysisJSON string
+		var analysisJSON, rawData string
 		err := rows.Scan(
 			&e.ID, &e.EventType, &e.Decision, &e.Importance, &e.Narrative,
 			&e.Gain.Type, &e.Gain.Kind, &e.Gain.Value, &e.Gain.Symbol, &e.Gain.Details,
-			&e.SourceService, &e.Read, &createdAt, &updatedAt, &analysisJSON,
+			&e.SourceService, &e.Read, &createdAt, &updatedAt, &analysisJSON, &rawData,
 		)
 		if err != nil {
 			return nil, err
@@ -102,6 +107,9 @@ func (s *Store) List() ([]Event, error) {
 		e.UpdatedAt = time.Unix(updatedAt, 0).UTC()
 		if analysisJSON != "" && analysisJSON != "{}" {
 			_ = json.Unmarshal([]byte(analysisJSON), &e.Analysis)
+		}
+		if rawData != "" {
+			e.RawData = json.RawMessage(rawData)
 		}
 		events = append(events, e)
 	}
@@ -121,15 +129,19 @@ func (s *Store) Create(e Event) (*Event, error) {
 	if err != nil {
 		return nil, err
 	}
+	rawData := ""
+	if len(e.RawData) > 0 {
+		rawData = string(e.RawData)
+	}
 	res, err := s.db.Exec(`
 		INSERT INTO events
 			(event_type, decision, importance, narrative,
 			 gain_type, gain_kind, gain_value, gain_symbol, gain_details,
-			 source_service, analysis, read, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+			 source_service, analysis, raw_data, read, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
 	`, e.EventType, e.Decision, e.Importance, e.Narrative,
 		e.Gain.Type, e.Gain.Kind, e.Gain.Value, e.Gain.Symbol, e.Gain.Details,
-		e.SourceService, string(analysisJSON), now, now,
+		e.SourceService, string(analysisJSON), rawData, now, now,
 	)
 	if err != nil {
 		return nil, err

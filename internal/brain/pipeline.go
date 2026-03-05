@@ -2,6 +2,7 @@ package brain
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -86,6 +87,16 @@ func (p *Pipeline) Run(ctx context.Context, signals []datasync.RawSignal) (Pipel
 	p.svc.kernel.mu.RUnlock()
 
 	// ── Step 2: Triage + Decide + Write ─────────────────────────────────────
+	// Pre-serialise each signal into JSON for the raw_data column.
+	rawDataCache := make([]json.RawMessage, len(analysed))
+	for i, as := range analysed {
+		if as != nil {
+			if b, err := json.Marshal(as.Signal); err == nil {
+				rawDataCache[i] = b
+			}
+		}
+	}
+
 	for i, as := range analysed {
 		if as == nil {
 			log.Printf("brain/pipeline: signal[%d] LLM error: %v — skipping", i, errs[i])
@@ -123,7 +134,10 @@ func (p *Pipeline) Run(ctx context.Context, signals []datasync.RawSignal) (Pipel
 		switch action {
 		case "GHOST":
 			decision = activities.Declined
-			narrative = fmt.Sprintf("Ghosted: %s", reason)
+			narrative = fmt.Sprintf(
+				"This message was ignored — it contains pressure language or urgency tactics (manipulation score: %.0f%%). No response was sent.",
+				req.ManipulationPct*100,
+			)
 			analysis.TriageGate = "manipulation"
 			result.Ghosted++
 			log.Printf("brain/pipeline: [%s] %q → GHOST (manipulation=%.0f%%) %s",
@@ -131,7 +145,10 @@ func (p *Pipeline) Run(ctx context.Context, signals []datasync.RawSignal) (Pipel
 
 		case "REJECT":
 			decision = activities.Declined
-			narrative = fmt.Sprintf("Rejected: %s", reason)
+			narrative = fmt.Sprintf(
+				"Skipped — the estimated value ($%.2f) doesn't justify your attention. At your current rate, this signal needs to be worth at least $%.2f to act on.",
+				req.EstimatedROI, roiThreshold,
+			)
 			analysis.TriageGate = "financial_insignificance"
 			result.Rejected++
 			log.Printf("brain/pipeline: [%s] %q → REJECT (financial_insignificance) roi=%.2f roi_threshold=%.2f time=%.2fh manip=%.0f%%",
@@ -149,7 +166,7 @@ func (p *Pipeline) Run(ctx context.Context, signals []datasync.RawSignal) (Pipel
 			analysis.DecideUtility = eval.Utility
 			analysis.DecideThreshold = vals.UtilityThreshold
 			if eval.Execute {
-				narrative = fmt.Sprintf("%s | %s", as.Narrative, eval.Reason)
+				narrative = as.Narrative
 				analysis.TriageGate = "accepted"
 				p.svc.ledger.LogSuccess(p.svc.uid, int64(eval.Utility))
 				result.Accepted++
@@ -161,7 +178,7 @@ func (p *Pipeline) Run(ctx context.Context, signals []datasync.RawSignal) (Pipel
 					action := execution.ClassifyAction(as.Signal, as)
 					if action.Type != execution.ActionNone {
 						if shielded {
-							narrative = fmt.Sprintf("[SHIELDED] %s | %s", shieldNote, narrative)
+							narrative = fmt.Sprintf("%s %s", shieldNote, narrative)
 						}
 						event := activities.Event{
 							EventType:     as.EventType,
@@ -171,6 +188,7 @@ func (p *Pipeline) Run(ctx context.Context, signals []datasync.RawSignal) (Pipel
 							Analysis:      analysis,
 							Gain:          as.Gain,
 							SourceService: as.Signal.ServiceSlug,
+							RawData:       rawDataCache[i],
 						}
 						created, createErr := p.events.Create(event)
 						if createErr != nil {
@@ -190,14 +208,21 @@ func (p *Pipeline) Run(ctx context.Context, signals []datasync.RawSignal) (Pipel
 				decision = activities.Automated
 			} else {
 				decision = activities.Declined
-				narrative = fmt.Sprintf("Rejected post-decide: %s", eval.Reason)
 				if eval.Utility <= vals.UtilityThreshold {
 					analysis.TriageGate = "decide_utility"
+					narrative = fmt.Sprintf(
+						"Reviewed but not actioned — after accounting for your time cost, the net value ($%.2f) doesn't clear your bar of $%.2f.",
+						eval.AdjustedROI, vals.UtilityThreshold,
+					)
 					log.Printf("brain/pipeline: [%s] %q → REJECT (decide_utility) utility=%.2f threshold=%.2f roi=%.2f time=%.2fh",
 						as.Signal.ServiceSlug, as.Signal.Title,
 						eval.Utility, vals.UtilityThreshold, req.EstimatedROI, req.TimeCommitment)
 				} else {
 					analysis.TriageGate = "decide_risk"
+					narrative = fmt.Sprintf(
+						"Reviewed but not actioned — this carries too much reputational risk (%.0f%%) given your current risk tolerance of %.0f%%.",
+						op.ReputationRisk*100, vals.RiskTolerance*100,
+					)
 					log.Printf("brain/pipeline: [%s] %q → REJECT (decide_risk) manip=%.0f%% risk_tolerance=%.2f utility=%.2f",
 						as.Signal.ServiceSlug, as.Signal.Title,
 						req.ManipulationPct*100, vals.RiskTolerance, eval.Utility)
@@ -227,6 +252,7 @@ func (p *Pipeline) Run(ctx context.Context, signals []datasync.RawSignal) (Pipel
 			Analysis:      analysis,
 			Gain:          as.Gain,
 			SourceService: as.Signal.ServiceSlug,
+			RawData:       rawDataCache[i],
 		}
 		if _, err := p.events.Create(event); err != nil {
 			log.Printf("brain/pipeline: write event for signal[%d]: %v", i, err)
