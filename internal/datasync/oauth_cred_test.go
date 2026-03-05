@@ -251,13 +251,13 @@ func TestEngineRun_403_DisconnectsOAuthService(t *testing.T) {
 	engine := NewEngine(store, []Adapter{forbidden})
 	engine.Run(context.Background()) //nolint:errcheck
 
-	// The service should now be Disconnected.
+	// The service should now be NeedsReauth — not fully disconnected, just flagged.
 	svc, err := store.Get(svcID)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	if svc.Status != integrations.Disconnected {
-		t.Errorf("status = %v, want Disconnected after 403", svc.Status)
+	if svc.Status != integrations.NeedsReauth {
+		t.Errorf("status = %v, want NeedsReauth after 403", svc.Status)
 	}
 }
 

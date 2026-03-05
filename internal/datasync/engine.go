@@ -126,11 +126,11 @@ func (e *Engine) Run(ctx context.Context) ([]RawSignal, error) {
 		}
 
 		// On 403 from an OAuth service: the token lacks required scopes.
-		// A refresh won't help — mark the service disconnected so the user must re-authorize.
+		// A refresh won't help — mark the service as NeedsReauth so the user is prompted to re-authorize.
 		if err != nil && strings.Contains(err.Error(), "HTTP 403") && svc.AuthMethod == integrations.OAuth2Auth {
-			log.Printf("datasync: [%s] 403 — insufficient OAuth scopes; marking service disconnected", svc.Slug)
-			if disconnErr := e.services.DisconnectOAuth(svc.ID); disconnErr != nil {
-				log.Printf("datasync: [%s] failed to disconnect: %v", svc.Slug, disconnErr)
+			log.Printf("datasync: [%s] 403 — insufficient OAuth scopes; user must re-authorize", svc.Slug)
+			if reauthErr := e.services.MarkNeedsReauth(svc.ID); reauthErr != nil {
+				log.Printf("datasync: [%s] failed to mark needs-reauth: %v", svc.Slug, reauthErr)
 			}
 		}
 

@@ -493,6 +493,22 @@ func (s *Store) TryRefresh(id int, slug string) (string, error) {
 	return newToken, nil
 }
 
+// MarkNeedsReauth marks an OAuth service as NeedsReauth — the token is missing required
+// scopes and cannot be fixed by a refresh. Client credentials (client_id/secret) are kept
+// so the user can re-authorize without re-entering their app credentials.
+func (s *Store) MarkNeedsReauth(id int) error {
+	_, err := s.db.Exec(`
+		UPDATE services SET
+			status              = ?,
+			oauth_access_token  = '',
+			oauth_refresh_token = '',
+			oauth_token_expiry  = 0,
+			updated_at          = ?
+		WHERE id = ?
+	`, NeedsReauth, time.Now().UTC().Unix(), id)
+	return err
+}
+
 // DisconnectOAuth marks an OAuth service as Disconnected without clearing client credentials.
 // Used when a token refresh fails — the user can re-authorise without re-entering app creds.
 func (s *Store) DisconnectOAuth(id int) error {

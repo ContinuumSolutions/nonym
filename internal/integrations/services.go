@@ -10,6 +10,7 @@ const (
 	Disconnected ConnectionStatus = iota // not installed
 	Pending                              // credentials being entered
 	Connected                            // connected and active
+	NeedsReauth                          // connected before but token lacks required scopes — user must re-authorize
 )
 
 // AuthMethod describes how the integration authenticates.
@@ -30,7 +31,7 @@ type Service struct {
 	Color          string           `json:"color"` // brand hex color, e.g. "#4285F4"; empty for custom services
 	Description    string           `json:"description"`
 	AuthMethod     AuthMethod       `json:"auth_method" enums:"0,1"`
-	Status         ConnectionStatus `json:"status" enums:"0,1,2"`
+	Status         ConnectionStatus `json:"status" enums:"0,1,2,3"`
 	Custom         bool             `json:"custom"`
 	APIKey         string           `json:"api_key,omitempty"` // masked on read, never raw
 	APIEndpoint    string           `json:"api_endpoint,omitempty"`
