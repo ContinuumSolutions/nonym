@@ -100,7 +100,14 @@ var registry = []ServiceDef{
 		AuthURL:     "https://slack.com/oauth/v2/authorize",
 		TokenURL:    "https://slack.com/api/oauth.v2.access",
 		RevokeURL:   "https://slack.com/api/auth.revoke",
-		Scopes:      []string{"channels:read", "channels:history", "groups:read", "groups:history", "im:read", "im:history"},
+		// No bot scopes (Scopes = scope= param). We request only user scopes so the
+		// returned token is the user's own token (authed_user.access_token), which
+		// can read the user's actual DMs and channels — not just bot DMs.
+		Scopes:  []string{},
+		NoPKCE:  true, // Slack does not support PKCE
+		ExtraParams: map[string]string{
+			"user_scope": "channels:read channels:history groups:read groups:history im:read im:history",
+		},
 	},
 	{
 		Slug:        "zoho-mail",

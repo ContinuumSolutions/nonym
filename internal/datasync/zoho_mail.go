@@ -29,10 +29,12 @@ func (a *ZohoMailAdapter) Pull(ctx context.Context, creds Credentials, since tim
 		return nil, fmt.Errorf("zoho-mail: get account id: %w", err)
 	}
 
-	// Step 2: list unread messages (newest first, up to 25).
+	// Step 2: list recent messages (newest first, up to 50).
 	// Zoho uses `limit` (not `count`) and sortorder=true for descending.
+	// No status filter — read/unread both surface as signals; the `since` window
+	// in the calling engine handles deduplication across sync cycles.
 	url := fmt.Sprintf(
-		"%s/api/accounts/%s/messages/view?status=unread&limit=25&sortorder=true",
+		"%s/api/accounts/%s/messages/view?limit=50&sortorder=true",
 		apiBase, accountID,
 	)
 	body, err := authGet(ctx, url, creds.OAuthAccessToken)

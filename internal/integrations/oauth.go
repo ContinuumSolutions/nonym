@@ -81,6 +81,12 @@ type tokenResponse struct {
 	ExpiresIn    int    `json:"expires_in"`
 	Error        string `json:"error"`
 	ErrorDesc    string `json:"error_description"`
+	// Slack OAuth v2 returns the user token nested inside authed_user when
+	// user_scope is requested. Top-level access_token is the bot token (empty
+	// when no bot scopes are requested).
+	AuthedUser struct {
+		AccessToken string `json:"access_token"`
+	} `json:"authed_user"`
 }
 
 // exchangeCode exchanges an authorization code for access/refresh tokens.
@@ -126,6 +132,11 @@ func exchangeCode(ctx context.Context, def *ServiceDef, clientID, clientSecret, 
 	}
 	if tr.Error != "" {
 		return "", "", time.Time{}, fmt.Errorf("exchange code: %s: %s", tr.Error, tr.ErrorDesc)
+	}
+	// Slack OAuth v2: when only user_scope is requested, the user token lives in
+	// authed_user.access_token and the top-level access_token is absent.
+	if tr.AccessToken == "" && tr.AuthedUser.AccessToken != "" {
+		tr.AccessToken = tr.AuthedUser.AccessToken
 	}
 	if tr.AccessToken == "" {
 		return "", "", time.Time{}, fmt.Errorf("exchange code: empty access_token in response")
