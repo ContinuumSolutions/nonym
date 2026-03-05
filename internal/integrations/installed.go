@@ -82,13 +82,13 @@ func (s *Store) ListConnected() ([]ConnectedService, error) {
 					if svc.OAuthTokenURLOverride != "" {
 						effectiveDef.TokenURL = svc.OAuthTokenURLOverride
 					}
-					newAccess, newExpiry, refreshErr := refreshToken(context.Background(), &effectiveDef, clientID, clientSecret, svc.OAuthRefreshToken)
+					newAccess, newRefresh, newExpiry, refreshErr := refreshToken(context.Background(), &effectiveDef, clientID, clientSecret, svc.OAuthRefreshToken)
 					if refreshErr != nil {
 						log.Printf("integrations: token refresh for %s failed: %v — marking disconnected", svc.Slug, refreshErr)
 						s.DisconnectOAuth(svc.ID) //nolint:errcheck
 						continue                  // skip this service from the result
 					}
-					if updateErr := s.UpdateOAuthTokens(svc.ID, newAccess, newExpiry.Unix()); updateErr != nil {
+					if updateErr := s.UpdateOAuthTokens(svc.ID, newAccess, newRefresh, newExpiry.Unix()); updateErr != nil {
 						log.Printf("integrations: store refreshed token for %s: %v", svc.Slug, updateErr)
 					}
 					svc.OAuthAccessToken = newAccess
@@ -153,13 +153,13 @@ func (s *Store) GetConnectedBySlug(slug string) (*ConnectedService, error) {
 				if svc.OAuthTokenURLOverride != "" {
 					effectiveDef.TokenURL = svc.OAuthTokenURLOverride
 				}
-				newAccess, newExpiry, refreshErr := refreshToken(context.Background(), &effectiveDef, clientID, clientSecret, svc.OAuthRefreshToken)
+				newAccess, newRefresh, newExpiry, refreshErr := refreshToken(context.Background(), &effectiveDef, clientID, clientSecret, svc.OAuthRefreshToken)
 				if refreshErr != nil {
 					log.Printf("integrations: token refresh for %s failed: %v — marking disconnected", svc.Slug, refreshErr)
 					s.DisconnectOAuth(svc.ID) //nolint:errcheck
 					return nil, ErrNotFound
 				}
-				if updateErr := s.UpdateOAuthTokens(svc.ID, newAccess, newExpiry.Unix()); updateErr != nil {
+				if updateErr := s.UpdateOAuthTokens(svc.ID, newAccess, newRefresh, newExpiry.Unix()); updateErr != nil {
 					log.Printf("integrations: store refreshed token for %s: %v", svc.Slug, updateErr)
 				}
 				svc.OAuthAccessToken = newAccess

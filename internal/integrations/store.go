@@ -446,15 +446,28 @@ func (s *Store) CompleteOAuth(id int, accessToken, refreshToken string, expiry i
 }
 
 // UpdateOAuthTokens replaces the access token and expiry after a background refresh (step 9d).
-func (s *Store) UpdateOAuthTokens(id int, accessToken string, expiry int64) error {
+// When newRefresh is non-empty (e.g. Zoho rotating tokens), the stored refresh token is also
+// replaced — failing to do so would invalidate the old token and break all future refreshes.
+func (s *Store) UpdateOAuthTokens(id int, accessToken, newRefresh string, expiry int64) error {
 	encAccess, err := encrypt(s.key, accessToken)
 	if err != nil {
 		return err
 	}
+	if newRefresh == "" {
+		_, err = s.db.Exec(`
+			UPDATE services SET oauth_access_token = ?, oauth_token_expiry = ?, updated_at = ?
+			WHERE id = ?
+		`, encAccess, expiry, time.Now().UTC().Unix(), id)
+		return err
+	}
+	encRefresh, err := encrypt(s.key, newRefresh)
+	if err != nil {
+		return err
+	}
 	_, err = s.db.Exec(`
-		UPDATE services SET oauth_access_token = ?, oauth_token_expiry = ?, updated_at = ?
+		UPDATE services SET oauth_access_token = ?, oauth_refresh_token = ?, oauth_token_expiry = ?, updated_at = ?
 		WHERE id = ?
-	`, encAccess, expiry, time.Now().UTC().Unix(), id)
+	`, encAccess, encRefresh, expiry, time.Now().UTC().Unix(), id)
 	return err
 }
 
@@ -481,12 +494,12 @@ func (s *Store) TryRefresh(id int, slug string) (string, error) {
 	if tokenURLOverride != "" {
 		effectiveDef.TokenURL = tokenURLOverride
 	}
-	newToken, newExpiry, err := refreshToken(context.Background(), &effectiveDef, clientID, clientSecret, refreshTok)
+	newToken, newRefreshTok, newExpiry, err := refreshToken(context.Background(), &effectiveDef, clientID, clientSecret, refreshTok)
 	if err != nil {
 		s.DisconnectOAuth(id) //nolint:errcheck
 		return "", fmt.Errorf("refresh token exchange failed: %w", err)
 	}
-	if err := s.UpdateOAuthTokens(id, newToken, newExpiry.Unix()); err != nil {
+	if err := s.UpdateOAuthTokens(id, newToken, newRefreshTok, newExpiry.Unix()); err != nil {
 		log.Printf("integrations: persist refreshed token for %s (id=%d): %v", slug, id, err)
 	}
 	log.Printf("integrations: token refreshed for %s (id=%d) — new expiry %s", slug, id, newExpiry.Format("2006-01-02 15:04 UTC"))

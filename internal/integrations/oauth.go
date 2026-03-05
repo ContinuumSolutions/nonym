@@ -143,7 +143,9 @@ func exchangeCode(ctx context.Context, def *ServiceDef, clientID, clientSecret, 
 }
 
 // refreshToken uses the refresh_token grant to obtain a new access_token.
-func refreshToken(ctx context.Context, def *ServiceDef, clientID, clientSecret, refresh string) (access string, expiry time.Time, err error) {
+// newRefresh is non-empty only when the provider returns a rotated refresh token (e.g. Zoho).
+// Callers must persist newRefresh when non-empty, otherwise the old token becomes invalid.
+func refreshToken(ctx context.Context, def *ServiceDef, clientID, clientSecret, refresh string) (access, newRefresh string, expiry time.Time, err error) {
 	body := url.Values{
 		"grant_type":    {"refresh_token"},
 		"refresh_token": {refresh},
@@ -155,33 +157,33 @@ func refreshToken(ctx context.Context, def *ServiceDef, clientID, clientSecret, 
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, def.TokenURL, strings.NewReader(body.Encode()))
 	if err != nil {
-		return "", time.Time{}, fmt.Errorf("refresh token: build request: %w", err)
+		return "", "", time.Time{}, fmt.Errorf("refresh token: build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", time.Time{}, fmt.Errorf("refresh token: %w", err)
+		return "", "", time.Time{}, fmt.Errorf("refresh token: %w", err)
 	}
 	defer resp.Body.Close()
 
 	var tr tokenResponse
 	if err := json.NewDecoder(resp.Body).Decode(&tr); err != nil {
-		return "", time.Time{}, fmt.Errorf("refresh token: decode: %w", err)
+		return "", "", time.Time{}, fmt.Errorf("refresh token: decode: %w", err)
 	}
 	if tr.Error != "" {
-		return "", time.Time{}, fmt.Errorf("refresh token: %s: %s", tr.Error, tr.ErrorDesc)
+		return "", "", time.Time{}, fmt.Errorf("refresh token: %s: %s", tr.Error, tr.ErrorDesc)
 	}
 	if tr.AccessToken == "" {
-		return "", time.Time{}, fmt.Errorf("refresh token: empty access_token in response")
+		return "", "", time.Time{}, fmt.Errorf("refresh token: empty access_token in response")
 	}
 
 	exp := time.Now().Add(time.Duration(tr.ExpiresIn) * time.Second)
 	if tr.ExpiresIn == 0 {
 		exp = time.Now().Add(time.Hour)
 	}
-	return tr.AccessToken, exp, nil
+	return tr.AccessToken, tr.RefreshToken, exp, nil
 }
 
 // revokeToken calls the service's revocation endpoint. Best-effort — errors are logged,
