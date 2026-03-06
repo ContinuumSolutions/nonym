@@ -2,7 +2,6 @@ package datasync
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -73,7 +72,7 @@ func (a *GmailAdapter) Pull(ctx context.Context, creds Credentials, since time.T
 			ServiceSlug: a.Slug(),
 			Category:    "Communication",
 			Title:       headers["subject"],
-			Body:        base64.StdEncoding.EncodeToString([]byte(m.Snippet)),
+			Body:        m.Snippet,
 			Metadata: map[string]string{
 				"from":       headers["from"],
 				"message_id": msg.ID,
