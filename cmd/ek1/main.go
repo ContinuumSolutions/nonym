@@ -7,12 +7,15 @@
 package main
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -81,8 +84,47 @@ func syncInterval() time.Duration {
 	return time.Duration(mins) * time.Minute
 }
 
+// isValidPIN validates that PIN is exactly 4 digits
+func isValidPIN(pin string) bool {
+	matched, _ := regexp.MatchString("^[0-9]{4}$", pin)
+	return matched
+}
+
+// hashPIN creates a SHA-256 hex hash of the PIN (matches frontend expectation)
+func hashPIN(pin string) string {
+	hash := sha256.Sum256([]byte(pin))
+	return hex.EncodeToString(hash[:])
+}
+
+// promptForPIN prompts the user to enter a 4-digit PIN with confirmation
+func promptForPIN() (string, error) {
+	var pin1, pin2 string
+
+	fmt.Print("Enter new 4-digit PIN: ")
+	_, err := fmt.Scanln(&pin1)
+	if err != nil {
+		return "", err
+	}
+
+	if !isValidPIN(pin1) {
+		return "", fmt.Errorf("PIN must be exactly 4 digits")
+	}
+
+	fmt.Print("Confirm PIN: ")
+	_, err = fmt.Scanln(&pin2)
+	if err != nil {
+		return "", err
+	}
+
+	if pin1 != pin2 {
+		return "", fmt.Errorf("PINs do not match")
+	}
+
+	return pin1, nil
+}
+
 // handleCLICommands processes admin CLI operations
-func handleCLICommands(resetPIN, showPINStatus bool) {
+func handleCLICommands(resetPIN, showPINStatus, setPIN bool) {
 	db, err := initDB()
 	if err != nil {
 		log.Fatalf("failed to open database: %v", err)
@@ -94,16 +136,53 @@ func handleCLICommands(resetPIN, showPINStatus bool) {
 		log.Fatalf("pin store migration failed: %v", err)
 	}
 
+	profileStore := profile.NewStore(db)
+	if err := profileStore.Migrate(); err != nil {
+		log.Fatalf("profile migration failed: %v", err)
+	}
+
 	if showPINStatus {
-		configured, err := pinStore.IsConfigured()
+		pinHash, err := profileStore.GetPINHash()
 		if err != nil {
 			log.Fatalf("failed to check PIN status: %v", err)
 		}
-		if configured {
+		if pinHash != "" {
 			fmt.Println("✅ PIN is configured")
 		} else {
 			fmt.Println("❌ PIN is not configured")
 		}
+	}
+
+	if setPIN {
+		// Check if PIN already exists
+		existingHash, err := profileStore.GetPINHash()
+		if err != nil {
+			log.Fatalf("failed to check existing PIN: %v", err)
+		}
+		if existingHash != "" {
+			fmt.Print("⚠️  A PIN is already configured. Do you want to overwrite it? (y/N): ")
+			var response string
+			fmt.Scanln(&response)
+			if response != "y" && response != "Y" && response != "yes" {
+				fmt.Println("❌ PIN setting cancelled")
+				return
+			}
+		}
+
+		pin, err := promptForPIN()
+		if err != nil {
+			log.Fatalf("failed to get PIN: %v", err)
+		}
+
+		pinHash := hashPIN(pin)
+		_, err = profileStore.SetPIN(pinHash)
+		if err != nil {
+			log.Fatalf("failed to set PIN: %v", err)
+		}
+
+		fmt.Println("✅ PIN has been set successfully")
+		fmt.Printf("📝 PIN hash: %s\n", pinHash)
+		return
 	}
 
 	if resetPIN {
@@ -111,11 +190,12 @@ func handleCLICommands(resetPIN, showPINStatus bool) {
 		var response string
 		fmt.Scanln(&response)
 		if response == "y" || response == "Y" || response == "yes" {
-			if err := pinStore.ResetPIN(); err != nil {
+			_, err := profileStore.RemovePIN()
+			if err != nil {
 				log.Fatalf("failed to reset PIN: %v", err)
 			}
 			fmt.Println("✅ PIN has been reset successfully")
-			fmt.Println("💡 You can now set up a new PIN via the frontend or API")
+			fmt.Println("💡 You can now set up a new PIN via --set-pin or the frontend")
 		} else {
 			fmt.Println("❌ PIN reset cancelled")
 		}
@@ -126,6 +206,7 @@ func main() {
 	// ── CLI Commands ─────────────────────────────────────────────────────────
 	var resetPIN = flag.Bool("reset-pin", false, "Reset the PIN authentication")
 	var showPINStatus = flag.Bool("pin-status", false, "Show PIN configuration status")
+	var setPIN = flag.Bool("set-pin", false, "Set a new PIN (interactive)")
 	flag.Parse()
 
 	if err := godotenv.Load(".env"); err != nil {
@@ -133,8 +214,8 @@ func main() {
 	}
 
 	// Handle CLI commands before starting server
-	if *resetPIN || *showPINStatus {
-		handleCLICommands(*resetPIN, *showPINStatus)
+	if *resetPIN || *showPINStatus || *setPIN {
+		handleCLICommands(*resetPIN, *showPINStatus, *setPIN)
 		return
 	}
 
