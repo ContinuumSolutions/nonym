@@ -56,7 +56,6 @@ func (m *JWTMiddleware) isPublicEndpoint(path string) bool {
 		"/auth/pin/status",
 		"/auth/pin/setup",
 		"/auth/login",
-		"/profile/pin",          // PIN setup/change endpoint
 		"/docs",                 // Swagger docs
 		"/swagger",              // Swagger UI
 	}
