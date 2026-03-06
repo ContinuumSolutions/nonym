@@ -31,7 +31,7 @@ import (
 	"github.com/egokernel/ek1/internal/signals"
 	"github.com/gofiber/fiber/v2"
 
-	// "github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	fiberswagger "github.com/swaggo/fiber-swagger"
@@ -190,15 +190,16 @@ func main() {
 		app.Use(sentryfiber.New(sentryfiber.Options{Repanic: true}))
 	}
 
-	// allowedOrigins := os.Getenv("CORS_ORIGINS")
-	// if allowedOrigins == "" {
-	// 	allowedOrigins = "http://genesis.egokernel.com:8080"
-	// }
-	// app.Use(cors.New(cors.Config{
-	// 	AllowOrigins: allowedOrigins,
-	// 	AllowHeaders: "Origin, Content-Type, Accept, Authorization",
-	// 	AllowMethods: "GET, POST, PUT, DELETE, OPTIONS",
-	// }))
+	allowedOrigins := os.Getenv("CORS_ORIGINS")
+	if allowedOrigins == "" {
+		allowedOrigins = "http://genesis.egokernel.com:8080"
+	}
+	app.Use(cors.New(cors.Config{
+		AllowOrigins:     allowedOrigins,
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
+		AllowMethods:     "GET, POST, PUT, DELETE, OPTIONS",
+		AllowCredentials: true,
+	}))
 
 	// @Summary      Health check
 	// @Tags         system
