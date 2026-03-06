@@ -22,7 +22,7 @@ type InteractionClass struct {
 	Overlap float64 `json:"overlap"`
 }
 
-const classifySystemPrompt = `You analyse communication signals for a personal AI agent.
+const baseClassifyPrompt = `You analyse communication signals for a personal AI agent.
 Classify each interaction strictly from the USER'S perspective.
 
 Respond ONLY with valid JSON — no markdown, no explanation:
@@ -38,7 +38,16 @@ Definitions:
 - neutral:         informational, transactional, scheduling, or otherwise unclassifiable
 
 overlap: probability that this contact's problem domain matches the user's apparent expertise.
-Use context clues (industry, topics discussed, requests made). Default to 0.1 if unclear.`
+Use the USER CONTEXT block (if present) to accurately assess skill overlap. Default to 0.1 if unclear.`
+
+// buildClassifyPrompt returns the harvest classification prompt, optionally prefixed
+// with the user's identity context to improve overlap detection accuracy.
+func buildClassifyPrompt(identity string) string {
+	if identity == "" {
+		return baseClassifyPrompt
+	}
+	return identity + "\n\n" + baseClassifyPrompt
+}
 
 // ClassifyInteraction asks the LLM to classify a single communication or calendar
 // signal for social graph analysis. Used exclusively by the harvest engine.
@@ -46,7 +55,7 @@ func (c *Client) ClassifyInteraction(ctx context.Context, signal datasync.RawSig
 	payload, err := json.Marshal(map[string]interface{}{
 		"model": c.model,
 		"messages": []map[string]string{
-			{"role": "system", "content": classifySystemPrompt},
+			{"role": "system", "content": buildClassifyPrompt(c.getIdentityContext())},
 			{"role": "user", "content": buildUserMessage(signal)},
 		},
 		"stream":     false,

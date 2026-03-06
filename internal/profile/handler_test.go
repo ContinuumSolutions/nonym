@@ -14,7 +14,7 @@ func setupApp(t *testing.T) *fiber.App {
 	t.Helper()
 	store := newTestStore(t) // defined in store_test.go
 	app := fiber.New()
-	NewHandler(store).RegisterRoutes(app)
+	NewHandler(store, nil, nil).RegisterRoutes(app)
 	return app
 }
 

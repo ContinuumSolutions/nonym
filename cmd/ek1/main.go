@@ -189,6 +189,17 @@ func main() {
 
 	// ── Pipeline ─────────────────────────────────────────────────────────────
 	aiClient := newAIClient()
+
+	// Inject user identity into every LLM prompt. Reads fresh from DB on each call
+	// so any update via PUT /profile/identity is reflected in the next pipeline run.
+	aiClient.WithIdentityProvider(func() string {
+		id, err := profileStore.GetIdentity()
+		if err != nil || id.IsEmpty() {
+			return ""
+		}
+		return id.IdentityContext()
+	})
+
 	allAdapters, waAdapter := datasync.NewDefaultAdapters(os.Getenv("WHATSAPP_VERIFY_TOKEN"))
 	syncEngine := datasync.NewEngine(servicesStore, allAdapters)
 	pipeline := brain.NewPipeline(brainSvc, aiClient, eventsStore, checkInStore, execEngine)
@@ -229,8 +240,27 @@ func main() {
 
 	app.Get("/swagger/*", fiberswagger.WrapHandler)
 
+	// Build a narratives callback for POST /profile/infer — pulls recent event narratives
+	// from the already-populated events store without creating a package import cycle.
+	narrativesFn := profile.NarrativesFunc(func(limit int) []string {
+		events, err := eventsStore.List()
+		if err != nil {
+			return nil
+		}
+		var out []string
+		for _, e := range events {
+			if len(out) >= limit {
+				break
+			}
+			if e.Narrative != "" {
+				out = append(out, e.Narrative)
+			}
+		}
+		return out
+	})
+
 	waAdapter.RegisterRoutes(app)
-	profile.NewHandler(profileStore).RegisterRoutes(app)
+	profile.NewHandler(profileStore, aiClient, narrativesFn).RegisterRoutes(app)
 	auth.NewHandler(authStore, profileStore).RegisterRoutes(app)
 	brain.NewHandler(brainSvc, eventsStore).RegisterRoutes(app)
 	ledger.NewHandler(sqliteLedger, "ek1-kernel").RegisterRoutes(app)

@@ -19,10 +19,11 @@ import (
 
 // Client talks to a locally running Ollama instance.
 type Client struct {
-	host      string
-	model     string
-	numCtx    int // context window size (tokens); 0 = Ollama default
-	numPredict int // max tokens to generate; 0 = Ollama default
+	host        string
+	model       string
+	numCtx      int // context window size (tokens); 0 = Ollama default
+	numPredict  int // max tokens to generate; 0 = Ollama default
+	identityCtx func() string // optional: called per-request to inject user identity into prompts
 }
 
 // NewClient creates a client pointing at host with the given model.
@@ -44,6 +45,19 @@ func (c *Client) WithNumCtx(n int) *Client    { c.numCtx = n; return c }
 
 // WithNumPredict caps the maximum tokens the model will generate per reply.
 func (c *Client) WithNumPredict(n int) *Client { c.numPredict = n; return c }
+
+// WithIdentityProvider registers a function that returns the current user identity context.
+// It is called on every LLM analysis request; the returned string is prepended to the
+// system prompt so the model knows who it is scoring signals for.
+// Pass a closure that reads from your profile store: func() string { return store.GetIdentityContext() }
+func (c *Client) WithIdentityProvider(fn func() string) *Client { c.identityCtx = fn; return c }
+
+func (c *Client) getIdentityContext() string {
+	if c.identityCtx == nil {
+		return ""
+	}
+	return c.identityCtx()
+}
 
 // ollamaOptions builds the options map for the Ollama API request.
 func (c *Client) ollamaOptions(temperature float64) map[string]any {
@@ -96,7 +110,7 @@ type llmOutput struct {
 	} `json:"gain"`
 }
 
-const systemPrompt = `You are the analysis engine for a personal autonomous AI agent.
+const baseSystemPrompt = `You are the analysis engine for a personal autonomous AI agent.
 You receive raw signals from the user's connected services (email, calendar, finance, health) and must analyse each one.
 
 Respond ONLY with valid JSON matching this exact schema — no markdown, no explanation:
@@ -120,14 +134,24 @@ Rules:
 - manipulation_pct > 0.15 causes the signal to be ghosted automatically
 - estimated_roi and time_commitment drive the financial significance filter
 - narrative is a single sentence, factual, no filler words
-- gain.value is 0 and gain.details is "" when there is no meaningful gain`
+- gain.value is 0 and gain.details is "" when there is no meaningful gain
+- Use the USER CONTEXT block (if present) to calibrate estimated_roi and importance accurately`
+
+// buildSystemPrompt returns the analysis system prompt, optionally prefixed with
+// the user's identity context so the LLM can score signals relative to their profession.
+func buildSystemPrompt(identity string) string {
+	if identity == "" {
+		return baseSystemPrompt
+	}
+	return identity + "\n\n" + baseSystemPrompt
+}
 
 // Analyse sends one RawSignal to Ollama and returns a structured AnalysedSignal.
 func (c *Client) Analyse(ctx context.Context, signal datasync.RawSignal) (*AnalysedSignal, error) {
 	payload, err := json.Marshal(map[string]interface{}{
 		"model": c.model,
 		"messages": []map[string]string{
-			{"role": "system", "content": systemPrompt},
+			{"role": "system", "content": buildSystemPrompt(c.getIdentityContext())},
 			{"role": "user", "content": buildUserMessage(signal)},
 		},
 		"stream":     false,

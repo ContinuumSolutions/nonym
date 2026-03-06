@@ -1,21 +1,37 @@
 package profile
 
 import (
+	"context"
+
 	"github.com/gofiber/fiber/v2"
 )
 
-type Handler struct {
-	store *Store
+// IdentityInferrer is satisfied by *ai.Client. Defined here as an interface
+// to avoid an import cycle (ai already imports activities; profile is lower-level).
+type IdentityInferrer interface {
+	InferIdentity(ctx context.Context, narratives []string) (string, error)
 }
 
-func NewHandler(store *Store) *Handler {
-	return &Handler{store: store}
+// NarrativesFunc returns the most recent N event narratives for identity inference.
+// Wired in main.go as a closure over the activities store.
+type NarrativesFunc func(limit int) []string
+
+type Handler struct {
+	store        *Store
+	inferrer     IdentityInferrer // nil = infer endpoint disabled
+	narrativesFn NarrativesFunc   // nil = infer endpoint disabled
+}
+
+func NewHandler(store *Store, inferrer IdentityInferrer, narrativesFn NarrativesFunc) *Handler {
+	return &Handler{store: store, inferrer: inferrer, narrativesFn: narrativesFn}
 }
 
 func (h *Handler) RegisterRoutes(r fiber.Router) {
 	r.Get("/profile", h.get)
 	r.Put("/profile/preferences", h.updatePreferences)
 	r.Put("/profile/connection", h.updateConnection)
+	r.Put("/profile/identity", h.updateIdentity)
+	r.Post("/profile/infer", h.inferIdentity)
 }
 
 // @Summary      Get profile
@@ -74,6 +90,67 @@ func (h *Handler) updateConnection(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "kernel_name is required"})
 	}
 	profile, err := h.store.UpdateConnection(body)
+	if err != nil {
+		return err
+	}
+	return c.JSON(profile)
+}
+
+// @Summary      Update user identity
+// @Description  Sets profession, industry, skills, goals and other identity fields used to
+//               personalise LLM signal scoring. All fields are optional; send only what you want
+//               to update — empty string fields are ignored (existing values preserved).
+// @Tags         profile
+// @Accept       json
+// @Produce      json
+// @Param        body  body      profile.UserIdentity  true  "Identity fields"
+// @Success      200   {object}  profile.Profile
+// @Failure      400   {object}  map[string]interface{}
+// @Failure      500   {object}  map[string]interface{}
+// @Router       /profile/identity [put]
+func (h *Handler) updateIdentity(c *fiber.Ctx) error {
+	var body UserIdentity
+	if err := c.BodyParser(&body); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+	profile, err := h.store.UpdateIdentity(body)
+	if err != nil {
+		return err
+	}
+	return c.JSON(profile)
+}
+
+// @Summary      Auto-infer user identity from signal history
+// @Description  Runs the local LLM over the most recent event narratives to generate a
+//               plain-text professional summary. The result is stored in inferred_summary
+//               and injected into future LLM prompts alongside any user-declared fields.
+//               Requires at least 5 events in history to produce a meaningful result.
+// @Tags         profile
+// @Produce      json
+// @Success      200  {object}  profile.Profile
+// @Failure      422  {object}  map[string]interface{}
+// @Failure      500  {object}  map[string]interface{}
+// @Router       /profile/infer [post]
+func (h *Handler) inferIdentity(c *fiber.Ctx) error {
+	if h.inferrer == nil || h.narrativesFn == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(
+			fiber.Map{"error": "identity inference not available"},
+		)
+	}
+
+	narratives := h.narrativesFn(40)
+	if len(narratives) < 5 {
+		return c.Status(fiber.StatusUnprocessableEntity).JSON(
+			fiber.Map{"error": "not enough signal history — run at least one sync cycle first"},
+		)
+	}
+
+	summary, err := h.inferrer.InferIdentity(c.Context(), narratives)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	profile, err := h.store.SaveInferredSummary(summary)
 	if err != nil {
 		return err
 	}
