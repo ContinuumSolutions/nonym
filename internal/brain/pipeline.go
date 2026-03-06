@@ -112,6 +112,16 @@ func (p *Pipeline) Run(ctx context.Context, signals []datasync.RawSignal) (Pipel
 			ManipulationPct: as.Request.ManipulationPct,
 		}
 
+		// Signals pulled directly from financial/health APIs via authenticated adapters
+		// cannot contain human manipulation tactics — zero any false-positive LLM score.
+		// Note: email-delivered financial alerts (zoho-mail, gmail) are NOT in this list;
+		// those still go through the manipulation check (phishing is possible via email).
+		// The primary defence for email false-positives is the updated LLM prompt rules.
+		switch as.Signal.ServiceSlug {
+		case "plaid", "stripe", "oura", "fitbit", "whoop":
+			req.ManipulationPct = 0
+		}
+
 		// ROI threshold mirrors Triage Gate 1 so we can surface it in analysis.
 		roiThreshold := vals.BaseHourlyRate * req.TimeCommitment * vals.TemporalSovereignty * MinROIMultiplier
 
