@@ -148,6 +148,17 @@ func (p *PINStore) RemovePIN(currentPIN string) error {
 	return err
 }
 
+// ResetPIN clears the PIN without verification (admin function)
+func (p *PINStore) ResetPIN() error {
+	now := time.Now().Unix()
+	_, err := p.db.Exec(`
+		UPDATE pin_auth
+		SET pin_hash = '', updated_at = ?
+		WHERE id = 1
+	`, now)
+	return err
+}
+
 // isValidPIN validates that PIN is exactly 4 digits
 func isValidPIN(pin string) bool {
 	matched, _ := regexp.MatchString("^[0-9]{4}$", pin)

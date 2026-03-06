@@ -8,6 +8,8 @@ package main
 
 import (
 	"database/sql"
+	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -79,9 +81,61 @@ func syncInterval() time.Duration {
 	return time.Duration(mins) * time.Minute
 }
 
+// handleCLICommands processes admin CLI operations
+func handleCLICommands(resetPIN, showPINStatus bool) {
+	db, err := initDB()
+	if err != nil {
+		log.Fatalf("failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	pinStore := auth.NewPINStore(db)
+	if err := pinStore.Migrate(); err != nil {
+		log.Fatalf("pin store migration failed: %v", err)
+	}
+
+	if showPINStatus {
+		configured, err := pinStore.IsConfigured()
+		if err != nil {
+			log.Fatalf("failed to check PIN status: %v", err)
+		}
+		if configured {
+			fmt.Println("✅ PIN is configured")
+		} else {
+			fmt.Println("❌ PIN is not configured")
+		}
+	}
+
+	if resetPIN {
+		fmt.Print("⚠️  Are you sure you want to reset the PIN? (y/N): ")
+		var response string
+		fmt.Scanln(&response)
+		if response == "y" || response == "Y" || response == "yes" {
+			if err := pinStore.ResetPIN(); err != nil {
+				log.Fatalf("failed to reset PIN: %v", err)
+			}
+			fmt.Println("✅ PIN has been reset successfully")
+			fmt.Println("💡 You can now set up a new PIN via the frontend or API")
+		} else {
+			fmt.Println("❌ PIN reset cancelled")
+		}
+	}
+}
+
 func main() {
+	// ── CLI Commands ─────────────────────────────────────────────────────────
+	var resetPIN = flag.Bool("reset-pin", false, "Reset the PIN authentication")
+	var showPINStatus = flag.Bool("pin-status", false, "Show PIN configuration status")
+	flag.Parse()
+
 	if err := godotenv.Load(".env"); err != nil {
 		log.Println("no .env file found, falling back to environment")
+	}
+
+	// Handle CLI commands before starting server
+	if *resetPIN || *showPINStatus {
+		handleCLICommands(*resetPIN, *showPINStatus)
+		return
 	}
 
 	if dsn := os.Getenv("SENTRY_DSN"); dsn != "" {
