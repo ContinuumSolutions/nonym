@@ -17,6 +17,7 @@ import (
 	"github.com/egokernel/ek1/internal/notifications"
 	"github.com/egokernel/ek1/internal/profile"
 	"github.com/egokernel/ek1/internal/scheduler"
+	"github.com/egokernel/ek1/internal/signals"
 	"github.com/gofiber/fiber/v2"
 	"github.com/valyala/fasthttp"
 )
@@ -49,6 +50,7 @@ type Handler struct {
 	notifs   *notifications.Store
 	harvest  *harvest.Store
 	sched    *scheduler.Scheduler
+	signals  *signals.Store
 	history  *HistoryStore
 	uid      string
 }
@@ -64,6 +66,7 @@ func NewHandler(
 	notifs *notifications.Store,
 	harvestStore *harvest.Store,
 	sched *scheduler.Scheduler,
+	signalsStore *signals.Store,
 	history *HistoryStore,
 	uid string,
 ) *Handler {
@@ -77,6 +80,7 @@ func NewHandler(
 		notifs:   notifs,
 		harvest:  harvestStore,
 		sched:    sched,
+		signals:  signalsStore,
 		history:  history,
 		uid:      uid,
 	}

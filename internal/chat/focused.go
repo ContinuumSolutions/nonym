@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egokernel/ek1/internal/activities"
+	"github.com/egokernel/ek1/internal/signals"
 )
 
 // buildFocusedUserMessage replaces the last user turn with a version that
@@ -60,7 +60,20 @@ func focusedFooter(sb *strings.Builder) {
 // ── Per-intent builders ───────────────────────────────────────────────────────
 
 func (h *Handler) focusTodayMessage(ctx context.Context, original string) (string, bool) {
-	events, _ := h.events.List()
+	// Get relevant signals that need attention
+	relevantFilter := signals.FilterCriteria{Category: "relevant"}
+	pending := signals.StatusPending
+	relevantFilter.Status = &pending
+	relevantSignals, _ := h.signals.List(relevantFilter, 20)
+
+	// Get high priority signals (for counting/display)
+
+	// Get signals needing replies
+	needsReply := true
+	replyFilter := signals.FilterCriteria{NeedsReply: &needsReply}
+	replyFilter.Status = &pending
+	replySignals, _ := h.signals.List(replyFilter, 10)
+
 	notifs, _ := h.notifs.ListUnread()
 	ci, _ := h.bio.Get()
 	hasData := false
@@ -68,48 +81,39 @@ func (h *Handler) focusTodayMessage(ctx context.Context, original string) (strin
 	var sb strings.Builder
 	focusedHeader(&sb, original)
 
-	// Show accepted + pending events first (these need attention)
-	var active []activities.Event
-	var recent []activities.Event
-	for _, e := range events {
-		if e.Decision == activities.Accepted || e.Decision == activities.Pending {
-			active = append(active, e)
-		} else {
-			recent = append(recent, e)
-		}
-		if len(active) >= 20 {
-			break
-		}
-	}
-
-	if len(active) > 0 {
+	if len(relevantSignals) > 0 {
 		hasData = true
-		fmt.Fprintf(&sb, "\nACTIVE ITEMS — accepted or pending (%d):\n", len(active))
-		for _, e := range active {
-			fmt.Fprintf(&sb, "  • [%s] %s | %s | %s\n",
-				e.CreatedAt.Format("Jan 2 15:04"),
-				eventTypeName(e.EventType),
-				decisionName(e.Decision),
-				e.Narrative,
+		fmt.Fprintf(&sb, "\nRELEVANT ITEMS — need your attention (%d):\n", len(relevantSignals))
+		for _, s := range relevantSignals {
+			priority := ""
+			if s.Analysis.Priority == "high" {
+				priority = " 🔴"
+			} else if s.Analysis.Priority == "medium" {
+				priority = " 🟡"
+			}
+			fmt.Fprintf(&sb, "  • [%s] %s%s — %s\n",
+				s.ProcessedAt.Format("Jan 2 15:04"),
+				s.OriginalSignal.Title,
+				priority,
+				s.Analysis.Summary,
 			)
-		}
-	} else if len(recent) > 0 {
-		hasData = true
-		limit := 10
-		if len(recent) < limit {
-			limit = len(recent)
-		}
-		sb.WriteString("\nRECENT DECISIONS (no pending/accepted items right now):\n")
-		for _, e := range recent[:limit] {
-			fmt.Fprintf(&sb, "  • [%s] %s | %s | %s\n",
-				e.CreatedAt.Format("Jan 2 15:04"),
-				eventTypeName(e.EventType),
-				decisionName(e.Decision),
-				e.Narrative,
-			)
+			if s.Analysis.SuggestedAction != "" {
+				fmt.Fprintf(&sb, "    → %s\n", s.Analysis.SuggestedAction)
+			}
 		}
 	} else {
-		sb.WriteString("\nACTIVE ITEMS: EMPTY — no events processed yet.\n")
+		sb.WriteString("\nRELEVANT ITEMS: EMPTY — no signals need your attention right now.\n")
+	}
+
+	if len(replySignals) > 0 {
+		hasData = true
+		fmt.Fprintf(&sb, "\nNEED REPLIES (%d):\n", len(replySignals))
+		for _, s := range replySignals {
+			fmt.Fprintf(&sb, "  • %s — %s\n",
+				s.OriginalSignal.Title,
+				s.Analysis.Summary,
+			)
+		}
 	}
 
 	if len(notifs) > 0 {

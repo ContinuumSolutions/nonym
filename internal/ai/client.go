@@ -13,7 +13,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/egokernel/ek1/internal/activities"
 	"github.com/egokernel/ek1/internal/datasync"
 )
 
@@ -71,81 +70,73 @@ func (c *Client) ollamaOptions(temperature float64) map[string]any {
 	return opts
 }
 
-// SignalRequest carries the triage inputs derived from the LLM analysis.
-// It mirrors brain.IncomingRequest but lives here to avoid an import cycle
-// (brain/pipeline.go imports ai; ai must not import brain).
-type SignalRequest struct {
-	ID              string
-	SenderID        string
-	Description     string
-	EstimatedROI    float64
-	TimeCommitment  float64
-	ManipulationPct float64
-}
 
 // AnalysedSignal is the fully structured output produced by the LLM for one RawSignal.
-// It contains everything the brain pipeline needs: triage input and a partial Event.
+// It contains the relevance analysis, categorization, and optional reply draft.
 type AnalysedSignal struct {
-	Signal     datasync.RawSignal
-	Request    SignalRequest         // for EgoKernel.Triage() — convert in brain/pipeline.go
-	EventType  activities.EventType
-	Importance activities.Importance
-	Narrative  string
-	Gain       activities.Gain
+	Signal          datasync.RawSignal
+	Category        string // relevant|newsletter|automated|notification
+	Priority        string // high|medium|low
+	NeedsReply      bool
+	IsRelevant      bool
+	Reasoning       string
+	SuggestedAction string
+	ReplyDraft      string
+	ReplyTone       string
+	Summary         string
 }
 
 // llmOutput is the JSON schema the LLM is instructed to produce.
 type llmOutput struct {
-	EventType       string  `json:"event_type"`       // Finance|Calendar|Communication|Billing|Health
-	Importance      string  `json:"importance"`       // Low|Medium|High
-	EstimatedROI    float64 `json:"estimated_roi"`    // USD value of engaging with the signal
-	TimeCommitment  float64 `json:"time_commitment"`  // hours needed to respond or act
-	ManipulationPct float64 `json:"manipulation_pct"` // 0.0–1.0
-	Narrative       string  `json:"narrative"`        // one sentence
-	Gain            struct {
-		Type    string  `json:"type"`    // Positive|Negative
-		Value   float64 `json:"value"`
-		Symbol  string  `json:"symbol"`  // e.g. "$" or "hrs"
-		Details string  `json:"details"`
-	} `json:"gain"`
+	Category        string `json:"category"`         // relevant|newsletter|automated|notification
+	Priority        string `json:"priority"`         // high|medium|low
+	NeedsReply      bool   `json:"needs_reply"`      // true if requires a response
+	IsRelevant      bool   `json:"is_relevant"`      // true if user should pay attention
+	Reasoning       string `json:"reasoning"`        // why relevant/not relevant
+	SuggestedAction string `json:"suggested_action"` // what user should do
+	ReplyDraft      string `json:"reply_draft"`      // drafted reply if needs_reply
+	ReplyTone       string `json:"reply_tone"`       // professional|casual|friendly|formal
+	Summary         string `json:"summary"`          // one sentence summary
 }
 
-const baseSystemPrompt = `You are the analysis engine for a personal autonomous AI agent.
-You receive raw signals from the user's connected services (email, calendar, finance, health) and must analyse each one.
+const baseSystemPrompt = `You are a smart email and signal analysis assistant.
+Your job is to analyze incoming communications and determine:
+1. Is this relevant to the user?
+2. What category is it?
+3. Does it need a reply?
+4. Should the user focus on this now?
 
-Respond ONLY with valid JSON matching this exact schema — no markdown, no explanation:
+Respond ONLY with valid JSON matching this exact schema:
 {
-  "event_type": "Finance|Calendar|Communication|Billing|Health",
-  "importance": "Low|Medium|High",
-  "estimated_roi": <float — USD value of engaging with this signal, 0 if none>,
-  "time_commitment": <float — hours needed to respond or act, 0 if passive>,
-  "manipulation_pct": <float 0.0–1.0 — detect guilt language, urgency traps, false scarcity>,
-  "narrative": "<one factual sentence: what happened and why it matters to the user>",
-  "gain": {
-    "type": "Positive|Negative",
-    "value": <float — magnitude of the gain or loss, 0 if none>,
-    "symbol": "<currency or unit, e.g. $ or hrs, empty string if none>",
-    "details": "<brief description of the gain/loss, empty string if none>"
-  }
+  "category": "relevant|newsletter|automated|notification",
+  "priority": "high|medium|low",
+  "needs_reply": true|false,
+  "is_relevant": true|false,
+  "reasoning": "<why this is/isn't relevant to the user>",
+  "suggested_action": "<what the user should do, if anything>",
+  "reply_draft": "<drafted reply if needs_reply is true, empty string otherwise>",
+  "reply_tone": "professional|casual|friendly|formal",
+  "summary": "<one sentence: what this is and why it matters>"
 }
 
-Rules:
-- event_type must match the signal category where possible
-- manipulation_pct > 0.15 causes the signal to be ghosted automatically
-- manipulation_pct MUST be 0.0 for: automated system notifications, payment processor alerts,
-  bank statements, chargeback notices, invoices, receipts, calendar invites, health data sync,
-  or any message generated by a software system rather than written by a human. Manipulation
-  detection applies ONLY to human-written messages that attempt to pressure, guilt, or deceive.
-  Transactional language ("Status: PROCESSING", "Amount due", "Action required") is NOT manipulation.
-- estimated_roi and time_commitment drive the financial significance filter
-- for Finance and Billing signals, estimated_roi should reflect the actual transaction amount
-  or chargeback value — these are real money events, not just attention costs
-- ALL monetary values (estimated_roi, gain.value) MUST be in USD. Convert local currencies
-  to USD at current rates. Never use KES, GBP, EUR etc. as the raw number.
-- gain.value must be a realistic USD amount — never exceed 1000000 (one million) for a single signal
-- narrative is a single sentence, factual, no filler words
-- gain.value is 0 and gain.details is "" when there is no meaningful gain
-- Use the USER CONTEXT block (if present) to calibrate estimated_roi and importance accurately`
+Categories explained:
+- "relevant" → Needs user attention (personal emails, important notifications, deadlines)
+- "newsletter" → Automated marketing/updates (can be archived)
+- "automated" → System notifications, receipts, confirmations
+- "notification" → Service alerts, status updates
+
+Priority levels:
+- "high" → Urgent, time-sensitive, requires immediate attention
+- "medium" → Important but can wait a few hours
+- "low" → Informational, no action needed
+
+Reply drafting rules:
+- Only draft if needs_reply is true AND it's from a person (not a system)
+- Keep replies concise and match the original tone
+- Use professional tone for business, casual for personal
+- Include specific details from the original message when relevant
+
+Use the USER CONTEXT (if present) to understand what's relevant to this specific user.`
 
 // buildSystemPrompt returns the analysis system prompt, optionally prefixed with
 // the user's identity context so the LLM can score signals relative to their profession.
@@ -261,116 +252,20 @@ func buildUserMessage(signal datasync.RawSignal) string {
 	return sb.String()
 }
 
-// Sanity bounds for LLM-generated numeric fields.
-// The LLM occasionally hallucinates large numbers (currency confusion, misread IDs).
-// These caps prevent garbage values from corrupting gain totals and triage thresholds.
-const (
-	maxROI            = 10_000_000.0 // $10M per signal — above this the LLM is hallucinating
-	maxTimeCommitment = 168.0        // 1 week in hours — hard upper bound
-	maxGainMoney      = 10_000_000.0 // $10M gain/loss per event
-	maxGainTime       = 168.0        // 1 week in hours
-)
-
-func clamp(v, min, max float64) float64 {
-	if v < min {
-		return min
-	}
-	if v > max {
-		return max
-	}
-	return v
-}
 
 // toAnalysedSignal maps the raw LLM output into the typed AnalysedSignal.
 func toAnalysedSignal(signal datasync.RawSignal, out llmOutput) *AnalysedSignal {
-	gainType := activities.Positive
-	if strings.EqualFold(out.Gain.Type, "Negative") {
-		gainType = activities.Negative
-	}
-	gainKind := parseGainKind(out.Gain.Symbol)
-
-	// Clamp numeric fields — LLM can return absurd values (e.g. confusing KES with USD,
-	// treating transaction IDs as dollar amounts, or hallucinating enterprise-scale numbers).
-	roi := clamp(out.EstimatedROI, 0, maxROI)
-	timeCommit := clamp(out.TimeCommitment, 0, maxTimeCommitment)
-	manipPct := clamp(out.ManipulationPct, 0, 1)
-	gainMax := maxGainMoney
-	if gainKind == activities.Time {
-		gainMax = maxGainTime
-	}
-	gainValue := clamp(out.Gain.Value, 0, gainMax)
-
-	// Derive sender from whatever metadata key the adapter populates.
-	sender := signal.Metadata["from"]
-	if sender == "" {
-		sender = signal.Metadata["user"]
-	}
-	if sender == "" {
-		sender = signal.ServiceSlug
-	}
-
 	return &AnalysedSignal{
-		Signal: signal,
-		Request: SignalRequest{
-			ID:              fmt.Sprintf("%s-%d", signal.ServiceSlug, signal.OccurredAt.Unix()),
-			SenderID:        sender,
-			Description:     out.Narrative,
-			EstimatedROI:    roi,
-			TimeCommitment:  timeCommit,
-			ManipulationPct: manipPct,
-		},
-		EventType:  parseEventType(out.EventType, signal.Category),
-		Importance: parseImportance(out.Importance),
-		Narrative:  out.Narrative,
-		Gain: activities.Gain{
-			Type:    gainType,
-			Kind:    gainKind,
-			Value:   float32(gainValue),
-			Symbol:  out.Gain.Symbol,
-			Details: out.Gain.Details,
-		},
+		Signal:          signal,
+		Category:        out.Category,
+		Priority:        out.Priority,
+		NeedsReply:      out.NeedsReply,
+		IsRelevant:      out.IsRelevant,
+		Reasoning:       out.Reasoning,
+		SuggestedAction: out.SuggestedAction,
+		ReplyDraft:      out.ReplyDraft,
+		ReplyTone:       out.ReplyTone,
+		Summary:         out.Summary,
 	}
 }
 
-func parseEventType(s, fallback string) activities.EventType {
-	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "finance":
-		return activities.Finance
-	case "calendar":
-		return activities.Calendar
-	case "communication":
-		return activities.Communication
-	case "billing":
-		return activities.Billing
-	case "health":
-		return activities.Health
-	case "other":
-		return activities.Other
-	}
-	// Derive from signal category if LLM returned an unrecognised value.
-	if fallback != "" && fallback != s {
-		return parseEventType(fallback, "")
-	}
-	return activities.Other // unrecognised — explicit fallback value
-}
-
-// parseGainKind derives the gain kind from the symbol the LLM returned.
-// Time-unit symbols map to Time; everything else (including "$") maps to Money.
-func parseGainKind(symbol string) activities.GainKind {
-	switch strings.ToLower(strings.TrimSpace(symbol)) {
-	case "h", "hr", "hrs", "hours", "min", "mins", "minutes":
-		return activities.Time
-	}
-	return activities.Money
-}
-
-func parseImportance(s string) activities.Importance {
-	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "high":
-		return activities.High
-	case "medium":
-		return activities.Medium
-	default:
-		return activities.Low
-	}
-}
