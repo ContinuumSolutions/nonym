@@ -107,8 +107,6 @@ func (h *Handler) chat(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "message is required"})
 	}
 
-	systemPrompt := h.buildSystemPrompt()
-
 	// Convert history: map "kernel" → "assistant" for Ollama, then append the new user message.
 	turns := make([]ai.ChatTurn, 0, len(req.History)+1)
 	for _, m := range req.History {
@@ -124,32 +122,39 @@ func (h *Handler) chat(c *fiber.Ctx) error {
 	// always earlier than the kernel reply, even when both land in the same second.
 	_ = h.history.Append("user", req.Message)
 
-	// Bypass LLM entirely for structured data queries — local models hallucinate.
+	// Bypass LLM entirely for exact structured queries — local models hallucinate.
 	if directReply, handled := h.directDataResponse(c.Context(), req.Message); handled {
 		_ = h.history.Append("kernel", directReply)
 		return c.JSON(Response{Reply: directReply, Timestamp: time.Now().UTC()})
 	}
 
 	var (
-		reply string
-		err   error
+		reply        string
+		err          error
+		systemPrompt string
 	)
-	if needsLiveData(req.Message) {
-		liveCtx, hasData := h.buildLiveContext(c.Context())
+
+	// Intent-based focused prompting: embed targeted DB data directly into the
+	// user turn so the LLM is forced to answer from the actual records rather
+	// than generating a generic response.
+	intent := detectIntent(req.Message)
+	if intent != IntentGeneral {
+		focusedMsg, hasData := h.buildFocusedUserMessage(c.Context(), intent, req.Message)
 		if !hasData {
-			// Short-circuit: local LLMs hallucinate numbers when data is absent.
-			// Return a direct "no data" reply without calling the model.
 			reply = "No data yet — connect your integrations at Connectors and trigger a sync first."
 			_ = h.history.Append("kernel", reply)
 			return c.JSON(Response{Reply: reply, Timestamp: time.Now().UTC()})
 		}
-		systemPrompt += liveCtx
-	}
-	if tc, ok := h.ai.(ToolChatter); ok && needsLiveData(req.Message) {
-		reply, err = tc.ChatWithTools(c.Context(), systemPrompt, turns, h.buildTools())
+		// Replace the last turn with the data-enriched message.
+		turns[len(turns)-1] = ai.ChatTurn{Role: "user", Content: focusedMsg}
+		// Use a lean system prompt — data is already in the user turn.
+		systemPrompt = h.buildIdentityPrompt()
 	} else {
-		reply, err = h.ai.Chat(c.Context(), systemPrompt, turns)
+		// General question — use the full system prompt with all background context.
+		systemPrompt = h.buildSystemPrompt()
 	}
+
+	reply, err = h.ai.Chat(c.Context(), systemPrompt, turns)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -188,8 +193,6 @@ func (h *Handler) chatStream(c *fiber.Ctx) error {
 		return h.chat(c)
 	}
 
-	systemPrompt := h.buildSystemPrompt()
-
 	turns := make([]ai.ChatTurn, 0, len(req.History)+1)
 	for _, m := range req.History {
 		role := m.Role
@@ -200,7 +203,7 @@ func (h *Handler) chatStream(c *fiber.Ctx) error {
 	}
 	turns = append(turns, ai.ChatTurn{Role: "user", Content: req.Message})
 
-	// Bypass LLM entirely for structured data queries — local models hallucinate.
+	// Bypass LLM entirely for exact structured queries.
 	if directReply, handled := h.directDataResponse(c.Context(), req.Message); handled {
 		_ = h.history.Append("user", req.Message)
 		c.Set("Content-Type", "text/event-stream")
@@ -219,18 +222,21 @@ func (h *Handler) chatStream(c *fiber.Ctx) error {
 		return nil
 	}
 
-	// Pre-inject live DB context when the message is data-related.
+	// Intent-based focused prompting.
+	var systemPrompt string
 	noData := false
-	if needsLiveData(req.Message) {
-		liveCtx, hasData := h.buildLiveContext(c.Context())
+	intent := detectIntent(req.Message)
+	if intent != IntentGeneral {
+		focusedMsg, hasData := h.buildFocusedUserMessage(c.Context(), intent, req.Message)
 		if !hasData {
 			noData = true
 		} else {
-			systemPrompt += liveCtx
+			turns[len(turns)-1] = ai.ChatTurn{Role: "user", Content: focusedMsg}
+			systemPrompt = h.buildIdentityPrompt()
 		}
+	} else {
+		systemPrompt = h.buildSystemPrompt()
 	}
-
-	tc, canUseTools := h.ai.(ToolChatter)
 
 	c.Set("Content-Type", "text/event-stream")
 	c.Set("Cache-Control", "no-cache")
@@ -247,7 +253,6 @@ func (h *Handler) chatStream(c *fiber.Ctx) error {
 			w.Flush()
 		}
 
-		// Short-circuit: no data in DB — skip the model entirely.
 		if noData {
 			msg := "No data yet — connect your integrations at Connectors and trigger a sync first."
 			sendEvent(map[string]string{"token": msg})
@@ -256,21 +261,6 @@ func (h *Handler) chatStream(c *fiber.Ctx) error {
 			return
 		}
 
-		// Tool-calling path: resolve tools, then stream the final answer.
-		if canUseTools && needsLiveData(req.Message) {
-			reply, err := tc.ChatWithTools(ctx, systemPrompt, turns, h.buildTools())
-			if err != nil {
-				sendEvent(map[string]string{"error": err.Error()})
-				return
-			}
-			// Emit the full reply as a single token so the frontend receives it.
-			sendEvent(map[string]string{"token": reply})
-			_ = h.history.Append("kernel", reply)
-			sendEvent(map[string]any{"done": true, "timestamp": time.Now().UTC()})
-			return
-		}
-
-		// Plain streaming path (no tool calling).
 		var fullReply strings.Builder
 		err := streamer.ChatStream(ctx, systemPrompt, turns, func(token string) {
 			fullReply.WriteString(token)
@@ -304,6 +294,37 @@ func (h *Handler) getHistory(c *fiber.Ctx) error {
 		msgs = []Message{}
 	}
 	return c.JSON(msgs)
+}
+
+// buildIdentityPrompt returns a lean system prompt with just the kernel's
+// identity and grounding rules. Used for data-intent queries where the
+// actual records are already embedded in the user turn.
+func (h *Handler) buildIdentityPrompt() string {
+	now := time.Now().UTC()
+	var sb strings.Builder
+
+	prof, _ := h.prof.Get()
+	name := "EK-1"
+	tz := "UTC"
+	if prof != nil {
+		name = prof.KernelName
+		tz = prof.Timezone
+	}
+
+	fmt.Fprintf(&sb, `You are %s, a personal AI agent — a digital extension of the user.
+Today: %s | Timezone: %s
+
+The user's message contains a DATA block with their actual records.
+Your job is to answer the question using ONLY the data provided in that block.
+
+Rules:
+- Every fact, number, or name you state must appear verbatim in the DATA block.
+- If a section in the DATA block says EMPTY, tell the user that section has no data yet.
+- Be direct and specific — reference the actual items by name/date/value.
+- Never refuse a question. Never say "I can't help with that."
+`, name, now.Format("Monday 2 Jan 2006, 15:04 UTC"), tz)
+
+	return sb.String()
 }
 
 // buildSystemPrompt gathers live data from every store and assembles the briefing
