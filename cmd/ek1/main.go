@@ -34,6 +34,7 @@ import (
 	"github.com/egokernel/ek1/internal/notifications"
 	"github.com/egokernel/ek1/internal/profile"
 	"github.com/egokernel/ek1/internal/scheduler"
+	"github.com/egokernel/ek1/internal/signals"
 	"github.com/gofiber/fiber/v2"
 
 	// "github.com/gofiber/fiber/v2/middleware/cors"
@@ -171,6 +172,25 @@ func main() {
 		log.Fatalf("execution queue migration failed: %v", err)
 	}
 
+	signalsStore := signals.NewStore(db)
+	if err := signalsStore.Migrate(); err != nil {
+		log.Fatalf("signals store migration failed: %v", err)
+	}
+
+	// ── JWT Authentication ──────────────────────────────────────────────────
+	pinStore := auth.NewPINStore(db)
+	if err := pinStore.Migrate(); err != nil {
+		log.Fatalf("pin store migration failed: %v", err)
+	}
+
+	jwtService, err := auth.NewJWTService("")
+	if err != nil {
+		log.Fatalf("JWT service initialization failed: %v", err)
+	}
+
+	tokenDenylist := auth.NewTokenDenylist()
+	defer tokenDenylist.Stop() // Clean shutdown
+
 	// ── Brain ────────────────────────────────────────────────────────────────
 	prof, err := profileStore.Get()
 	if err != nil {
@@ -260,6 +280,18 @@ func main() {
 	})
 
 	waAdapter.RegisterRoutes(app)
+
+	// ── JWT Authentication & Authorization ────────────────────────────────
+	jwtHandler := auth.NewJWTHandler(pinStore, jwtService, tokenDenylist)
+	jwtMiddleware := auth.NewJWTMiddleware(jwtService, tokenDenylist)
+
+	// Register JWT auth endpoints (public - no auth required)
+	jwtHandler.RegisterJWTRoutes(app)
+
+	// Apply JWT middleware to protect all routes
+	app.Use(jwtMiddleware.RequireAuth())
+
+	// ── Protected Routes (require authentication) ──────────────────────────
 	profile.NewHandler(profileStore, aiClient, narrativesFn).RegisterRoutes(app)
 	auth.NewHandler(authStore, profileStore).RegisterRoutes(app)
 	brain.NewHandler(brainSvc, eventsStore).RegisterRoutes(app)
@@ -285,7 +317,8 @@ func main() {
 	notifications.NewHandler(notifsStore).RegisterRoutes(app)
 	scheduler.NewHandler(sched).RegisterRoutes(app)
 	execution.NewHandler(execEngine, execQueueStore, eventsStore).RegisterRoutes(app)
-	chat.NewHandler(aiClient, brainSvc, profileStore, checkInStore, eventsStore, sqliteLedger, notifsStore, harvestStore, sched, chatHistoryStore, "ek1-kernel").RegisterRoutes(app)
+	signals.NewHandler(signalsStore).RegisterRoutes(app)
+	chat.NewHandler(aiClient, brainSvc, profileStore, checkInStore, eventsStore, sqliteLedger, notifsStore, harvestStore, sched, signalsStore, chatHistoryStore, "ek1-kernel").RegisterRoutes(app)
 
 	if domain != "" {
 		cacheDir := os.Getenv("CERT_CACHE_DIR")

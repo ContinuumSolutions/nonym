@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egokernel/ek1/internal/activities"
 	"github.com/egokernel/ek1/internal/signals"
 )
 

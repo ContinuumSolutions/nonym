@@ -80,135 +80,135 @@ PUT  /signals/:id/status         # Mark done/ignored/etc.
 ```json
 {
   "signal": {
-    "id": "email-123",
-    "service": "gmail",
-    "category": "relevant|newsletter|automated|notification",
-    "priority": "high|medium|low",
-    "title": "Contract renewal from Alice",
-    "body": "Hi, following up on...",
-    "analysis": {
-      "is_relevant": true,
-      "needs_reply": true,
-      "reasoning": "Contract deadline approaching, requires action",
-      "suggested_action": "Review terms and respond by Thursday"
-    },
-    "draft_reply": {
-      "generated": true,
-      "content": "Hi Alice,\n\nThanks for...",
-      "tone": "professional"
-    },
-    "status": "pending|done|ignored",
-    "created_at": "2024-03-06T10:30:00Z"
-  }
-}
-```
+      "id": "email-123",
+          "service": "gmail",
+              "category": "relevant|newsletter|automated|notification",
+                  "priority": "high|medium|low",
+                      "title": "Contract renewal from Alice",
+                          "body": "Hi, following up on...",
+                              "analysis": {
+                                    "is_relevant": true,
+                                          "needs_reply": true,
+                                                "reasoning": "Contract deadline approaching, requires action",
+                                                      "suggested_action": "Review terms and respond by Thursday"
+                                                          },
+                                                              "draft_reply": {
+                                                                    "generated": true,
+                                                                          "content": "Hi Alice,\n\nThanks for...",
+                                                                                "tone": "professional"
+                                                                                    },
+                                                                                        "status": "pending|done|ignored",
+                                                                                            "created_at": "2024-03-06T10:30:00Z"
+                                                                                              }
+                                                                                              }
+                                                                                              ```
 
-## Removed Features
-- ❌ Reputation ledger/scoring
-- ❌ Complex decision states (Accept/Decline/Negotiate)
-- ❌ Social debt tracking
-- ❌ Gain calculations
-- ❌ H2HI/entropy states
-- ❌ Biometric shields
-- ❌ Execution queues
+                                                                                              ## Removed Features
+                                                                                              - ❌ Reputation ledger/scoring
+                                                                                              - ❌ Complex decision states (Accept/Decline/Negotiate)
+                                                                                              - ❌ Social debt tracking
+                                                                                              - ❌ Gain calculations
+                                                                                              - ❌ H2HI/entropy states
+                                                                                              - ❌ Biometric shields
+                                                                                              - ❌ Execution queues
 
-## Kept Features
-- ✅ Multi-service integration (Gmail, Calendar, etc.)
-- ✅ Smart signal analysis via Ollama
-- ✅ User preferences for personalization
-- ✅ Chat interface for queries
-- ✅ Automatic sync/scheduling
+                                                                                              ## Kept Features
+                                                                                              - ✅ Multi-service integration (Gmail, Calendar, etc.)
+                                                                                              - ✅ Smart signal analysis via Ollama
+                                                                                              - ✅ User preferences for personalization
+                                                                                              - ✅ Chat interface for queries
+                                                                                              - ✅ Automatic sync/scheduling
 
-## Frontend Migration Tasks
+                                                                                              ## Frontend Migration Tasks
 
-### 1. Dashboard Redesign
-- [ ] Remove brain status/reputation widgets
-- [ ] Create "Needs Attention" priority list
-- [ ] Add draft reply management interface
-- [ ] Build category-based signal organization
+                                                                                              ### 1. Dashboard Redesign
+                                                                                              - [ ] Remove brain status/reputation widgets
+                                                                                              - [ ] Create "Needs Attention" priority list
+                                                                                              - [ ] Add draft reply management interface
+                                                                                              - [ ] Build category-based signal organization
 
-### 2. API Integration
-- [ ] Update to new `/signals` endpoints
-- [ ] Remove references to events/decisions/gains
-- [ ] Implement reply drafting workflow
-- [ ] Add signal status management
+                                                                                              ### 2. API Integration
+                                                                                              - [ ] Update to new `/signals` endpoints
+                                                                                              - [ ] Remove references to events/decisions/gains
+                                                                                              - [ ] Implement reply drafting workflow
+                                                                                              - [ ] Add signal status management
 
-### 3. Chat Improvements
-- [ ] Simplify chat intents (focus on relevance, not complex data)
-- [ ] Add reply generation commands
-- [ ] Remove complex system status queries
+                                                                                              ### 3. Chat Improvements
+                                                                                              - [ ] Simplify chat intents (focus on relevance, not complex data)
+                                                                                              - [ ] Add reply generation commands
+                                                                                              - [ ] Remove complex system status queries
 
-### 4. Settings Simplification
-- [ ] Keep user preferences for signal analysis
-- [ ] Remove reputation/decision thresholds
-- [ ] Add reply tone/style preferences
+                                                                                              ### 4. Settings Simplification
+                                                                                              - [ ] Keep user preferences for signal analysis
+                                                                                              - [ ] Remove reputation/decision thresholds
+                                                                                              - [ ] Add reply tone/style preferences
 
-## Implementation Status
+                                                                                              ## Implementation Status
 
-### ✅ Completed (Phase 1)
-- **Simplified AI analysis schema** — focuses on relevance, categorization, reply drafting
-- **New signals package** — `internal/signals/` with Signal, DraftReply models
-- **Signals store** — SQLite storage with filtering, status management
-- **Signals API handlers** — REST endpoints for signal management
-- **Fixed Gmail base64 decoding** — emails now readable by AI
-- **Ollama optimization** — `OLLAMA_KEEP_ALIVE=-1` for faster responses
-- **Focused chat prompting** — embeds targeted data in user messages for better grounding
+                                                                                              ### ✅ Completed (Phase 1)
+                                                                                              - **Simplified AI analysis schema** — focuses on relevance, categorization, reply drafting
+                                                                                              - **New signals package** — `internal/signals/` with Signal, DraftReply models
+                                                                                              - **Signals store** — SQLite storage with filtering, status management
+                                                                                              - **Signals API handlers** — REST endpoints for signal management
+                                                                                              - **Fixed Gmail base64 decoding** — emails now readable by AI
+                                                                                              - **Ollama optimization** — `OLLAMA_KEEP_ALIVE=-1` for faster responses
+                                                                                              - **Focused chat prompting** — embeds targeted data in user messages for better grounding
 
-### 🔄 In Progress (Phase 2)
-- **Chat handler integration** — signals store added to chat handlers (needs main.go wiring)
-- **Focused intent handlers** — "what should I focus on" now uses signals (other intents need updating)
+                                                                                              ### 🔄 In Progress (Phase 2)
+                                                                                              - **Chat handler integration** — signals store added to chat handlers (needs main.go wiring)
+                                                                                              - **Focused intent handlers** — "what should I focus on" now uses signals (other intents need updating)
 
-### ⏳ TODO (Phase 3 & 4)
-- **Main.go integration** — wire signals store into the app startup
-- **Remove old brain pipeline** — replace with simple signal processing loop
-- **Update remaining chat intents** — financial, health, etc. to use signals
-- **Frontend API migration** — update dashboard to use `/signals/*` endpoints
-- **Reply drafting UI** — interface for managing AI-generated replies
+                                                                                              ### ⏳ TODO (Phase 3 & 4)
+                                                                                              - **Main.go integration** — wire signals store into the app startup
+                                                                                              - **Remove old brain pipeline** — replace with simple signal processing loop
+                                                                                              - **Update remaining chat intents** — financial, health, etc. to use signals
+                                                                                              - **Frontend API migration** — update dashboard to use `/signals/*` endpoints
+                                                                                              - **Reply drafting UI** — interface for managing AI-generated replies
 
-### 🚧 Migration Notes
+                                                                                              ### 🚧 Migration Notes
 
-**To complete the backend:**
-1. Add signals store to `main.go` startup
-2. Create simple processing pipeline that calls `ai.AnalyseBatch()` → stores results in signals
-3. Replace brain/activities endpoints with signals endpoints
-4. Update chat focused handlers for remaining intents
+                                                                                              **To complete the backend:**
+                                                                                              1. Add signals store to `main.go` startup
+                                                                                              2. Create simple processing pipeline that calls `ai.AnalyseBatch()` → stores results in signals
+                                                                                              3. Replace brain/activities endpoints with signals endpoints
+                                                                                              4. Update chat focused handlers for remaining intents
 
-**API Changes Made:**
-```go
-// New signals endpoints (implemented)
-GET  /signals                    # List signals with filtering
-GET  /signals/relevant           # Signals needing attention
-GET  /signals/replies            # Signals needing replies
-GET  /signals/summary            # Dashboard counts
-PUT  /signals/:id/status         # Mark done/ignored/snoozed
-GET  /replies/pending            # AI-generated drafts
-PUT  /replies/:id                # Approve/edit/reject drafts
+                                                                                              **API Changes Made:**
+                                                                                              ```go
+                                                                                              // New signals endpoints (implemented)
+                                                                                              GET  /signals                    # List signals with filtering
+                                                                                              GET  /signals/relevant           # Signals needing attention
+                                                                                              GET  /signals/replies            # Signals needing replies
+                                                                                              GET  /signals/summary            # Dashboard counts
+                                                                                              PUT  /signals/:id/status         # Mark done/ignored/snoozed
+                                                                                              GET  /replies/pending            # AI-generated drafts
+                                                                                              PUT  /replies/:id                # Approve/edit/reject drafts
 
-// Old endpoints (to be replaced)
-GET  /activities/events          → /signals
-GET  /brain/events              → /signals/relevant
-GET  /brain/queue               → /replies/pending
-```
+                                                                                              // Old endpoints (to be replaced)
+                                                                                              GET  /activities/events          → /signals
+                                                                                              GET  /brain/events              → /signals/relevant
+                                                                                              GET  /brain/queue               → /replies/pending
+                                                                                              ```
 
-**Data Model Changes:**
-```go
-// Before: Complex Event with decision states
-type Event struct {
-    Decision Decision  // Accepted/Declined/etc.
-    Gain     Gain     // Complex financial tracking
-    // ... many fields
-}
+                                                                                              **Data Model Changes:**
+                                                                                              ```go
+                                                                                              // Before: Complex Event with decision states
+                                                                                              type Event struct {
+                                                                                                  Decision Decision  // Accepted/Declined/etc.
+                                                                                                      Gain     Gain     // Complex financial tracking
+                                                                                                          // ... many fields
+                                                                                                          }
 
-// After: Simple Signal with AI analysis
-type Signal struct {
-    Analysis ai.AnalysedSignal  // Category, priority, needs_reply, etc.
-    Status   Status            // pending/done/ignored/snoozed
-    // ... fewer, clearer fields
-}
-```
+                                                                                                          // After: Simple Signal with AI analysis
+                                                                                                          type Signal struct {
+                                                                                                              Analysis ai.AnalysedSignal  // Category, priority, needs_reply, etc.
+                                                                                                                  Status   Status            // pending/done/ignored/snoozed
+                                                                                                                      // ... fewer, clearer fields
+                                                                                                                      }
+                                                                                                                      ```
 
-## Success Metrics
-- **Relevance accuracy:** % of "relevant" signals user actually acts on
-- **Reply usage:** % of drafted replies sent (with/without edits)
-- **Time saved:** Reduced time from signal → action
-- **User satisfaction:** Simpler, more focused experience
+                                                                                                                      ## Success Metrics
+                                                                                                                      - **Relevance accuracy:** % of "relevant" signals user actually acts on
+                                                                                                                      - **Reply usage:** % of drafted replies sent (with/without edits)
+                                                                                                                      - **Time saved:** Reduced time from signal → action
+                                                                                                                      - **User satisfaction:** Simpler, more focused experience

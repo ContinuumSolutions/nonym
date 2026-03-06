@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/egokernel/ek1/internal/activities"
 	"github.com/egokernel/ek1/internal/datasync"
 )
 
@@ -84,7 +85,32 @@ type AnalysedSignal struct {
 	ReplyDraft      string
 	ReplyTone       string
 	Summary         string
+
+	// Deprecated: Legacy fields for backward compatibility during transition
+	Narrative string          `json:"narrative"`  // Use Summary instead
+	Request   LegacyRequest   `json:"request"`    // Use new fields instead
+	EventType LegacyEventType `json:"event_type"` // Use Category instead
+	Importance LegacyImportance `json:"importance"` // Use Priority instead
+	Gain      LegacyGain      `json:"gain"`       // Removed in simplified model
 }
+
+// Legacy types for backward compatibility during transition
+
+type LegacyEventType = activities.EventType
+type LegacyImportance = activities.Importance
+type LegacyGainType = activities.GainType
+type LegacyGainKind = activities.GainKind
+
+type LegacyRequest struct {
+	ID              string  `json:"id"`
+	SenderID        string  `json:"sender_id"`
+	Description     string  `json:"description"`
+	EstimatedROI    float64 `json:"estimated_roi"`
+	TimeCommitment  float64 `json:"time_commitment"`
+	ManipulationPct float64 `json:"manipulation_pct"`
+}
+
+type LegacyGain = activities.Gain
 
 // llmOutput is the JSON schema the LLM is instructed to produce.
 type llmOutput struct {
@@ -255,6 +281,15 @@ func buildUserMessage(signal datasync.RawSignal) string {
 
 // toAnalysedSignal maps the raw LLM output into the typed AnalysedSignal.
 func toAnalysedSignal(signal datasync.RawSignal, out llmOutput) *AnalysedSignal {
+	// Derive sender from metadata for backward compatibility
+	sender := signal.Metadata["from"]
+	if sender == "" {
+		sender = signal.Metadata["user"]
+	}
+	if sender == "" {
+		sender = signal.ServiceSlug
+	}
+
 	return &AnalysedSignal{
 		Signal:          signal,
 		Category:        out.Category,
@@ -266,6 +301,26 @@ func toAnalysedSignal(signal datasync.RawSignal, out llmOutput) *AnalysedSignal 
 		ReplyDraft:      out.ReplyDraft,
 		ReplyTone:       out.ReplyTone,
 		Summary:         out.Summary,
+
+		// Backward compatibility fields
+		Narrative: out.Summary, // Use summary as narrative
+		Request: LegacyRequest{
+			ID:              fmt.Sprintf("%s-%d", signal.ServiceSlug, signal.OccurredAt.Unix()),
+			SenderID:        sender,
+			Description:     out.Summary,
+			EstimatedROI:    0,     // Simplified: no ROI calculation
+			TimeCommitment:  0,     // Simplified: no time commitment
+			ManipulationPct: 0,     // Simplified: no manipulation detection
+		},
+		EventType:  activities.Other, // Default to Other event type
+		Importance: activities.Low,   // Default to Low importance
+		Gain: activities.Gain{
+			Type:    activities.Positive,
+			Kind:    activities.Money,
+			Value:   0,
+			Symbol:  "",
+			Details: "",
+		},
 	}
 }
 

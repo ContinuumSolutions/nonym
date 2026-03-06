@@ -39,37 +39,38 @@ type Action struct {
 //   - Finance/Billing + narrative contains late|delay|refund → ActionRequestRefund
 //   - Finance/Billing + narrative contains subscription|price increase → ActionCancelSubscription
 func ClassifyAction(signal datasync.RawSignal, as *ai.AnalysedSignal) Action {
-	narrative := strings.ToLower(as.Narrative)
+	summary := strings.ToLower(as.Summary)
 	category := signal.Category
 	slug := signal.ServiceSlug
 
 	switch {
-	case category == "Communication" && as.Request.ManipulationPct > 0.10:
+	case category == "Communication" && as.Category == "automated":
+		// Simple rule: auto-categorized emails can be archived
 		return Action{
 			Type:           ActionArchiveEmail,
 			ServiceSlug:    slug,
 			ResourceID:     signal.Metadata["message_id"],
 			ResourceMeta:   copyMeta(signal.Metadata),
-			Reason:         "manipulation detected",
+			Reason:         "automated email auto-archive",
 			EstimatedCost:  0,
-			ReputationRisk: as.Request.ManipulationPct,
+			ReputationRisk: 0.05,
 		}
 
-	case category == "Calendar" && as.Request.TimeCommitment <= 0.5 && as.Request.EstimatedROI < 100:
+	case category == "Calendar" && as.Priority == "low" && !as.IsRelevant:
 		return Action{
 			Type:           ActionDeclineCalendar,
 			ServiceSlug:    slug,
 			ResourceID:     signal.Metadata["event_id"],
 			ResourceMeta:   copyMeta(signal.Metadata),
-			Reason:         "low-value time commitment",
+			Reason:         "low priority calendar event",
 			EstimatedCost:  0,
 			ReputationRisk: 0.1,
 		}
 
 	case (category == "Finance" || category == "Billing") &&
-		(strings.Contains(narrative, "late") ||
-			strings.Contains(narrative, "delay") ||
-			strings.Contains(narrative, "refund")):
+		(strings.Contains(summary, "late") ||
+			strings.Contains(summary, "delay") ||
+			strings.Contains(summary, "refund")):
 		resourceID := signal.Metadata["charge_id"]
 		if resourceID == "" {
 			resourceID = signal.Metadata["transaction_id"]
@@ -85,8 +86,8 @@ func ClassifyAction(signal datasync.RawSignal, as *ai.AnalysedSignal) Action {
 		}
 
 	case (category == "Finance" || category == "Billing") &&
-		(strings.Contains(narrative, "subscription") ||
-			strings.Contains(narrative, "price increase")):
+		(strings.Contains(summary, "subscription") ||
+			strings.Contains(summary, "price increase")):
 		resourceID := signal.Metadata["account"]
 		if resourceID == "" {
 			resourceID = signal.Metadata["charge_id"]
