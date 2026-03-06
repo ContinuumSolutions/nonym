@@ -29,7 +29,12 @@ func NewHandler(store *Store, apiBaseURL, frontendOrigin string) *Handler {
 	return &Handler{store: store, apiBaseURL: apiBaseURL, frontendOrigin: frontendOrigin}
 }
 
-// RegisterRoutes mounts all integration endpoints on the given router.
+// RegisterPublicRoutes mounts only the public OAuth callback route (no auth required).
+func (h *Handler) RegisterPublicRoutes(r fiber.Router) {
+	r.Get("/oauth/callback", h.oauthCallback) // 9c - OAuth providers need access
+}
+
+// RegisterRoutes mounts all integration endpoints on the given router (requires auth).
 func (h *Handler) RegisterRoutes(r fiber.Router) {
 	r.Get("/integrations/services", h.list)
 	r.Post("/integrations/services/custom", h.createCustom) // must be before /:id
@@ -38,10 +43,9 @@ func (h *Handler) RegisterRoutes(r fiber.Router) {
 	r.Put("/integrations/services/:id/connect", h.completeConnect)
 	r.Delete("/integrations/services/:id/connect", h.uninstall)
 
-	// OAuth BYOA flow (steps 9a–9c)
+	// OAuth BYOA flow (steps 9a–9b) - 9c is registered separately as public
 	r.Post("/integrations/services/:id/oauth-app", h.saveOAuthApp)      // 9a
 	r.Post("/integrations/services/:id/oauth/initiate", h.initiateOAuth) // 9b
-	r.Get("/oauth/callback", h.oauthCallback)                             // 9c
 }
 
 // @Summary      List all services

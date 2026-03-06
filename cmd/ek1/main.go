@@ -225,15 +225,8 @@ func main() {
 	// Register JWT auth endpoints (public - no auth required)
 	jwtHandler.RegisterJWTRoutes(app)
 
-	// Apply JWT middleware to protect all routes
-	app.Use(jwtMiddleware.RequireAuth())
-
-	// ── Protected Routes (require authentication) ──────────────────────────
-	profile.NewHandler(profileStore, aiClient, narrativesFn).RegisterRoutes(app)
-	auth.NewHandler(authStore, profileStore).RegisterRoutes(app)
-	biometrics.NewHandler(checkInStore).RegisterRoutes(app)
+	// Register OAuth callback route (public - external services need access)
 	domain := os.Getenv("DOMAIN")
-
 	apiBaseURL := os.Getenv("API_BASE_URL")
 	if apiBaseURL == "" {
 		if domain != "" {
@@ -246,7 +239,17 @@ func main() {
 	if frontendOrigin == "" {
 		frontendOrigin = "http://localhost:8080"
 	}
-	integrations.NewHandler(servicesStore, apiBaseURL, frontendOrigin).RegisterRoutes(app)
+	integrationsHandler := integrations.NewHandler(servicesStore, apiBaseURL, frontendOrigin)
+	integrationsHandler.RegisterPublicRoutes(app)
+
+	// Apply JWT middleware to protect all routes
+	app.Use(jwtMiddleware.RequireAuth())
+
+	// ── Protected Routes (require authentication) ──────────────────────────
+	profile.NewHandler(profileStore, aiClient, narrativesFn).RegisterRoutes(app)
+	auth.NewHandler(authStore, profileStore).RegisterRoutes(app)
+	biometrics.NewHandler(checkInStore).RegisterRoutes(app)
+	integrationsHandler.RegisterRoutes(app)
 	notifications.NewHandler(notifsStore).RegisterRoutes(app)
 	scheduler.NewHandler(sched).RegisterRoutes(app)
 	signals.NewHandler(signalsStore).RegisterRoutes(app)
