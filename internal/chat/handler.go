@@ -1,25 +1,18 @@
 package chat
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/egokernel/ek1/internal/activities"
 	"github.com/egokernel/ek1/internal/ai"
 	"github.com/egokernel/ek1/internal/biometrics"
-	"github.com/egokernel/ek1/internal/brain"
-	"github.com/egokernel/ek1/internal/harvest"
-	"github.com/egokernel/ek1/internal/ledger"
 	"github.com/egokernel/ek1/internal/notifications"
 	"github.com/egokernel/ek1/internal/profile"
 	"github.com/egokernel/ek1/internal/scheduler"
 	"github.com/egokernel/ek1/internal/signals"
 	"github.com/gofiber/fiber/v2"
-	"github.com/valyala/fasthttp"
 )
 
 // Chatter abstracts the LLM so the handler can be tested without a real Ollama server.
@@ -39,20 +32,16 @@ type Streamer interface {
 	ChatStream(ctx context.Context, systemPrompt string, turns []ai.ChatTurn, fn func(string)) error
 }
 
-// Handler serves POST /chat and GET /chat/history.
+// Handler serves POST /chat and GET /chat/history (simplified).
 type Handler struct {
-	ai       Chatter
-	brainSvc *brain.Service
-	prof     *profile.Store
-	bio      *biometrics.Store
-	events   *activities.Store
-	ledger   ledger.Ledger
-	notifs   *notifications.Store
-	harvest  *harvest.Store
-	sched    *scheduler.Scheduler
-	signals  *signals.Store
-	history  *HistoryStore
-	uid      string
+	ai      Chatter
+	prof    *profile.Store
+	bio     *biometrics.Store
+	notifs  *notifications.Store
+	sched   *scheduler.Scheduler
+	signals *signals.Store
+	history *HistoryStore
+	uid     string
 }
 
 // NewHandler wires all store/service dependencies needed to build the system prompt.

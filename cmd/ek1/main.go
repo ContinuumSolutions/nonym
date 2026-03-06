@@ -23,7 +23,6 @@ import (
 	"github.com/egokernel/ek1/internal/ai"
 	"github.com/egokernel/ek1/internal/auth"
 	"github.com/egokernel/ek1/internal/biometrics"
-	"github.com/egokernel/ek1/internal/chat"
 	"github.com/egokernel/ek1/internal/datasync"
 	"github.com/egokernel/ek1/internal/integrations"
 	"github.com/egokernel/ek1/internal/notifications"
@@ -134,11 +133,6 @@ func main() {
 	authStore := auth.NewStore(db)
 	if err := authStore.Migrate(); err != nil {
 		log.Fatalf("auth migration failed: %v", err)
-	}
-
-	chatHistoryStore := chat.NewHistoryStore(db)
-	if err := chatHistoryStore.Migrate(); err != nil {
-		log.Fatalf("chat history migration failed: %v", err)
 	}
 
 	notifsStore := notifications.NewStore(db)
@@ -256,7 +250,7 @@ func main() {
 	notifications.NewHandler(notifsStore).RegisterRoutes(app)
 	scheduler.NewHandler(sched).RegisterRoutes(app)
 	signals.NewHandler(signalsStore).RegisterRoutes(app)
-	// TODO: Temporarily disabled chat until dependencies are cleaned up
+	// TODO: Chat handler temporarily disabled during cleanup - can be re-enabled later
 	// chat.NewHandler(...).RegisterRoutes(app)
 
 	if domain != "" {
