@@ -7,17 +7,15 @@
 package main
 
 import (
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
-	"regexp"
 	"strconv"
 	"time"
+	"regexp"
 
 	"github.com/getsentry/sentry-go"
 	sentryfiber "github.com/getsentry/sentry-go/fiber"
@@ -90,11 +88,6 @@ func isValidPIN(pin string) bool {
 	return matched
 }
 
-// hashPIN creates a SHA-256 hex hash of the PIN (matches frontend expectation)
-func hashPIN(pin string) string {
-	hash := sha256.Sum256([]byte(pin))
-	return hex.EncodeToString(hash[:])
-}
 
 // promptForPIN prompts the user to enter a 4-digit PIN with confirmation
 func promptForPIN() (string, error) {
@@ -142,11 +135,11 @@ func handleCLICommands(resetPIN, showPINStatus, setPIN bool) {
 	}
 
 	if showPINStatus {
-		pinHash, err := profileStore.GetPINHash()
+		configured, err := pinStore.IsConfigured()
 		if err != nil {
 			log.Fatalf("failed to check PIN status: %v", err)
 		}
-		if pinHash != "" {
+		if configured {
 			fmt.Println("✅ PIN is configured")
 		} else {
 			fmt.Println("❌ PIN is not configured")
@@ -155,11 +148,11 @@ func handleCLICommands(resetPIN, showPINStatus, setPIN bool) {
 
 	if setPIN {
 		// Check if PIN already exists
-		existingHash, err := profileStore.GetPINHash()
+		configured, err := pinStore.IsConfigured()
 		if err != nil {
 			log.Fatalf("failed to check existing PIN: %v", err)
 		}
-		if existingHash != "" {
+		if configured {
 			fmt.Print("⚠️  A PIN is already configured. Do you want to overwrite it? (y/N): ")
 			var response string
 			fmt.Scanln(&response)
@@ -174,14 +167,13 @@ func handleCLICommands(resetPIN, showPINStatus, setPIN bool) {
 			log.Fatalf("failed to get PIN: %v", err)
 		}
 
-		pinHash := hashPIN(pin)
-		_, err = profileStore.SetPIN(pinHash)
+		err = pinStore.SetupPIN(pin)
 		if err != nil {
 			log.Fatalf("failed to set PIN: %v", err)
 		}
 
 		fmt.Println("✅ PIN has been set successfully")
-		fmt.Printf("📝 PIN hash: %s\n", pinHash)
+		fmt.Println("💡 Use this PIN for /api/v1/auth/login (bcrypt-hashed)")
 		return
 	}
 
@@ -190,7 +182,7 @@ func handleCLICommands(resetPIN, showPINStatus, setPIN bool) {
 		var response string
 		fmt.Scanln(&response)
 		if response == "y" || response == "Y" || response == "yes" {
-			_, err := profileStore.RemovePIN()
+			err := pinStore.ResetPIN()
 			if err != nil {
 				log.Fatalf("failed to reset PIN: %v", err)
 			}
