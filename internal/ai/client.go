@@ -13,7 +13,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/egokernel/ek1/internal/activities"
 	"github.com/egokernel/ek1/internal/datasync"
 )
 
@@ -96,10 +95,17 @@ type AnalysedSignal struct {
 
 // Legacy types for backward compatibility during transition
 
-type LegacyEventType = activities.EventType
-type LegacyImportance = activities.Importance
-type LegacyGainType = activities.GainType
-type LegacyGainKind = activities.GainKind
+type LegacyEventType int
+type LegacyImportance int
+type LegacyGainType int
+type LegacyGainKind int
+
+const (
+	EventTypeOther LegacyEventType = 0
+	ImportanceLow LegacyImportance = 0
+	GainTypePositive LegacyGainType = 0
+	GainKindMoney LegacyGainKind = 0
+)
 
 type LegacyRequest struct {
 	ID              string  `json:"id"`
@@ -110,7 +116,13 @@ type LegacyRequest struct {
 	ManipulationPct float64 `json:"manipulation_pct"`
 }
 
-type LegacyGain = activities.Gain
+type LegacyGain struct {
+	Type    LegacyGainType `json:"type"`
+	Kind    LegacyGainKind `json:"kind"`
+	Value   float64        `json:"value"`
+	Symbol  string         `json:"symbol"`
+	Details string         `json:"details"`
+}
 
 // llmOutput is the JSON schema the LLM is instructed to produce.
 type llmOutput struct {
@@ -312,11 +324,11 @@ func toAnalysedSignal(signal datasync.RawSignal, out llmOutput) *AnalysedSignal 
 			TimeCommitment:  0,     // Simplified: no time commitment
 			ManipulationPct: 0,     // Simplified: no manipulation detection
 		},
-		EventType:  activities.Other, // Default to Other event type
-		Importance: activities.Low,   // Default to Low importance
-		Gain: activities.Gain{
-			Type:    activities.Positive,
-			Kind:    activities.Money,
+		EventType:  EventTypeOther, // Default to Other event type
+		Importance: ImportanceLow,   // Default to Low importance
+		Gain: LegacyGain{
+			Type:    GainTypePositive,
+			Kind:    GainKindMoney,
 			Value:   0,
 			Symbol:  "",
 			Details: "",

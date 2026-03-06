@@ -20,17 +20,12 @@ import (
 	"golang.org/x/crypto/acme/autocert"
 
 	_ "github.com/egokernel/ek1/docs"
-	"github.com/egokernel/ek1/internal/activities"
 	"github.com/egokernel/ek1/internal/ai"
 	"github.com/egokernel/ek1/internal/auth"
 	"github.com/egokernel/ek1/internal/biometrics"
-	"github.com/egokernel/ek1/internal/brain"
 	"github.com/egokernel/ek1/internal/chat"
 	"github.com/egokernel/ek1/internal/datasync"
-	"github.com/egokernel/ek1/internal/execution"
-	"github.com/egokernel/ek1/internal/harvest"
 	"github.com/egokernel/ek1/internal/integrations"
-	"github.com/egokernel/ek1/internal/ledger"
 	"github.com/egokernel/ek1/internal/notifications"
 	"github.com/egokernel/ek1/internal/profile"
 	"github.com/egokernel/ek1/internal/scheduler"
@@ -114,20 +109,9 @@ func main() {
 		log.Fatalf("profile migration failed: %v", err)
 	}
 
-	sqliteLedger := ledger.NewSQLiteLedger(db)
-	if err := sqliteLedger.Migrate(); err != nil {
-		log.Fatalf("ledger migration failed: %v", err)
-	}
-	sqliteLedger.Initialize("ek1-kernel")
-
 	checkInStore := biometrics.NewStore(db)
 	if err := checkInStore.Migrate(); err != nil {
 		log.Fatalf("biometrics migration failed: %v", err)
-	}
-
-	eventsStore := activities.NewStore(db)
-	if err := eventsStore.Migrate(); err != nil {
-		log.Fatalf("activities migration failed: %v", err)
 	}
 
 	rawKey := os.Getenv("EK1_SECRET_KEY")
@@ -152,11 +136,6 @@ func main() {
 		log.Fatalf("auth migration failed: %v", err)
 	}
 
-	harvestStore := harvest.NewStore(db)
-	if err := harvestStore.Migrate(); err != nil {
-		log.Fatalf("harvest migration failed: %v", err)
-	}
-
 	chatHistoryStore := chat.NewHistoryStore(db)
 	if err := chatHistoryStore.Migrate(); err != nil {
 		log.Fatalf("chat history migration failed: %v", err)
@@ -165,11 +144,6 @@ func main() {
 	notifsStore := notifications.NewStore(db)
 	if err := notifsStore.Migrate(); err != nil {
 		log.Fatalf("notifications migration failed: %v", err)
-	}
-
-	execQueueStore := execution.NewStore(db)
-	if err := execQueueStore.Migrate(); err != nil {
-		log.Fatalf("execution queue migration failed: %v", err)
 	}
 
 	signalsStore := signals.NewStore(db)
@@ -191,21 +165,7 @@ func main() {
 	tokenDenylist := auth.NewTokenDenylist()
 	defer tokenDenylist.Stop() // Clean shutdown
 
-	// ── Brain ────────────────────────────────────────────────────────────────
-	prof, err := profileStore.Get()
-	if err != nil {
-		log.Fatalf("failed to load profile: %v", err)
-	}
-	brainSvc := brain.NewService("ek1-kernel", prof.Preferences, sqliteLedger)
-
-	// ── Execution engine (Stage 2) ────────────────────────────────────────────
-	execEngine := execution.NewEngine(
-		servicesStore,
-		execution.DefaultExecutors(),
-		execQueueStore,
-		notifsStore,
-		execution.MicroWalletThreshold(),
-	)
+	// ── Simple signal processing - no complex brain/execution logic ─────────
 
 	// ── Pipeline ─────────────────────────────────────────────────────────────
 	aiClient := newAIClient()
@@ -222,14 +182,11 @@ func main() {
 
 	allAdapters, waAdapter := datasync.NewDefaultAdapters(os.Getenv("WHATSAPP_VERIFY_TOKEN"))
 	syncEngine := datasync.NewEngine(servicesStore, allAdapters)
-	pipeline := brain.NewPipeline(brainSvc, aiClient, eventsStore, checkInStore, execEngine)
+	signalsProcessor := signals.NewProcessor(signalsStore, aiClient, checkInStore)
 
 	// ── Scheduler ────────────────────────────────────────────────────────────
-	sched := scheduler.NewScheduler(syncEngine, pipeline, brainSvc, notifsStore, syncInterval())
+	sched := scheduler.NewScheduler(syncEngine, signalsProcessor, notifsStore, syncInterval())
 	sched.Start()
-
-	// ── Harvest ──────────────────────────────────────────────────────────────
-	harvestScanner := harvest.NewScanner(syncEngine, aiClient, eventsStore)
 
 	// ── HTTP app ─────────────────────────────────────────────────────────────
 	app := fiber.New(fiber.Config{AppName: "EK-1"})
@@ -260,23 +217,9 @@ func main() {
 
 	app.Get("/swagger/*", fiberswagger.WrapHandler)
 
-	// Build a narratives callback for POST /profile/infer — pulls recent event narratives
-	// from the already-populated events store without creating a package import cycle.
+	// Simplified narratives callback - no longer depends on activities
 	narrativesFn := profile.NarrativesFunc(func(limit int) []string {
-		events, err := eventsStore.List()
-		if err != nil {
-			return nil
-		}
-		var out []string
-		for _, e := range events {
-			if len(out) >= limit {
-				break
-			}
-			if e.Narrative != "" {
-				out = append(out, e.Narrative)
-			}
-		}
-		return out
+		return []string{} // Simplified: return empty narratives for now
 	})
 
 	waAdapter.RegisterRoutes(app)
@@ -294,10 +237,7 @@ func main() {
 	// ── Protected Routes (require authentication) ──────────────────────────
 	profile.NewHandler(profileStore, aiClient, narrativesFn).RegisterRoutes(app)
 	auth.NewHandler(authStore, profileStore).RegisterRoutes(app)
-	brain.NewHandler(brainSvc, eventsStore).RegisterRoutes(app)
-	ledger.NewHandler(sqliteLedger, "ek1-kernel").RegisterRoutes(app)
 	biometrics.NewHandler(checkInStore).RegisterRoutes(app)
-	activities.NewHandler(eventsStore).RegisterRoutes(app)
 	domain := os.Getenv("DOMAIN")
 
 	apiBaseURL := os.Getenv("API_BASE_URL")
@@ -313,12 +253,11 @@ func main() {
 		frontendOrigin = "http://localhost:8080"
 	}
 	integrations.NewHandler(servicesStore, apiBaseURL, frontendOrigin).RegisterRoutes(app)
-	harvest.NewHandler(harvestScanner, harvestStore, notifsStore).RegisterRoutes(app)
 	notifications.NewHandler(notifsStore).RegisterRoutes(app)
 	scheduler.NewHandler(sched).RegisterRoutes(app)
-	execution.NewHandler(execEngine, execQueueStore, eventsStore).RegisterRoutes(app)
 	signals.NewHandler(signalsStore).RegisterRoutes(app)
-	chat.NewHandler(aiClient, brainSvc, profileStore, checkInStore, eventsStore, sqliteLedger, notifsStore, harvestStore, sched, signalsStore, chatHistoryStore, "ek1-kernel").RegisterRoutes(app)
+	// TODO: Temporarily disabled chat until dependencies are cleaned up
+	// chat.NewHandler(...).RegisterRoutes(app)
 
 	if domain != "" {
 		cacheDir := os.Getenv("CERT_CACHE_DIR")
@@ -347,6 +286,10 @@ func main() {
 		log.Printf("HTTPS listening on :443 for %s", domain)
 		log.Fatal(app.Listener(m.Listener()))
 	} else {
-		log.Fatal(app.Listen(":3000"))
+		port := os.Getenv("PORT")
+		if port == "" {
+			port = "3000"
+		}
+		log.Fatal(app.Listen(":" + port))
 	}
 }

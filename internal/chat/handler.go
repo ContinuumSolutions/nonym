@@ -519,8 +519,8 @@ Saying "I can't provide advice on relationships" or similar is a hard failure.
 	}
 	if st.LastResult != nil {
 		r := st.LastResult
-		fmt.Fprintf(&sb, " | Signals: %d (accepted=%d rejected=%d ghosted=%d)",
-			st.LastSignalCount, r.Accepted, r.Rejected, r.Ghosted)
+		fmt.Fprintf(&sb, " | Signals: %d (processed=%d relevant=%d replies=%d)",
+			st.LastSignalCount, r.ProcessedOK, r.RelevantSignals, r.RepliesGenerated)
 	}
 	sb.WriteString("\n\n")
 

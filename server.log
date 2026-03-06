@@ -1,0 +1,30 @@
+2026/03/06 11:17:44 [11:17:44.275] EK-1 [ek1-kernel] initialized. Sovereignty Protocol: ACTIVE.
+2026/03/06 11:17:44 [11:17:44.275] Genesis Block sealed. Timestamp: 2026-03-06T11:17:44Z
+2026/03/06 11:17:44 scheduler: started — interval 15m0s
+
+ ┌───────────────────────────────────────────────────┐ 
+ │                       EK-1                        │ 
+ │                  Fiber v2.52.12                   │ 
+ │               http://127.0.0.1:3001               │ 
+ │       (bound on host 0.0.0.0 and port 3001)       │ 
+ │                                                   │ 
+ │ Handlers ............ 90  Processes ........... 1 │ 
+ │ Prefork ....... Disabled  PID ............ 163573 │ 
+ └───────────────────────────────────────────────────┘ 
+
+11:17:51 | 200 |     203.509µs | 127.0.0.1 | GET | /auth/pin/status | -
+11:17:58 | 200 |  304.866802ms | 127.0.0.1 | POST | /auth/pin/setup | -
+11:19:24 | 200 |      546.84µs | 127.0.0.1 | GET | /signals | -
+11:19:33 | 401 |      19.125µs | 127.0.0.1 | POST | /scheduler/run-now | -
+11:19:39 | 401 |       21.45µs | 127.0.0.1 | GET | /scheduler/status | -
+11:19:45 | 401 |      63.939µs | 127.0.0.1 | GET | /signals | -
+11:19:54 | 200 |     290.181µs | 127.0.0.1 | GET | /scheduler/status | -
+11:20:04 | 202 |      91.358µs | 127.0.0.1 | POST | /scheduler/run-now | -
+2026/03/06 11:20:04 scheduler: cycle starting
+2026/03/06 11:20:04 scheduler: pulled 0 signals
+2026/03/06 11:20:04 scheduler: processor done — processed=0 relevant=0 replies=0
+11:20:14 | 200 |     963.838µs | 127.0.0.1 | GET | /scheduler/status | -
+11:20:23 | 200 |     292.245µs | 127.0.0.1 | GET | /signals | -
+2026/03/06 11:32:44 scheduler: cycle starting
+2026/03/06 11:32:44 scheduler: pulled 0 signals
+2026/03/06 11:32:44 scheduler: processor done — processed=0 relevant=0 replies=0

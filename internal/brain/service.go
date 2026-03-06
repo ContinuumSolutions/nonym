@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/egokernel/ek1/internal/biometrics"
-	"github.com/egokernel/ek1/internal/ledger"
+	""
 	"github.com/egokernel/ek1/internal/profile"
 )
 

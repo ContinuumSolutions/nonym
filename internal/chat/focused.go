@@ -353,8 +353,8 @@ func (h *Handler) kernelStatusMessage(ctx context.Context, original string) (str
 	}
 	if st.LastResult != nil {
 		r := st.LastResult
-		fmt.Fprintf(&sb, "  Last cycle: %d signals (accepted=%d declined=%d ghosted=%d)\n",
-			st.LastSignalCount, r.Accepted, r.Rejected, r.Ghosted)
+		fmt.Fprintf(&sb, "  Last cycle: %d signals (processed=%d relevant=%d replies=%d)\n",
+			st.LastSignalCount, r.ProcessedOK, r.RelevantSignals, r.RepliesGenerated)
 	}
 
 	focusedFooter(&sb)
