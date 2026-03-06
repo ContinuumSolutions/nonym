@@ -1,325 +1,420 @@
 # Frontend Tasks & API Contract Notes
 
-This document captures API changes and UI tasks the frontend must implement or fix.
+This document captures the current EK-1 system after major simplification and cleanup.
 Updated as the backend evolves — check this file after every backend session.
 
 ---
 
-## 1. Identity Profile — New Section & Endpoints
+## System Overview: UI Pivot Complete
 
-### What it is
-The kernel now has a first-class identity model. The user tells the kernel who they are
-(profession, industry, skills, goals) and this context is injected into every LLM signal
-analysis. Without it, scoring is generic. With it, the LLM knows whether a $500
-opportunity is noise or gold for this specific person.
+EK-1 has been simplified from a complex decision/reputation system to a focused **signal analysis tool** that helps users manage communications intelligently.
 
-### New endpoints
+**Core Flow:** Emails, calendar invites, notifications → AI analysis → categorization + reply drafts + smart prioritization
+
+---
+
+## 1. Authentication System — JWT with PIN
+
+### New Authentication Flow
+EK-1 now uses **PIN-based JWT authentication** instead of sessions. All protected endpoints require JWT tokens.
+
+### Authentication Endpoints
 ```
-PUT  /profile/identity     — save/update identity fields
-POST /profile/infer        — auto-detect identity from signal history (calls Ollama)
+POST /auth/pin/setup        # First-time PIN creation
+POST /auth/pin/login        # Login with PIN → JWT token
+POST /auth/pin/verify       # Verify current PIN
+PUT  /auth/pin/change       # Change PIN (requires current PIN)
+POST /auth/pin/logout       # Logout (blacklist token)
 ```
 
-### `GET /profile` — new `identity` object
-`identity` is now returned inside the profile response alongside `preferences`:
+### PIN Setup Flow (First Time Users)
+```json
+// POST /auth/pin/setup
+{
+  "pin": "123456"  // 6-digit string
+}
 
+// Response
+{
+  "message": "PIN setup successful",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+### Login Flow
+```json
+// POST /auth/pin/login
+{
+  "pin": "123456"
+}
+
+// Success (200)
+{
+  "message": "Login successful",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "expires_at": "2026-03-13T10:30:00Z"
+}
+
+// Failed (401)
+{
+  "error": "Invalid PIN"
+}
+```
+
+### Token Usage
+- Include in all requests: `Authorization: Bearer <token>`
+- Tokens expire after 7 days
+- Invalid/expired tokens return 401
+- Refresh by logging in again
+
+### Rate Limiting
+- **5 attempts per 15 minutes** for PIN operations
+- After 5 failed attempts: 15 minute lockout
+- Returns 429 with `retry_after` seconds
+
+---
+
+## 2. Signals System — New Core API
+
+### What Replaced What
+- ❌ **Removed:** `/activities/events`, `/brain/events`, `/brain/status`, `/brain/queue`
+- ❌ **Removed:** Activities, Events, Decisions, Reputation, Ledger, Harvest, Execution
+- ✅ **New:** `/signals` API with AI-analyzed communications
+- ✅ **New:** `/replies` API for AI-generated draft responses
+
+### Core Signals Endpoints
+```
+GET  /signals                    # All analyzed signals
+GET  /signals/relevant           # High/medium priority needing attention
+GET  /signals/replies            # Signals that need replies
+GET  /signals/summary            # Dashboard counts
+PUT  /signals/:id/status         # Mark done/ignored/snoozed
+
+GET  /replies/pending            # AI-generated drafts ready to send
+PUT  /replies/:id                # Approve/edit/reject draft replies
+```
+
+### Signal Data Structure
+```json
+{
+  "id": 123,
+  "raw_signal": {
+    "service_slug": "gmail",
+    "category": "Communication",
+    "title": "Contract renewal from Alice",
+    "body": "Hi, following up on...",
+    "metadata": {
+      "from": "alice@example.com",
+      "message_id": "abc123"
+    },
+    "occurred_at": "2026-03-06T10:30:00Z"
+  },
+  "analysis": {
+    "category": "relevant",           // relevant|newsletter|automated|notification
+    "priority": "high",               // high|medium|low
+    "is_relevant": true,
+    "needs_reply": true,
+    "reasoning": "Contract deadline approaching, requires action",
+    "suggested_action": "Review terms and respond by Thursday",
+    "reply_draft": "Hi Alice,\n\nThanks for...",
+    "reply_tone": "professional",     // professional|casual|friendly|formal
+    "summary": "Client needs contract renewal response by Friday"
+  },
+  "status": "pending",                // pending|done|ignored|snoozed
+  "created_at": "2026-03-06T10:30:05Z",
+  "updated_at": "2026-03-06T10:30:05Z"
+}
+```
+
+### Signal Categories
+Replace complex event types with simple categories:
+- **relevant** — needs user attention (personal emails, deadlines, important notifications)
+- **newsletter** — automated marketing/updates (can be archived)
+- **automated** — system notifications, receipts, confirmations
+- **notification** — service alerts, status updates
+
+### Signal Status Management
+```json
+// PUT /signals/:id/status
+{
+  "status": "done"  // pending|done|ignored|snoozed
+}
+```
+
+### Dashboard Summary
+```json
+// GET /signals/summary
+{
+  "relevant_count": 5,        // High/medium priority needing attention
+  "replies_needed": 3,        // Signals requiring responses
+  "total_pending": 12,        // All unprocessed signals
+  "last_sync": "2026-03-06T10:25:00Z"
+}
+```
+
+---
+
+## 3. Reply Drafting System
+
+### AI-Generated Replies
+The system automatically generates draft replies for signals that `needs_reply: true`.
+
+### Reply Endpoints
+```json
+// GET /replies/pending — List all pending drafts
+[
+  {
+    "id": 456,
+    "signal_id": 123,
+    "content": "Hi Alice,\n\nThanks for following up...",
+    "tone": "professional",
+    "status": "pending",        // pending|approved|edited|rejected|sent
+    "created_at": "2026-03-06T10:30:05Z"
+  }
+]
+
+// PUT /replies/:id — Approve/edit/reject draft
+{
+  "action": "approve",        // approve|edit|reject
+  "content": "Modified draft content..."  // Required if action=edit
+}
+```
+
+### Reply Actions
+- **approve** — Mark ready to send (frontend implements actual sending)
+- **edit** — Update content, mark as approved
+- **reject** — Discard draft, mark signal as done
+
+---
+
+## 4. Biometrics Integration — Simplified
+
+### What's Kept
+Biometrics are **simplified but preserved** for signal prioritization and user focus management.
+
+### Biometrics Endpoints (Unchanged)
+```
+GET /biometrics/checkin
+PUT /biometrics/checkin
+```
+
+### How Biometrics Affect Signals
+The system applies biometric-based prioritization:
+- **High stress (>7) OR low sleep (<5)** → Enhanced filtering
+- Medium priority signals get upgraded to high if they contain urgent keywords
+- Low energy states reduce signal processing noise
+
+### Biometrics Data Structure
+```json
+{
+  "id": 1,
+  "mood": 7,                  // 1-10
+  "stress_level": 8,          // 1-10
+  "sleep": 4.5,               // hours (float)
+  "energy": 6,                // 1-10
+  "updated_at": "2026-03-06T08:00:00Z"
+}
+```
+
+---
+
+## 5. Chat System — Temporarily Disabled
+
+### Current Status
+- **Chat endpoints exist** but are **temporarily disabled** during cleanup
+- Chat handler was removed from main.go routes
+- Will be re-enabled with simplified intents focused on signal management
+
+### Planned Chat Commands (When Re-enabled)
+- "What should I focus on today?" → Shows relevant signals
+- "Draft a reply to Alice" → Creates email draft
+- "What's urgent?" → High-priority items only
+- "Mark email from Bob as done" → Update signal status
+
+---
+
+## 6. User Preferences — Simplified
+
+### Profile Endpoints (Unchanged)
+```
+GET /profile
+PUT /profile/preferences
+PUT /profile/connection
+```
+
+### Simplified Preferences
+Removed complex decision thresholds. Now used only for signal analysis tuning:
+
+```json
+{
+  "preferences": {
+    "time_sovereignty": 7,      // 1-10, affects time-sensitive filtering
+    "financial_growth": 6,      // 1-10, affects ROI thresholds
+    "health_recovery": 5,       // 1-10, affects stress-based filtering
+    "reputation_building": 8,   // 1-10, affects networking signal priority
+    "privacy_protection": 5,    // 1-10, affects data sharing warnings
+    "autonomy": 6               // 1-10, affects auto-processing vs manual review
+  }
+}
+```
+
+### Connection Settings
 ```json
 {
   "kernel_name": "EK-1",
-  "preferences": { ... },
-  "identity": {
-    "profession": "Senior Product Manager, B2B SaaS",
-    "industry": "Software / SaaS",
-    "skills": "product strategy, pricing, stakeholder management",
-    "current_goals": "close Q1 enterprise deals, reduce ops overhead",
-    "income_model": "salary + consulting",
-    "signal_priorities": "client requests > investor pings > vendor outreach",
-    "inferred_summary": "..."
-  }
+  "api_endpoint": "https://genesis.egokernel.com",
+  "timezone": "America/New_York"
 }
 ```
-
-All fields are empty strings for new users who haven't set up their identity yet.
-`inferred_summary` is auto-populated by `POST /profile/infer` and should not be
-edited directly — it is shown as read-only context generated by the AI.
-
-### `PUT /profile/identity` — update identity fields
-
-Send any combination of fields. Empty string = "leave existing value unchanged".
-
-```json
-{
-  "profession": "Senior Product Manager, B2B SaaS",
-  "industry": "Software / SaaS",
-  "skills": "product strategy, pricing, hiring",
-  "current_goals": "close 3 enterprise deals Q1, ship Q2 roadmap",
-  "income_model": "salary + consulting",
-  "signal_priorities": "client requests, investor pings, warm intros"
-}
-```
-
-Returns the full updated `Profile` object on success (200).
-
-### `POST /profile/infer` — auto-detect identity
-
-No request body. Calls the local LLM over recent signal history.
-
-- **202 / 200** — returns full `Profile` with `identity.inferred_summary` populated
-- **422** — not enough signal history ("run at least one sync cycle first")
-- **503** — Ollama not available
-
-The `inferred_summary` field is a 2–4 sentence plain-text paragraph the AI wrote.
-Show it to the user as a preview they can review and use to fill in the structured fields.
-
-### UI guidance
-
-**Identity setup screen** (new screen or tab in Profile):
-
-1. **"Who are you?"** form with 6 labelled free-text inputs:
-   - Profession — *"Your role and where you work (e.g. Freelance designer, B2B clients)"*
-   - Industry — *"Your sector (e.g. Healthcare SaaS, Creative agency)"*
-   - Skills — *"Key skills, comma-separated (e.g. UX design, client management, Figma)"*
-   - Current Goals — *"What are you working toward right now?"*
-   - Income Model — *"How you earn (e.g. salary, consulting, product revenue, freelance)"*
-   - Signal Priorities — *"What types of messages matter most to you, in order"*
-
-2. **"Auto-detect from my signals"** button → calls `POST /profile/infer`
-   - Show loading state (this calls Ollama, takes 5–15s)
-   - On success: show the `inferred_summary` text in a read-only card:
-     *"Here's what your kernel inferred about you:"*
-   - Below the card: *"Use this to fill in your profile"* — auto-populate the form fields
-     from the summary text if possible, or just let the user copy-paste manually
-
-3. **Empty state CTA**: if `identity.IsEmpty()` (all fields blank, no inferred_summary),
-   show a banner on the dashboard: *"Your kernel doesn't know who you are yet — signal
-   scoring may be inaccurate. [Set up your identity →]"*
-
-4. **Completeness indicator**: show a simple progress bar (0–7 fields filled) next to
-   the identity section heading so users know how personalised the kernel is.
-
-### Why this matters (show in tooltip or onboarding)
-> *"The kernel scores every email, calendar invite, and transaction based on its estimated
-> value to you. Without knowing who you are, it guesses. With your identity set, it knows
-> whether a $500 deal is noise or gold — and filters accordingly."*
 
 ---
 
-## 2. Preferences — New `base_hourly_rate` Field
+## 7. Service Integrations — Unchanged
 
-**Endpoint:** `PUT /profile/preferences`
-**Endpoint:** `GET /profile` (returned inside `preferences`)
-
-### What changed
-`base_hourly_rate` (float, USD/hr) is now a first-class preference field.
-It drives the signal triage gate — any email/calendar item whose estimated ROI
-does not justify the user's hourly rate is automatically rejected.
-
-### API shape
-```json
-// GET /profile → preferences object
-{
-  "preferences": {
-    "time_sovereignty": 5,
-    "financial_growth": 5,
-    "health_recovery": 5,
-    "reputation_building": 5,
-    "privacy_protection": 5,
-    "autonomy": 5,
-    "base_hourly_rate": 85.0
-  }
-}
-
-// PUT /profile/preferences — full object required, all fields
-{
-  "time_sovereignty": 7,
-  "financial_growth": 6,
-  "health_recovery": 5,
-  "reputation_building": 8,
-  "privacy_protection": 5,
-  "autonomy": 5,
-  "base_hourly_rate": 150.0
-}
+### Integration Endpoints (Preserved)
+```
+GET    /integrations/services
+GET    /integrations/services/:id
+POST   /integrations/services/:id/connect
+PUT    /integrations/services/:id/connect
+DELETE /integrations/services/:id/connect
 ```
 
-### Validation rules
-- `time_sovereignty`, `financial_growth`, `health_recovery`, `reputation_building`,
-  `privacy_protection`, `autonomy`: integer, 1–10 inclusive, all required.
-- `base_hourly_rate`: positive float (> 0). Zero or omitted falls back to a computed
-  default (`10 + financial_growth × 15`). Negative values are rejected with 400.
-
-### UI guidance
-- Show as a labelled currency input: **"Your hourly rate (USD/hr)"**
-- Place it prominently in the preferences screen — it is the single most impactful
-  setting. A user on $50/hr will see completely different signal filtering than one
-  on $500/hr.
-- Suggested range hint: $25–$1000. Allow free-text entry; do not cap it.
-- Explain in tooltip: *"Signals whose estimated value does not justify this rate are
-  automatically filtered out. Set this to what one hour of your attention is worth."*
-- Default shown on first load: 85 (the DB default for new users).
-
-### How it affects signal filtering (show this to users)
-The kernel rejects a signal when:
-```
-estimated_roi  <  base_hourly_rate × time_commitment_hours × time_sovereignty_factor × 1.5
-```
-Example at $85/hr, `time_sovereignty=5`, 0.5 hr email:
-- threshold = 85 × 0.5 × 0.5 × 1.5 = **$31.88**
-- LLM estimates ROI = $200 → signal **passes**
+OAuth flow and service management remain the same.
 
 ---
 
-## 3. Events — New `raw_data` Field
+## 8. Scheduler — Simplified
 
-**Endpoints:** `GET /activities/events`, `GET /activities/events/:id`
+### Scheduler Endpoints (Simplified)
+```
+GET  /scheduler/status
+POST /scheduler/run-now
+```
 
-### What changed
-Each event now includes `raw_data`: the original signal payload (email, calendar item,
-Slack message, transaction, etc.) that the kernel analysed. This gives the user full
-context for every decision without leaving the app.
+### What Changed
+- **Removed:** Complex brain pipeline status, reputation tracking
+- **Kept:** Sync scheduling, signal processing status
+- **New:** Shows signal processing results instead of decision outcomes
 
-### API shape
+### Status Response
 ```json
 {
-  "id": 42,
-  "event_type": 2,
-  "decision": 2,
-  "importance": 1,
-  "narrative": "Client confirmed the meeting for tomorrow at 12:30.",
-  "analysis": { ... },
-  "gain": { ... },
-  "source_service": "zoho-mail",
-  "raw_data": {
-    "ServiceSlug": "zoho-mail",
-    "ServicePurpose": "Business email inbox...",
-    "Category": "Communication",
-    "Title": "Re: PROSPECTIVE BUSINESS",
-    "Body": "Hi Christine, Thank you for the email...",
-    "Metadata": {
-      "from": "moses@example.com",
-      "message_id": "1234567890"
-    },
-    "OccurredAt": "2026-03-05T12:50:31Z"
+  "running": false,
+  "interval_minutes": 15,
+  "last_run_at": "2026-03-06T10:15:00Z",
+  "next_run_at": "2026-03-06T10:30:00Z",
+  "last_signal_count": 12,
+  "last_result": {
+    "processed_ok": 12,
+    "relevant_signals": 5,
+    "replies_generated": 3,
+    "errors": 0
   },
-  "read": false,
-  "created_at": "2026-03-05T12:50:32Z",
-  "updated_at": "2026-03-05T12:50:32Z"
+  "services": [...]  // Service connection status
 }
 ```
 
-`raw_data` is `null` / omitted for events created before this change (existing rows).
-
-### UI guidance
-- On the event detail page, render a collapsible **"Source Signal"** panel showing:
-  - `Title` as the subject/headline
-  - `Body` as the message preview (truncate to ~300 chars, expand on tap)
-  - `Metadata.from` as sender
-  - `OccurredAt` as the signal timestamp (distinct from `created_at` which is when
-    the kernel processed it)
-  - `source_service` badge (already exists in events list — keep it)
-- Do not show `raw_data` panel at all when the field is absent/null.
-- `raw_data` fields are PascalCase (Go JSON serialisation of `datasync.RawSignal`).
-
 ---
 
-## 4. Events — Existing `analysis` Field (must display)
+## 9. Health Check — Unchanged
 
-**Endpoints:** `GET /activities/events`, `GET /activities/events/:id`
-
-The `analysis` object has always been returned but the frontend is not currently
-rendering it. This is the most important transparency feature.
-
-### Shape
-```json
-"analysis": {
-  "service_slug": "zoho-mail",
-  "signal_title": "Re: PROSPECTIVE BUSINESS",
-  "estimated_roi": 200.00,
-  "time_commitment": 0.5,
-  "manipulation_pct": 0.02,
-  "roi_threshold": 31.88,
-  "triage_gate": "accepted",
-  "decide_utility": 178.75,
-  "decide_threshold": 127.50
-}
+```
+GET /health
 ```
 
-### `triage_gate` values and what to show
-| Value | Meaning | UI label |
-|-------|---------|----------|
-| `accepted` | Passed all gates | "Accepted" (green) |
-| `financial_insignificance` | ROI below hourly-rate threshold | "Low ROI" (amber) |
-| `manipulation` | Detected guilt/urgency language | "Manipulation detected" (red) |
-| `decide_utility` | Passed triage but utility score too low | "Below utility bar" (amber) |
-| `decide_risk` | Utility ok but reputation risk too high | "High risk" (red) |
-| `unknown` | Unexpected triage result | "Unknown" (grey) |
-
-### UI guidance
-- Show a **"Why this decision?"** section on the event detail page.
-- Display `estimated_roi` vs `roi_threshold` as a bar or two-line comparison:
-  *"Estimated value: $200 / Required: $31.88"*
-- Show `manipulation_pct` as a percentage badge if > 0 (e.g. "2% manipulation").
-- Show `decide_utility` vs `decide_threshold` when present.
-- Show `time_commitment` as hours (e.g. "0.5 hr estimated").
+Returns `{"status": "ok"}` for system monitoring.
 
 ---
 
-## 5. Events — `decision` Enum Values
+## Frontend Migration Tasks
 
-The `decision` integer maps to:
+### 1. Authentication UI
+- [ ] **Create PIN setup screen** — 6-digit PIN entry for first-time users
+- [ ] **Create login screen** — PIN entry with error handling and rate limiting
+- [ ] **Add token management** — Store JWT, handle expiration, logout
+- [ ] **Protect all routes** — Redirect to login if no valid token
 
-| Value | Label | Colour |
-|-------|-------|--------|
-| 0 | Pending | grey |
-| 1 | Accepted | green |
-| 2 | Declined | red |
-| 3 | Negotiated | blue |
-| 4 | Automated | purple |
-| 5 | Cancelled | grey |
+### 2. Dashboard Redesign
+- [ ] **Remove brain/reputation widgets** — No more H2HI, reputation scores, complex status
+- [ ] **Create "Needs Attention" list** — High/medium priority signals from `/signals/relevant`
+- [ ] **Add reply management interface** — Show pending drafts from `/replies/pending`
+- [ ] **Build signal categories view** — Organized by relevant/newsletter/automated/notification
+- [ ] **Add signal summary counters** — Use `/signals/summary` for dashboard stats
 
-`Declined` covers both rejected (low ROI) and ghosted (manipulation) events.
-Use `analysis.triage_gate` to distinguish them for display.
+### 3. Signal Management
+- [ ] **Update signal list view** — Replace events with signals, show category badges
+- [ ] **Add signal status controls** — Mark done/ignored/snoozed buttons
+- [ ] **Show AI analysis** — Display reasoning, suggested actions, summaries
+- [ ] **Implement signal filtering** — By category, priority, status, service
 
----
+### 4. Reply Drafting
+- [ ] **Create reply review interface** — Show AI-generated drafts with approve/edit/reject
+- [ ] **Add draft editing** — Rich text editor for modifying AI content
+- [ ] **Implement reply sending** — Frontend handles actual email sending after approval
+- [ ] **Show reply status** — Track pending/approved/sent states
 
-## 6. Preferences — `financial_growth` Effect on Utility Threshold
+### 5. Settings Simplification
+- [ ] **Remove reputation settings** — No more decision thresholds, reputation tracking
+- [ ] **Simplify preferences UI** — Focus on signal analysis tuning (6 sliders, 1-10 scale)
+- [ ] **Keep biometrics form** — Mood, stress, sleep, energy (preserved for signal prioritization)
+- [ ] **Preserve connection settings** — Kernel name, API endpoint, timezone
 
-The `utility_threshold` is now derived as:
-```
-utility_threshold = base_hourly_rate × (2.5 − financial_growth × 0.2)
-```
-At `base_hourly_rate=$85`:
-| financial_growth | utility_threshold |
-|---|---|
-| 1 | $195.50 (very strict) |
-| 5 | $127.50 (balanced) |
-| 10 | $42.50 (permissive) |
+### 6. Remove Obsolete Features
+- [ ] **Delete activities/events pages** — Replace with signals dashboard
+- [ ] **Remove brain status displays** — No more kernel state, entropy, H2HI
+- [ ] **Delete reputation displays** — No more scores, ledger, social debt tracking
+- [ ] **Remove execution queue** — No more approval workflows
+- [ ] **Clean up navigation** — Update menu items to reflect new structure
 
-Show this as a tooltip or live preview when the user adjusts `financial_growth`
-alongside `base_hourly_rate`.
-
----
-
-## 7. OAuth Callback Error Improvements
-
-The 403 error from OAuth services now includes the provider's actual error message
-rather than a generic "insufficient scopes" label. The callback popup's
-`reason` field in the `postMessage` will still be `token_exchange_failed`, but
-the server log contains the full provider message.
-
-No UI change needed. If you show the `reason` string in the UI, keep the current
-mapping from `friendlyOAuthError()`.
-
----
-
-## 8. Zoho Mail — Sort Order Fixed
-
-Zoho Mail now returns the **50 most recent** messages (was returning oldest 50).
-No UI change — this is a backend fix. Mention in release notes if relevant.
+### 7. Chat Integration (Future)
+- [ ] **Disable chat temporarily** — Remove chat routes until re-implementation
+- [ ] **Plan simplified intents** — Focus on signal queries, not complex system state
+- [ ] **Design signal-focused commands** — "What's urgent?", "Draft reply to X", etc.
 
 ---
 
-## 9. Gmail — API Disabled Error Surfacing
+## Error Handling Updates
 
-If the Gmail API is not enabled in the user's Google Cloud project, the sync
-engine now logs the exact Google error message instead of "insufficient OAuth scopes".
-No UI change needed. If you display sync errors per-service, the `last_error` field
-in `GET /scheduler/status` will contain the provider's message verbatim.
+### New Error Patterns
+- **401 Unauthorized** — Invalid/expired JWT token → redirect to login
+- **429 Rate Limited** — Too many PIN attempts → show lockout timer
+- **404 Signal Not Found** — Signal may have been processed → refresh list
+- **422 Invalid Status** — Bad signal status transition → show valid options
+
+### Removed Error Patterns
+- ❌ Brain state errors (H2HI, entropy)
+- ❌ Reputation calculation failures
+- ❌ Complex decision validation errors
+- ❌ Execution queue conflicts
+
+---
+
+## Data Migration Notes
+
+### What to Update in Existing Frontend Code
+1. **Replace all `/activities/*` calls** with `/signals/*`
+2. **Replace all `/brain/*` calls** with appropriate `/signals/*` or remove
+3. **Add JWT token to all requests** in Authorization header
+4. **Update data models** — Event → Signal, Decision → Status
+5. **Remove reputation/ledger components** — No longer exists in backend
+
+### Backward Compatibility
+- **None** — This is a breaking change requiring frontend rewrite
+- Old API endpoints will return 404
+- Data structures are completely different
+
+---
+
+## Success Metrics
+
+### Signal Analysis Quality
+- **Relevance accuracy:** % of "relevant" signals user actually acts on
+- **Reply usage:** % of drafted replies sent (with/without edits)
+- **Time saved:** Reduced time from signal → action
+- **Category accuracy:** % of auto-categorized signals correctly sorted
+
+### User Experience
+- **Authentication friction:** Login success rate, PIN reset requests
+- **Feature adoption:** Usage of reply drafts, signal status management
+- **System responsiveness:** Signal processing speed, UI responsiveness
