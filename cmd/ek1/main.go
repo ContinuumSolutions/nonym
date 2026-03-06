@@ -23,6 +23,7 @@ import (
 	"golang.org/x/crypto/acme/autocert"
 
 	_ "github.com/egokernel/ek1/docs"
+	"github.com/egokernel/ek1/internal/chat"
 	"github.com/egokernel/ek1/internal/ai"
 	"github.com/egokernel/ek1/internal/auth"
 	"github.com/egokernel/ek1/internal/biometrics"
@@ -268,6 +269,12 @@ func main() {
 	}
 
 	signalsStore := signals.NewStore(db)
+
+	// ── Chat History ─────────────────────────────────────────────────────────
+	chatHistory := chat.NewHistoryStore(db)
+	if err := chatHistory.Migrate(); err != nil {
+		log.Fatalf("chat history migration failed: %v", err)
+	}
 	if err := signalsStore.Migrate(); err != nil {
 		log.Fatalf("signals store migration failed: %v", err)
 	}
@@ -384,8 +391,7 @@ func main() {
 	notifications.NewHandler(notifsStore).RegisterRoutes(api)
 	scheduler.NewHandler(sched).RegisterRoutes(api)
 	signals.NewHandler(signalsStore).RegisterRoutes(api)
-	// TODO: Chat handler temporarily disabled during cleanup - can be re-enabled later
-	// chat.NewHandler(...).RegisterRoutes(api)
+	chat.NewSimpleHandler(aiClient, profileStore, checkInStore, notifsStore, signalsStore, chatHistory).RegisterRoutes(api)
 
 	if domain != "" {
 		cacheDir := os.Getenv("CERT_CACHE_DIR")
