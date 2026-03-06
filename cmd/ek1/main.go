@@ -364,9 +364,6 @@ func main() {
 	// Register public auth endpoints (no authentication required)
 	jwtHandler.RegisterJWTRoutes(api)
 
-	// Session-based auth handler for screen lock/unlock functionality
-	sessionAuthHandler := auth.NewHandler(authStore, profileStore)
-	sessionAuthHandler.RegisterRoutes(api)
 
 	// Register OAuth callback route (public - external services need access)
 	domain := os.Getenv("DOMAIN")
