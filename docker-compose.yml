@@ -9,6 +9,8 @@ services:
       - "11434:11434"
     volumes:
       - ollama-models:/root/.ollama
+    environment:
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-30m}
     healthcheck:
       test: ["CMD-SHELL", "ollama list || exit 1"]
       interval: 15s
