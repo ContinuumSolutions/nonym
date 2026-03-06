@@ -1,24 +1,148 @@
 basePath: /
 definitions:
-  github_com_egokernel_ek1_internal_brain.PipelineResult:
+  chat.Message:
     properties:
-      accepted:
-        description: 'passed Triage + Decide → Decision: Automated'
-        type: integer
-      ghosted:
-        description: 'manipulation detected → Decision: Declined (ghost)'
-        type: integer
-      rejected:
-        description: 'failed Triage or Decide → Decision: Declined'
-        type: integer
-      shield_reason:
-        description: why shield was active
+      content:
         type: string
-      shielded:
-        description: biometrics gate was active during this run
+      role:
+        type: string
+      timestamp:
+        type: string
+    type: object
+  chat.Request:
+    properties:
+      history:
+        items:
+          $ref: '#/definitions/chat.Message'
+        type: array
+      message:
+        type: string
+    type: object
+  chat.Response:
+    properties:
+      reply:
+        type: string
+      timestamp:
+        type: string
+    type: object
+  github_com_egokernel_ek1_internal_ai.AnalysedSignal:
+    properties:
+      category:
+        description: relevant|newsletter|automated|notification
+        type: string
+      event_type:
+        allOf:
+        - $ref: '#/definitions/github_com_egokernel_ek1_internal_ai.LegacyEventType'
+        description: Use Category instead
+      gain:
+        allOf:
+        - $ref: '#/definitions/github_com_egokernel_ek1_internal_ai.LegacyGain'
+        description: Removed in simplified model
+      importance:
+        allOf:
+        - $ref: '#/definitions/github_com_egokernel_ek1_internal_ai.LegacyImportance'
+        description: Use Priority instead
+      isRelevant:
         type: boolean
-      total:
-        type: integer
+      narrative:
+        description: 'Deprecated: Legacy fields for backward compatibility during
+          transition'
+        type: string
+      needsReply:
+        type: boolean
+      priority:
+        description: high|medium|low
+        type: string
+      reasoning:
+        type: string
+      replyDraft:
+        type: string
+      replyTone:
+        type: string
+      request:
+        allOf:
+        - $ref: '#/definitions/github_com_egokernel_ek1_internal_ai.LegacyRequest'
+        description: Use new fields instead
+      signal:
+        $ref: '#/definitions/github_com_egokernel_ek1_internal_datasync.RawSignal'
+      suggestedAction:
+        type: string
+      summary:
+        type: string
+    type: object
+  github_com_egokernel_ek1_internal_ai.LegacyEventType:
+    enum:
+    - 0
+    type: integer
+    x-enum-varnames:
+    - EventTypeOther
+  github_com_egokernel_ek1_internal_ai.LegacyGain:
+    properties:
+      details:
+        type: string
+      kind:
+        $ref: '#/definitions/github_com_egokernel_ek1_internal_ai.LegacyGainKind'
+      symbol:
+        type: string
+      type:
+        $ref: '#/definitions/github_com_egokernel_ek1_internal_ai.LegacyGainType'
+      value:
+        type: number
+    type: object
+  github_com_egokernel_ek1_internal_ai.LegacyGainKind:
+    enum:
+    - 0
+    type: integer
+    x-enum-varnames:
+    - GainKindMoney
+  github_com_egokernel_ek1_internal_ai.LegacyGainType:
+    enum:
+    - 0
+    type: integer
+    x-enum-varnames:
+    - GainTypePositive
+  github_com_egokernel_ek1_internal_ai.LegacyImportance:
+    enum:
+    - 0
+    type: integer
+    x-enum-varnames:
+    - ImportanceLow
+  github_com_egokernel_ek1_internal_ai.LegacyRequest:
+    properties:
+      description:
+        type: string
+      estimated_roi:
+        type: number
+      id:
+        type: string
+      manipulation_pct:
+        type: number
+      sender_id:
+        type: string
+      time_commitment:
+        type: number
+    type: object
+  github_com_egokernel_ek1_internal_datasync.RawSignal:
+    properties:
+      body:
+        type: string
+      category:
+        description: '"Calendar", "Communication", "Finance", "Health", "Billing"'
+        type: string
+      metadata:
+        additionalProperties:
+          type: string
+        description: service-specific fields (sender, amount, channel, etc.)
+        type: object
+      occurredAt:
+        type: string
+      servicePurpose:
+        description: what this service is and what it's used for (injected by engine)
+        type: string
+      serviceSlug:
+        type: string
+      title:
+        type: string
     type: object
   github_com_egokernel_ek1_internal_datasync.ServiceStatus:
     properties:
@@ -37,162 +161,57 @@ definitions:
       slug:
         type: string
     type: object
-  internal_activities.Decision:
-    enum:
-    - 0
-    - 1
-    - 2
-    - 3
-    - 4
-    - 5
-    type: integer
-    x-enum-varnames:
-    - Pending
-    - Accepted
-    - Declined
-    - Negotiated
-    - Automated
-    - Cancelled
-  internal_activities.Event:
+  github_com_egokernel_ek1_internal_signals.ProcessResult:
     properties:
-      analysis:
-        allOf:
-        - $ref: '#/definitions/internal_activities.SignalAnalysis'
-        description: LLM scores + triage rationale
-      created_at:
-        type: string
-      decision:
-        allOf:
-        - $ref: '#/definitions/internal_activities.Decision'
-        enum:
-        - 0
-        - 1
-        - 2
-        - 3
-        - 4
-        - 5
-      event_type:
-        allOf:
-        - $ref: '#/definitions/internal_activities.EventType'
-        enum:
-        - 0
-        - 1
-        - 2
-        - 3
-        - 4
-        - 5
-      gain:
-        $ref: '#/definitions/internal_activities.Gain'
-      id:
+      ai_errors:
         type: integer
-      importance:
-        allOf:
-        - $ref: '#/definitions/internal_activities.Importance'
-        enum:
-        - 0
-        - 1
-        - 2
-      narrative:
-        description: Detail description of exactly what happened
+      errors:
+        items:
+          type: string
+        type: array
+      processed_ok:
+        type: integer
+      relevant_signals:
+        type: integer
+      replies_generated:
+        type: integer
+      store_errors:
+        type: integer
+      total_signals:
+        type: integer
+    type: object
+  internal_auth.AuthTokenResponse:
+    properties:
+      expires_at:
         type: string
-      read:
+      token:
+        type: string
+    type: object
+  internal_auth.ChangePinRequest:
+    properties:
+      current_pin:
+        type: string
+      new_pin:
+        type: string
+    type: object
+  internal_auth.LoginRequest:
+    properties:
+      pin:
+        type: string
+    type: object
+  internal_auth.PinStatusResponse:
+    properties:
+      configured:
         type: boolean
-      source_service:
-        type: string
-      updated_at:
+    type: object
+  internal_auth.RemovePinRequest:
+    properties:
+      current_pin:
         type: string
     type: object
-  internal_activities.EventType:
-    enum:
-    - 0
-    - 1
-    - 2
-    - 3
-    - 4
-    - 5
-    type: integer
-    x-enum-varnames:
-    - Finance
-    - Calendar
-    - Communication
-    - Billing
-    - Health
-    - Other
-  internal_activities.Gain:
+  internal_auth.SetupPinRequest:
     properties:
-      _symbol:
-        description: How to present the gain e.g $ for money type
-        type: string
-      _value:
-        type: number
-      details:
-        type: string
-      kind:
-        allOf:
-        - $ref: '#/definitions/internal_activities.GainKind'
-        enum:
-        - 0
-        - 1
-      type:
-        allOf:
-        - $ref: '#/definitions/internal_activities.GainType'
-        enum:
-        - 0
-        - 1
-    type: object
-  internal_activities.GainKind:
-    enum:
-    - 0
-    - 1
-    type: integer
-    x-enum-varnames:
-    - Money
-    - Time
-  internal_activities.GainType:
-    enum:
-    - 0
-    - 1
-    type: integer
-    x-enum-varnames:
-    - Positive
-    - Negative
-  internal_activities.Importance:
-    enum:
-    - 0
-    - 1
-    - 2
-    type: integer
-    x-enum-varnames:
-    - Low
-    - Medium
-    - High
-  internal_activities.SignalAnalysis:
-    properties:
-      decide_threshold:
-        description: utility threshold at time of Decide
-        type: number
-      decide_utility:
-        description: utility computed by Decide (if reached)
-        type: number
-      estimated_roi:
-        description: USD value scored by LLM
-        type: number
-      manipulation_pct:
-        description: 0–1 manipulation score
-        type: number
-      roi_threshold:
-        description: minimum ROI the kernel required at triage
-        type: number
-      service_slug:
-        type: string
-      signal_title:
-        type: string
-      time_commitment:
-        description: hours scored by LLM
-        type: number
-      triage_gate:
-        description: financial_insignificance | manipulation | decide_utility | decide_risk
-          | accepted
+      pin:
         type: string
     type: object
   internal_auth.pinReq:
@@ -222,189 +241,6 @@ definitions:
       updated_at:
         type: string
     type: object
-  internal_brain.KernelSnapshot:
-    properties:
-      decision_count:
-        type: integer
-      identity_entropy:
-        type: number
-      status:
-        description: |-
-          Status is the current operational mode of the kernel.
-          ONLINE: normal autonomous operation.
-          SHIELDED: biometrics gate active — elevated stress or poor sleep; decision threshold raised.
-          H2HI: identity entropy spike — manual review required; call POST /brain/sync-acknowledge to resume.
-          EXILED: reputation score below exile threshold; no external processing.
-          enums: ONLINE,SHIELDED,H2HI,EXILED
-        enum:
-        - ONLINE
-        - SHIELDED
-        - H2HI
-        - EXILED
-        type: string
-      values:
-        $ref: '#/definitions/internal_brain.ValueMatrix'
-    type: object
-  internal_brain.StageProgress:
-    properties:
-      hand:
-        type: integer
-      shadow:
-        type: integer
-      voice:
-        type: integer
-    type: object
-  internal_brain.StatusResponse:
-    properties:
-      decision_count:
-        type: integer
-      identity_entropy:
-        type: number
-      reputation_score:
-        type: integer
-      reputation_tier:
-        type: string
-      stage_progress:
-        $ref: '#/definitions/internal_brain.StageProgress'
-      status:
-        description: |-
-          Status is the current operational mode of the kernel.
-          ONLINE: normal autonomous operation.
-          SHIELDED: biometrics gate active — elevated stress or poor sleep; decision threshold raised.
-          H2HI: identity entropy spike — manual review required; call POST /brain/sync-acknowledge to resume.
-          EXILED: reputation score below exile threshold; no external processing.
-          enums: ONLINE,SHIELDED,H2HI,EXILED
-        enum:
-        - ONLINE
-        - SHIELDED
-        - H2HI
-        - EXILED
-        type: string
-      time_saved_today:
-        description: minutes
-        type: integer
-      values:
-        $ref: '#/definitions/internal_brain.ValueMatrix'
-    type: object
-  internal_brain.ValueMatrix:
-    properties:
-      baseHourlyRate:
-        description: |-
-          BaseHourlyRate is the user's baseline value of one hour (in USD).
-          Used to compute the Cognitive Tax on time-consuming opportunities.
-        format: float64
-        type: number
-      presentBiasDiscount:
-        description: |-
-          PresentBiasDiscount (ρ) is the user's personal discount rate for future rewards.
-          Higher ρ = more present-biased (prefers immediate gains).
-        format: float64
-        type: number
-      reputationImpact:
-        description: |-
-          ReputationImpact: how much the user cares about ledger cleanliness (0–1).
-          HIGH priority. Predatory trades incur a reputation cost.
-        format: float64
-        type: number
-      riskTolerance:
-        description: |-
-          RiskTolerance: 0.05 = very conservative, 0.90 = degen.
-          MEDIUM priority. Mapped to a configurable σ.
-        format: float64
-        type: number
-      socialEntropy:
-        description: |-
-          SocialEntropy: desire to maintain human-like friction (prevents appearing robotic).
-          LOW priority. Set > 0 to inject periodic "irrational" human choices.
-        format: float64
-        type: number
-      temporalSovereignty:
-        description: |-
-          TemporalSovereignty: how much the user values unstructured free time (0–1).
-          CRITICAL priority. Any interaction yielding < 1.5× ROI on attention is culled.
-        format: float64
-        type: number
-      utilityThreshold:
-        description: |-
-          UtilityThreshold is the minimum computed utility required to execute an action.
-          Actions below this are automatically culled.
-        format: float64
-        type: number
-    type: object
-  internal_chat.Message:
-    properties:
-      content:
-        type: string
-      role:
-        type: string
-      timestamp:
-        type: string
-    type: object
-  internal_chat.Request:
-    properties:
-      history:
-        items:
-          $ref: '#/definitions/internal_chat.Message'
-        type: array
-      message:
-        type: string
-    type: object
-  internal_chat.Response:
-    properties:
-      reply:
-        type: string
-      timestamp:
-        type: string
-    type: object
-  internal_harvest.ContactRecord:
-    properties:
-      favors_given:
-        description: favours the contact gave to the user
-        type: integer
-      favors_received:
-        description: favours the contact received from the user
-        type: integer
-      id:
-        type: string
-      last_contact:
-        type: string
-      name:
-        type: string
-      overlap:
-        description: max 0-1 solution/bottleneck similarity seen
-        type: number
-    type: object
-  internal_harvest.HarvestResult:
-    properties:
-      contacts_found:
-        type: integer
-      debts:
-        items:
-          $ref: '#/definitions/internal_harvest.SocialDebt'
-        type: array
-      opportunities:
-        items:
-          type: string
-        type: array
-      scanned_at:
-        type: string
-      total_value:
-        type: number
-    type: object
-  internal_harvest.SocialDebt:
-    properties:
-      action:
-        description: recommended next step
-        type: string
-      contact:
-        $ref: '#/definitions/internal_harvest.ContactRecord'
-      estimated_value:
-        description: USD equivalent
-        type: number
-      net_favors:
-        description: positive = contact owes the user
-        type: integer
-    type: object
   internal_integrations.AuthMethod:
     enum:
     - 0
@@ -427,19 +263,23 @@ definitions:
     - 0
     - 1
     - 2
+    - 3
     type: integer
     x-enum-comments:
       Connected: connected and active
       Disconnected: not installed
+      NeedsReauth: connected before but token lacks required scopes — user must re-authorize
       Pending: credentials being entered
     x-enum-descriptions:
     - not installed
     - credentials being entered
     - connected and active
+    - connected before but token lacks required scopes — user must re-authorize
     x-enum-varnames:
     - Disconnected
     - Pending
     - Connected
+    - NeedsReauth
   internal_integrations.Service:
     properties:
       api_endpoint:
@@ -486,6 +326,7 @@ definitions:
         - 0
         - 1
         - 2
+        - 3
       updated_at:
         type: string
     type: object
@@ -502,17 +343,6 @@ definitions:
         type: string
       client_secret:
         type: string
-    type: object
-  internal_ledger.HistoryEntry:
-    properties:
-      created_at:
-        type: string
-      id:
-        type: integer
-      impact:
-        type: integer
-      success:
-        type: boolean
     type: object
   internal_notifications.Notification:
     properties:
@@ -535,22 +365,26 @@ definitions:
     - OPPORTUNITY
     - HARVEST
     - SOUL_DRIFT
+    - QUEUE_ENTRY
     type: string
     x-enum-comments:
       TypeH2HI: identity entropy spike — manual sync required
       TypeHarvest: ghost-agreement opportunity detected
       TypeOpportunity: high-value social debt detected by harvest engine
+      TypeQueueEntry: action queued for human approval (Stage 2)
       TypeSoulDrift: periodic irrational-human injection event
     x-enum-descriptions:
     - identity entropy spike — manual sync required
     - high-value social debt detected by harvest engine
     - ghost-agreement opportunity detected
     - periodic irrational-human injection event
+    - action queued for human approval (Stage 2)
     x-enum-varnames:
     - TypeH2HI
     - TypeOpportunity
     - TypeHarvest
     - TypeSoulDrift
+    - TypeQueueEntry
   internal_profile.ConnectionSetting:
     properties:
       api_endpoint:
@@ -564,22 +398,26 @@ definitions:
   internal_profile.DecisionPreference:
     properties:
       autonomy:
-        description: Minimise dependence on third parties
+        description: Minimise dependence on third parties (1–10)
         type: integer
+      base_hourly_rate:
+        description: Your target USD value of one hour of attention (e.g. 50, 150,
+          500)
+        type: number
       financial_growth:
-        description: Prioritise revenue-generating decisions
+        description: Prioritise revenue-generating decisions (1–10)
         type: integer
       health_recovery:
-        description: Respect sleep, stress and energy limits
+        description: Respect sleep, stress and energy limits (1–10)
         type: integer
       privacy_protection:
-        description: Refuse data sharing with low-trust parties
+        description: Refuse data sharing with low-trust parties (1–10)
         type: integer
       reputation_building:
-        description: Long-term trust over short-term gain
+        description: Long-term trust over short-term gain (1–10)
         type: integer
       time_sovereignty:
-        description: Weight given to protecting your time
+        description: Weight given to protecting your time (1–10)
         type: integer
     type: object
   internal_profile.EKProgress:
@@ -599,6 +437,8 @@ definitions:
         type: string
       has_pin:
         type: boolean
+      identity:
+        $ref: '#/definitions/internal_profile.UserIdentity'
       kernel_name:
         type: string
       preferences:
@@ -610,6 +450,30 @@ definitions:
       updated_at:
         type: string
     type: object
+  internal_profile.UserIdentity:
+    properties:
+      current_goals:
+        description: e.g. "close Q1 enterprise deals"
+        type: string
+      income_model:
+        description: e.g. "salary + consulting"
+        type: string
+      industry:
+        description: e.g. "Software / SaaS"
+        type: string
+      inferred_summary:
+        description: auto-generated by POST /profile/infer
+        type: string
+      profession:
+        description: e.g. "Senior Product Manager, B2B SaaS"
+        type: string
+      signal_priorities:
+        description: e.g. "client requests, investor pings"
+        type: string
+      skills:
+        description: e.g. "product strategy, pricing, hiring"
+        type: string
+    type: object
   internal_scheduler.Status:
     properties:
       interval_minutes:
@@ -619,7 +483,7 @@ definitions:
         type: string
       last_result:
         allOf:
-        - $ref: '#/definitions/github_com_egokernel_ek1_internal_brain.PipelineResult'
+        - $ref: '#/definitions/github_com_egokernel_ek1_internal_signals.ProcessResult'
         description: nil if never run
       last_run_at:
         description: nil if never run
@@ -637,6 +501,140 @@ definitions:
           $ref: '#/definitions/github_com_egokernel_ek1_internal_datasync.ServiceStatus'
         type: array
     type: object
+  internal_signals.DraftReply:
+    properties:
+      created_at:
+        type: string
+      edited_text:
+        description: User-modified version
+        type: string
+      id:
+        type: integer
+      original_text:
+        description: AI-generated draft
+        type: string
+      recipients:
+        description: email addresses
+        items:
+          type: string
+        type: array
+      signal_id:
+        type: integer
+      status:
+        $ref: '#/definitions/internal_signals.ReplyStatus'
+      subject:
+        description: reply subject line
+        type: string
+      tone:
+        description: professional, casual, friendly, formal
+        type: string
+      updated_at:
+        type: string
+    type: object
+  internal_signals.ReplyStatus:
+    enum:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    type: integer
+    x-enum-comments:
+      ReplyApproved: User approved, ready to send
+      ReplyDrafted: Reply generated, waiting for user
+      ReplyEdited: User modified the draft
+      ReplyNone: No reply needed/generated
+      ReplyRejected: User rejected the draft
+      ReplySent: Reply was sent
+    x-enum-descriptions:
+    - No reply needed/generated
+    - Reply generated, waiting for user
+    - User modified the draft
+    - User approved, ready to send
+    - User rejected the draft
+    - Reply was sent
+    x-enum-varnames:
+    - ReplyNone
+    - ReplyDrafted
+    - ReplyEdited
+    - ReplyApproved
+    - ReplyRejected
+    - ReplySent
+  internal_signals.Signal:
+    properties:
+      analysis:
+        $ref: '#/definitions/github_com_egokernel_ek1_internal_ai.AnalysedSignal'
+      id:
+        type: integer
+      last_updated:
+        type: string
+      original_signal:
+        $ref: '#/definitions/github_com_egokernel_ek1_internal_datasync.RawSignal'
+      processed_at:
+        type: string
+      reply_status:
+        $ref: '#/definitions/internal_signals.ReplyStatus'
+      service_slug:
+        type: string
+      status:
+        $ref: '#/definitions/internal_signals.Status'
+      user_notes:
+        type: string
+    type: object
+  internal_signals.SignalSummary:
+    properties:
+      high_priority:
+        type: integer
+      needing_replies:
+        type: integer
+      newsletters_today:
+        type: integer
+      relevant_today:
+        type: integer
+      total_pending:
+        type: integer
+    type: object
+  internal_signals.Status:
+    enum:
+    - 0
+    - 1
+    - 2
+    - 3
+    type: integer
+    x-enum-comments:
+      StatusDone: User marked as completed
+      StatusIgnored: User marked as not important
+      StatusPending: Waiting for user review
+      StatusSnoozed: User postponed until later
+    x-enum-descriptions:
+    - Waiting for user review
+    - User marked as completed
+    - User marked as not important
+    - User postponed until later
+    x-enum-varnames:
+    - StatusPending
+    - StatusDone
+    - StatusIgnored
+    - StatusSnoozed
+  internal_signals.UpdateReplyRequest:
+    properties:
+      action:
+        description: approve|reject|edit
+        type: string
+      edited_text:
+        description: modified reply text (for edit action)
+        type: string
+    type: object
+  internal_signals.UpdateStatusRequest:
+    properties:
+      notes:
+        description: optional user notes
+        type: string
+      status:
+        description: pending|done|ignored|snoozed
+        type: string
+    type: object
 host: localhost:3000
 info:
   contact: {}
@@ -644,91 +642,166 @@ info:
   title: EK-1 Ego-Kernel API
   version: "1.0"
 paths:
-  /activities/events:
-    get:
-      produces:
+  /auth/login:
+    post:
+      consumes:
       - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/internal_activities.Event'
-            type: array
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: List events
-      tags:
-      - activities
-  /activities/events/{id}:
-    get:
+      description: Validates PIN and returns JWT token
       parameters:
-      - description: Event ID
-        in: path
-        name: id
+      - description: Login request
+        in: body
+        name: body
         required: true
-        type: integer
+        schema:
+          $ref: '#/definitions/internal_auth.LoginRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_activities.Event'
+            $ref: '#/definitions/internal_auth.AuthTokenResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "429":
+          description: Too Many Requests
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Login with PIN
+      tags:
+      - auth
+  /auth/logout:
+    post:
+      description: Invalidates the current JWT token
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Logout
+      tags:
+      - auth
+  /auth/pin:
+    delete:
+      consumes:
+      - application/json
+      description: Removes PIN protection after verification, ends session
+      parameters:
+      - description: PIN removal request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_auth.RemovePinRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Remove PIN
+      tags:
+      - auth
+  /auth/pin/change:
+    post:
+      consumes:
+      - application/json
+      description: Changes the PIN after verifying current PIN, issues new JWT
+      parameters:
+      - description: PIN change request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_auth.ChangePinRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_auth.AuthTokenResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Change PIN
+      tags:
+      - auth
+  /auth/pin/setup:
+    post:
+      consumes:
+      - application/json
+      description: Sets up the PIN for first-time use (only if no PIN is configured)
+      parameters:
+      - description: PIN setup request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_auth.SetupPinRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_auth.AuthTokenResponse'
         "400":
           description: Bad Request
           schema:
-            additionalProperties: true
+            additionalProperties:
+              type: string
             type: object
-        "404":
-          description: Not Found
+        "409":
+          description: Conflict
           schema:
-            additionalProperties: true
+            additionalProperties:
+              type: string
             type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get event by ID
+      summary: Setup initial PIN
       tags:
-      - activities
-  /activities/events/{id}/read:
-    put:
-      parameters:
-      - description: Event ID
-        in: path
-        name: id
-        required: true
-        type: integer
+      - auth
+  /auth/pin/status:
+    get:
+      description: Returns whether a PIN has been configured for this device
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_activities.Event'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Toggle read status
+            $ref: '#/definitions/internal_auth.PinStatusResponse'
+      summary: Check PIN configuration status
       tags:
-      - activities
+      - auth
   /auth/session/lock:
     post:
       produces:
@@ -852,40 +925,6 @@ paths:
       summary: Check-in history
       tags:
       - biometrics
-  /brain/status:
-    get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_brain.StatusResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get brain status
-      tags:
-      - brain
-  /brain/sync-acknowledge:
-    post:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_brain.KernelSnapshot'
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Acknowledge manual sync (clears H2HI)
-      tags:
-      - brain
   /chat:
     post:
       consumes:
@@ -896,14 +935,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/internal_chat.Request'
+          $ref: '#/definitions/chat.Request'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_chat.Response'
+            $ref: '#/definitions/chat.Response'
         "400":
           description: Bad Request
           schema:
@@ -931,7 +970,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/internal_chat.Message'
+              $ref: '#/definitions/chat.Message'
             type: array
         "500":
           description: Internal Server Error
@@ -954,7 +993,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/internal_chat.Request'
+          $ref: '#/definitions/chat.Request'
       produces:
       - text/event-stream
       responses:
@@ -976,57 +1015,6 @@ paths:
       summary: Stream chat with your EK-1 kernel (SSE)
       tags:
       - chat
-  /harvest/results:
-    get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_harvest.HarvestResult'
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get latest harvest results
-      tags:
-      - harvest
-  /harvest/scan:
-    post:
-      description: Starts a social-debt scan in the background and returns immediately.
-        Poll GET /harvest/results for the completed result or GET /harvest/status
-        for running state.
-      produces:
-      - application/json
-      responses:
-        "202":
-          description: Accepted
-          schema:
-            additionalProperties: true
-            type: object
-        "409":
-          description: Conflict
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Trigger harvest scan (async)
-      tags:
-      - harvest
-  /harvest/status:
-    get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get harvest scan status
-      tags:
-      - harvest
   /integrations/services:
     get:
       produces:
@@ -1300,52 +1288,6 @@ paths:
       summary: Create custom service
       tags:
       - integrations
-  /ledger/history:
-    get:
-      parameters:
-      - description: Results per page (1–100, default 20)
-        in: query
-        name: limit
-        type: integer
-      - description: Pagination offset (default 0)
-        in: query
-        name: offset
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/internal_ledger.HistoryEntry'
-            type: array
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get reputation history
-      tags:
-      - ledger
-  /ledger/score:
-    get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get reputation score
-      tags:
-      - ledger
   /notifications:
     get:
       produces:
@@ -1490,6 +1432,63 @@ paths:
       summary: Update connection settings
       tags:
       - profile
+  /profile/identity:
+    put:
+      consumes:
+      - application/json
+      description: Sets profession, industry, skills, goals and other identity fields
+        used to
+      parameters:
+      - description: Identity fields
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_profile.UserIdentity'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_profile.Profile'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update user identity
+      tags:
+      - profile
+  /profile/infer:
+    post:
+      description: Runs the local LLM over the most recent event narratives to generate
+        a
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_profile.Profile'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Auto-infer user identity from signal history
+      tags:
+      - profile
   /profile/pin:
     delete:
       consumes:
@@ -1579,6 +1578,48 @@ paths:
       summary: Update decision preferences
       tags:
       - profile
+  /replies/{id}:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Draft reply ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Reply update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_signals.UpdateReplyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Update a draft reply
+      tags:
+      - replies
+  /replies/pending:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_signals.DraftReply'
+            type: array
+      summary: Get pending draft replies
+      tags:
+      - replies
   /scheduler/run-now:
     post:
       description: Starts a sync cycle in the background and returns immediately.
@@ -1611,6 +1652,131 @@ paths:
       summary: Get scheduler status
       tags:
       - scheduler
+  /signals:
+    get:
+      parameters:
+      - description: Filter by category (relevant|newsletter|automated|notification)
+        in: query
+        name: category
+        type: string
+      - description: Filter by priority (high|medium|low)
+        in: query
+        name: priority
+        type: string
+      - description: Filter by status (pending|done|ignored|snoozed)
+        in: query
+        name: status
+        type: string
+      - description: Filter by service slug
+        in: query
+        name: service
+        type: string
+      - description: Filter by reply requirement
+        in: query
+        name: needs_reply
+        type: boolean
+      - description: Max results (default 50, max 100)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_signals.Signal'
+            type: array
+      summary: List all signals with optional filtering
+      tags:
+      - signals
+  /signals/{id}:
+    get:
+      parameters:
+      - description: Signal ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_signals.Signal'
+      summary: Get a specific signal
+      tags:
+      - signals
+  /signals/{id}/status:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Signal ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Status update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_signals.UpdateStatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Update signal status
+      tags:
+      - signals
+  /signals/relevant:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_signals.Signal'
+            type: array
+      summary: Get relevant signals that need attention
+      tags:
+      - signals
+  /signals/replies:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_signals.Signal'
+            type: array
+      summary: Get signals that need replies
+      tags:
+      - signals
+  /signals/summary:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_signals.SignalSummary'
+      summary: Get signals summary for dashboard
+      tags:
+      - signals
 schemes:
 - http
 swagger: "2.0"

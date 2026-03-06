@@ -15,128 +15,252 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/activities/events": {
-            "get": {
+        "/auth/login": {
+            "post": {
+                "description": "Validates PIN and returns JWT token",
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "activities"
+                    "auth"
                 ],
-                "summary": "List events",
+                "summary": "Login with PIN",
+                "parameters": [
+                    {
+                        "description": "Login request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_auth.LoginRequest"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/internal_activities.Event"
+                            "$ref": "#/definitions/internal_auth.AuthTokenResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
                             }
                         }
                     },
-                    "500": {
-                        "description": "Internal Server Error",
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "type": "object",
-                            "additionalProperties": true
+                            "additionalProperties": {
+                                "type": "string"
+                            }
                         }
                     }
                 }
             }
         },
-        "/activities/events/{id}": {
+        "/auth/logout": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Invalidates the current JWT token",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Logout",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/pin": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Removes PIN protection after verification, ends session",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Remove PIN",
+                "parameters": [
+                    {
+                        "description": "PIN removal request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_auth.RemovePinRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/pin/change": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Changes the PIN after verifying current PIN, issues new JWT",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Change PIN",
+                "parameters": [
+                    {
+                        "description": "PIN change request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_auth.ChangePinRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_auth.AuthTokenResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/pin/setup": {
+            "post": {
+                "description": "Sets up the PIN for first-time use (only if no PIN is configured)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Setup initial PIN",
+                "parameters": [
+                    {
+                        "description": "PIN setup request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_auth.SetupPinRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_auth.AuthTokenResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/pin/status": {
             "get": {
+                "description": "Returns whether a PIN has been configured for this device",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "activities"
+                    "auth"
                 ],
-                "summary": "Get event by ID",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Event ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
+                "summary": "Check PIN configuration status",
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_activities.Event"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/activities/events/{id}/read": {
-            "put": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "activities"
-                ],
-                "summary": "Toggle read status",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Event ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_activities.Event"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/internal_auth.PinStatusResponse"
                         }
                     }
                 }
@@ -326,58 +450,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/brain/status": {
-            "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "brain"
-                ],
-                "summary": "Get brain status",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_brain.StatusResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/brain/sync-acknowledge": {
-            "post": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "brain"
-                ],
-                "summary": "Acknowledge manual sync (clears H2HI)",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_brain.KernelSnapshot"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/chat": {
             "post": {
                 "consumes": [
@@ -397,7 +469,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_chat.Request"
+                            "$ref": "#/definitions/chat.Request"
                         }
                     }
                 ],
@@ -405,7 +477,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_chat.Response"
+                            "$ref": "#/definitions/chat.Response"
                         }
                     },
                     "400": {
@@ -448,7 +520,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/internal_chat.Message"
+                                "$ref": "#/definitions/chat.Message"
                             }
                         }
                     },
@@ -482,7 +554,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_chat.Request"
+                            "$ref": "#/definitions/chat.Request"
                         }
                     }
                 ],
@@ -503,80 +575,6 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/harvest/results": {
-            "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "harvest"
-                ],
-                "summary": "Get latest harvest results",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_harvest.HarvestResult"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/harvest/scan": {
-            "post": {
-                "description": "Starts a social-debt scan in the background and returns immediately. Poll GET /harvest/results for the completed result or GET /harvest/status for running state.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "harvest"
-                ],
-                "summary": "Trigger harvest scan (async)",
-                "responses": {
-                    "202": {
-                        "description": "Accepted",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "409": {
-                        "description": "Conflict",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/harvest/status": {
-            "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "harvest"
-                ],
-                "summary": "Get harvest scan status",
-                "responses": {
-                    "200": {
-                        "description": "OK",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -986,76 +984,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/ledger/history": {
-            "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "ledger"
-                ],
-                "summary": "Get reputation history",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Results per page (1–100, default 20)",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Pagination offset (default 0)",
-                        "name": "offset",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/internal_ledger.HistoryEntry"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/ledger/score": {
-            "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "ledger"
-                ],
-                "summary": "Get reputation score",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/notifications": {
             "get": {
                 "produces": [
@@ -1272,6 +1200,88 @@ const docTemplate = `{
                 }
             }
         },
+        "/profile/identity": {
+            "put": {
+                "description": "Sets profession, industry, skills, goals and other identity fields used to",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "profile"
+                ],
+                "summary": "Update user identity",
+                "parameters": [
+                    {
+                        "description": "Identity fields",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_profile.UserIdentity"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_profile.Profile"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/profile/infer": {
+            "post": {
+                "description": "Runs the local LLM over the most recent event narratives to generate a",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "profile"
+                ],
+                "summary": "Auto-infer user identity from signal history",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_profile.Profile"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/profile/pin": {
             "put": {
                 "consumes": [
@@ -1406,6 +1416,71 @@ const docTemplate = `{
                 }
             }
         },
+        "/replies/pending": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "replies"
+                ],
+                "summary": "Get pending draft replies",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/internal_signals.DraftReply"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/replies/{id}": {
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "replies"
+                ],
+                "summary": "Update a draft reply",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Draft reply ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Reply update",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_signals.UpdateReplyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/scheduler/run-now": {
             "post": {
                 "description": "Starts a sync cycle in the background and returns immediately. Poll GET /scheduler/status for completion (running=false + last_result populated).",
@@ -1452,34 +1527,423 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/signals": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "signals"
+                ],
+                "summary": "List all signals with optional filtering",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by category (relevant|newsletter|automated|notification)",
+                        "name": "category",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by priority (high|medium|low)",
+                        "name": "priority",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by status (pending|done|ignored|snoozed)",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by service slug",
+                        "name": "service",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Filter by reply requirement",
+                        "name": "needs_reply",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Max results (default 50, max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/internal_signals.Signal"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/signals/relevant": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "signals"
+                ],
+                "summary": "Get relevant signals that need attention",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/internal_signals.Signal"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/signals/replies": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "signals"
+                ],
+                "summary": "Get signals that need replies",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/internal_signals.Signal"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/signals/summary": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "signals"
+                ],
+                "summary": "Get signals summary for dashboard",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_signals.SignalSummary"
+                        }
+                    }
+                }
+            }
+        },
+        "/signals/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "signals"
+                ],
+                "summary": "Get a specific signal",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Signal ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_signals.Signal"
+                        }
+                    }
+                }
+            }
+        },
+        "/signals/{id}/status": {
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "signals"
+                ],
+                "summary": "Update signal status",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Signal ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Status update",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_signals.UpdateStatusRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
-        "github_com_egokernel_ek1_internal_brain.PipelineResult": {
+        "chat.Message": {
             "type": "object",
             "properties": {
-                "accepted": {
-                    "description": "passed Triage + Decide → Decision: Automated",
-                    "type": "integer"
-                },
-                "ghosted": {
-                    "description": "manipulation detected → Decision: Declined (ghost)",
-                    "type": "integer"
-                },
-                "rejected": {
-                    "description": "failed Triage or Decide → Decision: Declined",
-                    "type": "integer"
-                },
-                "shield_reason": {
-                    "description": "why shield was active",
+                "content": {
                     "type": "string"
                 },
-                "shielded": {
-                    "description": "biometrics gate was active during this run",
+                "role": {
+                    "type": "string"
+                },
+                "timestamp": {
+                    "type": "string"
+                }
+            }
+        },
+        "chat.Request": {
+            "type": "object",
+            "properties": {
+                "history": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/chat.Message"
+                    }
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "chat.Response": {
+            "type": "object",
+            "properties": {
+                "reply": {
+                    "type": "string"
+                },
+                "timestamp": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_egokernel_ek1_internal_ai.AnalysedSignal": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "description": "relevant|newsletter|automated|notification",
+                    "type": "string"
+                },
+                "event_type": {
+                    "description": "Use Category instead",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/github_com_egokernel_ek1_internal_ai.LegacyEventType"
+                        }
+                    ]
+                },
+                "gain": {
+                    "description": "Removed in simplified model",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/github_com_egokernel_ek1_internal_ai.LegacyGain"
+                        }
+                    ]
+                },
+                "importance": {
+                    "description": "Use Priority instead",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/github_com_egokernel_ek1_internal_ai.LegacyImportance"
+                        }
+                    ]
+                },
+                "isRelevant": {
                     "type": "boolean"
                 },
-                "total": {
-                    "type": "integer"
+                "narrative": {
+                    "description": "Deprecated: Legacy fields for backward compatibility during transition",
+                    "type": "string"
+                },
+                "needsReply": {
+                    "type": "boolean"
+                },
+                "priority": {
+                    "description": "high|medium|low",
+                    "type": "string"
+                },
+                "reasoning": {
+                    "type": "string"
+                },
+                "replyDraft": {
+                    "type": "string"
+                },
+                "replyTone": {
+                    "type": "string"
+                },
+                "request": {
+                    "description": "Use new fields instead",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/github_com_egokernel_ek1_internal_ai.LegacyRequest"
+                        }
+                    ]
+                },
+                "signal": {
+                    "$ref": "#/definitions/github_com_egokernel_ek1_internal_datasync.RawSignal"
+                },
+                "suggestedAction": {
+                    "type": "string"
+                },
+                "summary": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_egokernel_ek1_internal_ai.LegacyEventType": {
+            "type": "integer",
+            "enum": [
+                0
+            ],
+            "x-enum-varnames": [
+                "EventTypeOther"
+            ]
+        },
+        "github_com_egokernel_ek1_internal_ai.LegacyGain": {
+            "type": "object",
+            "properties": {
+                "details": {
+                    "type": "string"
+                },
+                "kind": {
+                    "$ref": "#/definitions/github_com_egokernel_ek1_internal_ai.LegacyGainKind"
+                },
+                "symbol": {
+                    "type": "string"
+                },
+                "type": {
+                    "$ref": "#/definitions/github_com_egokernel_ek1_internal_ai.LegacyGainType"
+                },
+                "value": {
+                    "type": "number"
+                }
+            }
+        },
+        "github_com_egokernel_ek1_internal_ai.LegacyGainKind": {
+            "type": "integer",
+            "enum": [
+                0
+            ],
+            "x-enum-varnames": [
+                "GainKindMoney"
+            ]
+        },
+        "github_com_egokernel_ek1_internal_ai.LegacyGainType": {
+            "type": "integer",
+            "enum": [
+                0
+            ],
+            "x-enum-varnames": [
+                "GainTypePositive"
+            ]
+        },
+        "github_com_egokernel_ek1_internal_ai.LegacyImportance": {
+            "type": "integer",
+            "enum": [
+                0
+            ],
+            "x-enum-varnames": [
+                "ImportanceLow"
+            ]
+        },
+        "github_com_egokernel_ek1_internal_ai.LegacyRequest": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "estimated_roi": {
+                    "type": "number"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "manipulation_pct": {
+                    "type": "number"
+                },
+                "sender_id": {
+                    "type": "string"
+                },
+                "time_commitment": {
+                    "type": "number"
+                }
+            }
+        },
+        "github_com_egokernel_ek1_internal_datasync.RawSignal": {
+            "type": "object",
+            "properties": {
+                "body": {
+                    "type": "string"
+                },
+                "category": {
+                    "description": "\"Calendar\", \"Communication\", \"Finance\", \"Health\", \"Billing\"",
+                    "type": "string"
+                },
+                "metadata": {
+                    "description": "service-specific fields (sender, amount, channel, etc.)",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "occurredAt": {
+                    "type": "string"
+                },
+                "servicePurpose": {
+                    "description": "what this service is and what it's used for (injected by engine)",
+                    "type": "string"
+                },
+                "serviceSlug": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
                 }
             }
         },
@@ -1507,228 +1971,85 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_activities.Decision": {
-            "type": "integer",
-            "enum": [
-                0,
-                1,
-                2,
-                3,
-                4,
-                5
-            ],
-            "x-enum-varnames": [
-                "Pending",
-                "Accepted",
-                "Declined",
-                "Negotiated",
-                "Automated",
-                "Cancelled"
-            ]
-        },
-        "internal_activities.Event": {
+        "github_com_egokernel_ek1_internal_signals.ProcessResult": {
             "type": "object",
             "properties": {
-                "analysis": {
-                    "description": "LLM scores + triage rationale",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/internal_activities.SignalAnalysis"
-                        }
-                    ]
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "decision": {
-                    "enum": [
-                        0,
-                        1,
-                        2,
-                        3,
-                        4,
-                        5
-                    ],
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/internal_activities.Decision"
-                        }
-                    ]
-                },
-                "event_type": {
-                    "enum": [
-                        0,
-                        1,
-                        2,
-                        3,
-                        4,
-                        5
-                    ],
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/internal_activities.EventType"
-                        }
-                    ]
-                },
-                "gain": {
-                    "$ref": "#/definitions/internal_activities.Gain"
-                },
-                "id": {
+                "ai_errors": {
                     "type": "integer"
                 },
-                "importance": {
-                    "enum": [
-                        0,
-                        1,
-                        2
-                    ],
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/internal_activities.Importance"
-                        }
-                    ]
+                "errors": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
-                "narrative": {
-                    "description": "Detail description of exactly what happened",
+                "processed_ok": {
+                    "type": "integer"
+                },
+                "relevant_signals": {
+                    "type": "integer"
+                },
+                "replies_generated": {
+                    "type": "integer"
+                },
+                "store_errors": {
+                    "type": "integer"
+                },
+                "total_signals": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_auth.AuthTokenResponse": {
+            "type": "object",
+            "properties": {
+                "expires_at": {
                     "type": "string"
                 },
-                "read": {
+                "token": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_auth.ChangePinRequest": {
+            "type": "object",
+            "properties": {
+                "current_pin": {
+                    "type": "string"
+                },
+                "new_pin": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_auth.LoginRequest": {
+            "type": "object",
+            "properties": {
+                "pin": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_auth.PinStatusResponse": {
+            "type": "object",
+            "properties": {
+                "configured": {
                     "type": "boolean"
-                },
-                "source_service": {
-                    "type": "string"
-                },
-                "updated_at": {
+                }
+            }
+        },
+        "internal_auth.RemovePinRequest": {
+            "type": "object",
+            "properties": {
+                "current_pin": {
                     "type": "string"
                 }
             }
         },
-        "internal_activities.EventType": {
-            "type": "integer",
-            "enum": [
-                0,
-                1,
-                2,
-                3,
-                4,
-                5
-            ],
-            "x-enum-varnames": [
-                "Finance",
-                "Calendar",
-                "Communication",
-                "Billing",
-                "Health",
-                "Other"
-            ]
-        },
-        "internal_activities.Gain": {
+        "internal_auth.SetupPinRequest": {
             "type": "object",
             "properties": {
-                "_symbol": {
-                    "description": "How to present the gain e.g $ for money type",
-                    "type": "string"
-                },
-                "_value": {
-                    "type": "number"
-                },
-                "details": {
-                    "type": "string"
-                },
-                "kind": {
-                    "enum": [
-                        0,
-                        1
-                    ],
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/internal_activities.GainKind"
-                        }
-                    ]
-                },
-                "type": {
-                    "enum": [
-                        0,
-                        1
-                    ],
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/internal_activities.GainType"
-                        }
-                    ]
-                }
-            }
-        },
-        "internal_activities.GainKind": {
-            "type": "integer",
-            "enum": [
-                0,
-                1
-            ],
-            "x-enum-varnames": [
-                "Money",
-                "Time"
-            ]
-        },
-        "internal_activities.GainType": {
-            "type": "integer",
-            "enum": [
-                0,
-                1
-            ],
-            "x-enum-varnames": [
-                "Positive",
-                "Negative"
-            ]
-        },
-        "internal_activities.Importance": {
-            "type": "integer",
-            "enum": [
-                0,
-                1,
-                2
-            ],
-            "x-enum-varnames": [
-                "Low",
-                "Medium",
-                "High"
-            ]
-        },
-        "internal_activities.SignalAnalysis": {
-            "type": "object",
-            "properties": {
-                "decide_threshold": {
-                    "description": "utility threshold at time of Decide",
-                    "type": "number"
-                },
-                "decide_utility": {
-                    "description": "utility computed by Decide (if reached)",
-                    "type": "number"
-                },
-                "estimated_roi": {
-                    "description": "USD value scored by LLM",
-                    "type": "number"
-                },
-                "manipulation_pct": {
-                    "description": "0–1 manipulation score",
-                    "type": "number"
-                },
-                "roi_threshold": {
-                    "description": "minimum ROI the kernel required at triage",
-                    "type": "number"
-                },
-                "service_slug": {
-                    "type": "string"
-                },
-                "signal_title": {
-                    "type": "string"
-                },
-                "time_commitment": {
-                    "description": "hours scored by LLM",
-                    "type": "number"
-                },
-                "triage_gate": {
-                    "description": "financial_insignificance | manipulation | decide_utility | decide_risk | accepted",
+                "pin": {
                     "type": "string"
                 }
             }
@@ -1775,232 +2096,6 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_brain.KernelSnapshot": {
-            "type": "object",
-            "properties": {
-                "decision_count": {
-                    "type": "integer"
-                },
-                "identity_entropy": {
-                    "type": "number"
-                },
-                "status": {
-                    "description": "Status is the current operational mode of the kernel.\nONLINE: normal autonomous operation.\nSHIELDED: biometrics gate active — elevated stress or poor sleep; decision threshold raised.\nH2HI: identity entropy spike — manual review required; call POST /brain/sync-acknowledge to resume.\nEXILED: reputation score below exile threshold; no external processing.\nenums: ONLINE,SHIELDED,H2HI,EXILED",
-                    "type": "string",
-                    "enum": [
-                        "ONLINE",
-                        "SHIELDED",
-                        "H2HI",
-                        "EXILED"
-                    ]
-                },
-                "values": {
-                    "$ref": "#/definitions/internal_brain.ValueMatrix"
-                }
-            }
-        },
-        "internal_brain.StageProgress": {
-            "type": "object",
-            "properties": {
-                "hand": {
-                    "type": "integer"
-                },
-                "shadow": {
-                    "type": "integer"
-                },
-                "voice": {
-                    "type": "integer"
-                }
-            }
-        },
-        "internal_brain.StatusResponse": {
-            "type": "object",
-            "properties": {
-                "decision_count": {
-                    "type": "integer"
-                },
-                "identity_entropy": {
-                    "type": "number"
-                },
-                "reputation_score": {
-                    "type": "integer"
-                },
-                "reputation_tier": {
-                    "type": "string"
-                },
-                "stage_progress": {
-                    "$ref": "#/definitions/internal_brain.StageProgress"
-                },
-                "status": {
-                    "description": "Status is the current operational mode of the kernel.\nONLINE: normal autonomous operation.\nSHIELDED: biometrics gate active — elevated stress or poor sleep; decision threshold raised.\nH2HI: identity entropy spike — manual review required; call POST /brain/sync-acknowledge to resume.\nEXILED: reputation score below exile threshold; no external processing.\nenums: ONLINE,SHIELDED,H2HI,EXILED",
-                    "type": "string",
-                    "enum": [
-                        "ONLINE",
-                        "SHIELDED",
-                        "H2HI",
-                        "EXILED"
-                    ]
-                },
-                "time_saved_today": {
-                    "description": "minutes",
-                    "type": "integer"
-                },
-                "values": {
-                    "$ref": "#/definitions/internal_brain.ValueMatrix"
-                }
-            }
-        },
-        "internal_brain.ValueMatrix": {
-            "type": "object",
-            "properties": {
-                "baseHourlyRate": {
-                    "description": "BaseHourlyRate is the user's baseline value of one hour (in USD).\nUsed to compute the Cognitive Tax on time-consuming opportunities.",
-                    "type": "number",
-                    "format": "float64"
-                },
-                "presentBiasDiscount": {
-                    "description": "PresentBiasDiscount (ρ) is the user's personal discount rate for future rewards.\nHigher ρ = more present-biased (prefers immediate gains).",
-                    "type": "number",
-                    "format": "float64"
-                },
-                "reputationImpact": {
-                    "description": "ReputationImpact: how much the user cares about ledger cleanliness (0–1).\nHIGH priority. Predatory trades incur a reputation cost.",
-                    "type": "number",
-                    "format": "float64"
-                },
-                "riskTolerance": {
-                    "description": "RiskTolerance: 0.05 = very conservative, 0.90 = degen.\nMEDIUM priority. Mapped to a configurable σ.",
-                    "type": "number",
-                    "format": "float64"
-                },
-                "socialEntropy": {
-                    "description": "SocialEntropy: desire to maintain human-like friction (prevents appearing robotic).\nLOW priority. Set \u003e 0 to inject periodic \"irrational\" human choices.",
-                    "type": "number",
-                    "format": "float64"
-                },
-                "temporalSovereignty": {
-                    "description": "TemporalSovereignty: how much the user values unstructured free time (0–1).\nCRITICAL priority. Any interaction yielding \u003c 1.5× ROI on attention is culled.",
-                    "type": "number",
-                    "format": "float64"
-                },
-                "utilityThreshold": {
-                    "description": "UtilityThreshold is the minimum computed utility required to execute an action.\nActions below this are automatically culled.",
-                    "type": "number",
-                    "format": "float64"
-                }
-            }
-        },
-        "internal_chat.Message": {
-            "type": "object",
-            "properties": {
-                "content": {
-                    "type": "string"
-                },
-                "role": {
-                    "type": "string"
-                },
-                "timestamp": {
-                    "type": "string"
-                }
-            }
-        },
-        "internal_chat.Request": {
-            "type": "object",
-            "properties": {
-                "history": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/internal_chat.Message"
-                    }
-                },
-                "message": {
-                    "type": "string"
-                }
-            }
-        },
-        "internal_chat.Response": {
-            "type": "object",
-            "properties": {
-                "reply": {
-                    "type": "string"
-                },
-                "timestamp": {
-                    "type": "string"
-                }
-            }
-        },
-        "internal_harvest.ContactRecord": {
-            "type": "object",
-            "properties": {
-                "favors_given": {
-                    "description": "favours the contact gave to the user",
-                    "type": "integer"
-                },
-                "favors_received": {
-                    "description": "favours the contact received from the user",
-                    "type": "integer"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "last_contact": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "overlap": {
-                    "description": "max 0-1 solution/bottleneck similarity seen",
-                    "type": "number"
-                }
-            }
-        },
-        "internal_harvest.HarvestResult": {
-            "type": "object",
-            "properties": {
-                "contacts_found": {
-                    "type": "integer"
-                },
-                "debts": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/internal_harvest.SocialDebt"
-                    }
-                },
-                "opportunities": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "scanned_at": {
-                    "type": "string"
-                },
-                "total_value": {
-                    "type": "number"
-                }
-            }
-        },
-        "internal_harvest.SocialDebt": {
-            "type": "object",
-            "properties": {
-                "action": {
-                    "description": "recommended next step",
-                    "type": "string"
-                },
-                "contact": {
-                    "$ref": "#/definitions/internal_harvest.ContactRecord"
-                },
-                "estimated_value": {
-                    "description": "USD equivalent",
-                    "type": "number"
-                },
-                "net_favors": {
-                    "description": "positive = contact owes the user",
-                    "type": "integer"
-                }
-            }
-        },
         "internal_integrations.AuthMethod": {
             "type": "integer",
             "enum": [
@@ -2031,22 +2126,26 @@ const docTemplate = `{
             "enum": [
                 0,
                 1,
-                2
+                2,
+                3
             ],
             "x-enum-comments": {
                 "Connected": "connected and active",
                 "Disconnected": "not installed",
+                "NeedsReauth": "connected before but token lacks required scopes — user must re-authorize",
                 "Pending": "credentials being entered"
             },
             "x-enum-descriptions": [
                 "not installed",
                 "credentials being entered",
-                "connected and active"
+                "connected and active",
+                "connected before but token lacks required scopes — user must re-authorize"
             ],
             "x-enum-varnames": [
                 "Disconnected",
                 "Pending",
-                "Connected"
+                "Connected",
+                "NeedsReauth"
             ]
         },
         "internal_integrations.Service": {
@@ -2109,7 +2208,8 @@ const docTemplate = `{
                     "enum": [
                         0,
                         1,
-                        2
+                        2,
+                        3
                     ],
                     "allOf": [
                         {
@@ -2144,23 +2244,6 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_ledger.HistoryEntry": {
-            "type": "object",
-            "properties": {
-                "created_at": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "impact": {
-                    "type": "integer"
-                },
-                "success": {
-                    "type": "boolean"
-                }
-            }
-        },
         "internal_notifications.Notification": {
             "type": "object",
             "properties": {
@@ -2190,25 +2273,29 @@ const docTemplate = `{
                 "H2HI",
                 "OPPORTUNITY",
                 "HARVEST",
-                "SOUL_DRIFT"
+                "SOUL_DRIFT",
+                "QUEUE_ENTRY"
             ],
             "x-enum-comments": {
                 "TypeH2HI": "identity entropy spike — manual sync required",
                 "TypeHarvest": "ghost-agreement opportunity detected",
                 "TypeOpportunity": "high-value social debt detected by harvest engine",
+                "TypeQueueEntry": "action queued for human approval (Stage 2)",
                 "TypeSoulDrift": "periodic irrational-human injection event"
             },
             "x-enum-descriptions": [
                 "identity entropy spike — manual sync required",
                 "high-value social debt detected by harvest engine",
                 "ghost-agreement opportunity detected",
-                "periodic irrational-human injection event"
+                "periodic irrational-human injection event",
+                "action queued for human approval (Stage 2)"
             ],
             "x-enum-varnames": [
                 "TypeH2HI",
                 "TypeOpportunity",
                 "TypeHarvest",
-                "TypeSoulDrift"
+                "TypeSoulDrift",
+                "TypeQueueEntry"
             ]
         },
         "internal_profile.ConnectionSetting": {
@@ -2230,27 +2317,31 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "autonomy": {
-                    "description": "Minimise dependence on third parties",
+                    "description": "Minimise dependence on third parties (1–10)",
                     "type": "integer"
                 },
+                "base_hourly_rate": {
+                    "description": "Your target USD value of one hour of attention (e.g. 50, 150, 500)",
+                    "type": "number"
+                },
                 "financial_growth": {
-                    "description": "Prioritise revenue-generating decisions",
+                    "description": "Prioritise revenue-generating decisions (1–10)",
                     "type": "integer"
                 },
                 "health_recovery": {
-                    "description": "Respect sleep, stress and energy limits",
+                    "description": "Respect sleep, stress and energy limits (1–10)",
                     "type": "integer"
                 },
                 "privacy_protection": {
-                    "description": "Refuse data sharing with low-trust parties",
+                    "description": "Refuse data sharing with low-trust parties (1–10)",
                     "type": "integer"
                 },
                 "reputation_building": {
-                    "description": "Long-term trust over short-term gain",
+                    "description": "Long-term trust over short-term gain (1–10)",
                     "type": "integer"
                 },
                 "time_sovereignty": {
-                    "description": "Weight given to protecting your time",
+                    "description": "Weight given to protecting your time (1–10)",
                     "type": "integer"
                 }
             }
@@ -2281,6 +2372,9 @@ const docTemplate = `{
                 "has_pin": {
                     "type": "boolean"
                 },
+                "identity": {
+                    "$ref": "#/definitions/internal_profile.UserIdentity"
+                },
                 "kernel_name": {
                     "type": "string"
                 },
@@ -2294,6 +2388,39 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_profile.UserIdentity": {
+            "type": "object",
+            "properties": {
+                "current_goals": {
+                    "description": "e.g. \"close Q1 enterprise deals\"",
+                    "type": "string"
+                },
+                "income_model": {
+                    "description": "e.g. \"salary + consulting\"",
+                    "type": "string"
+                },
+                "industry": {
+                    "description": "e.g. \"Software / SaaS\"",
+                    "type": "string"
+                },
+                "inferred_summary": {
+                    "description": "auto-generated by POST /profile/infer",
+                    "type": "string"
+                },
+                "profession": {
+                    "description": "e.g. \"Senior Product Manager, B2B SaaS\"",
+                    "type": "string"
+                },
+                "signal_priorities": {
+                    "description": "e.g. \"client requests, investor pings\"",
+                    "type": "string"
+                },
+                "skills": {
+                    "description": "e.g. \"product strategy, pricing, hiring\"",
                     "type": "string"
                 }
             }
@@ -2312,7 +2439,7 @@ const docTemplate = `{
                     "description": "nil if never run",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/github_com_egokernel_ek1_internal_brain.PipelineResult"
+                            "$ref": "#/definitions/github_com_egokernel_ek1_internal_signals.ProcessResult"
                         }
                     ]
                 },
@@ -2336,6 +2463,189 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/github_com_egokernel_ek1_internal_datasync.ServiceStatus"
                     }
+                }
+            }
+        },
+        "internal_signals.DraftReply": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "edited_text": {
+                    "description": "User-modified version",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "original_text": {
+                    "description": "AI-generated draft",
+                    "type": "string"
+                },
+                "recipients": {
+                    "description": "email addresses",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "signal_id": {
+                    "type": "integer"
+                },
+                "status": {
+                    "$ref": "#/definitions/internal_signals.ReplyStatus"
+                },
+                "subject": {
+                    "description": "reply subject line",
+                    "type": "string"
+                },
+                "tone": {
+                    "description": "professional, casual, friendly, formal",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_signals.ReplyStatus": {
+            "type": "integer",
+            "enum": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5
+            ],
+            "x-enum-comments": {
+                "ReplyApproved": "User approved, ready to send",
+                "ReplyDrafted": "Reply generated, waiting for user",
+                "ReplyEdited": "User modified the draft",
+                "ReplyNone": "No reply needed/generated",
+                "ReplyRejected": "User rejected the draft",
+                "ReplySent": "Reply was sent"
+            },
+            "x-enum-descriptions": [
+                "No reply needed/generated",
+                "Reply generated, waiting for user",
+                "User modified the draft",
+                "User approved, ready to send",
+                "User rejected the draft",
+                "Reply was sent"
+            ],
+            "x-enum-varnames": [
+                "ReplyNone",
+                "ReplyDrafted",
+                "ReplyEdited",
+                "ReplyApproved",
+                "ReplyRejected",
+                "ReplySent"
+            ]
+        },
+        "internal_signals.Signal": {
+            "type": "object",
+            "properties": {
+                "analysis": {
+                    "$ref": "#/definitions/github_com_egokernel_ek1_internal_ai.AnalysedSignal"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "last_updated": {
+                    "type": "string"
+                },
+                "original_signal": {
+                    "$ref": "#/definitions/github_com_egokernel_ek1_internal_datasync.RawSignal"
+                },
+                "processed_at": {
+                    "type": "string"
+                },
+                "reply_status": {
+                    "$ref": "#/definitions/internal_signals.ReplyStatus"
+                },
+                "service_slug": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/internal_signals.Status"
+                },
+                "user_notes": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_signals.SignalSummary": {
+            "type": "object",
+            "properties": {
+                "high_priority": {
+                    "type": "integer"
+                },
+                "needing_replies": {
+                    "type": "integer"
+                },
+                "newsletters_today": {
+                    "type": "integer"
+                },
+                "relevant_today": {
+                    "type": "integer"
+                },
+                "total_pending": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_signals.Status": {
+            "type": "integer",
+            "enum": [
+                0,
+                1,
+                2,
+                3
+            ],
+            "x-enum-comments": {
+                "StatusDone": "User marked as completed",
+                "StatusIgnored": "User marked as not important",
+                "StatusPending": "Waiting for user review",
+                "StatusSnoozed": "User postponed until later"
+            },
+            "x-enum-descriptions": [
+                "Waiting for user review",
+                "User marked as completed",
+                "User marked as not important",
+                "User postponed until later"
+            ],
+            "x-enum-varnames": [
+                "StatusPending",
+                "StatusDone",
+                "StatusIgnored",
+                "StatusSnoozed"
+            ]
+        },
+        "internal_signals.UpdateReplyRequest": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "description": "approve|reject|edit",
+                    "type": "string"
+                },
+                "edited_text": {
+                    "description": "modified reply text (for edit action)",
+                    "type": "string"
+                }
+            }
+        },
+        "internal_signals.UpdateStatusRequest": {
+            "type": "object",
+            "properties": {
+                "notes": {
+                    "description": "optional user notes",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "pending|done|ignored|snoozed",
+                    "type": "string"
                 }
             }
         }
