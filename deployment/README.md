@@ -14,6 +14,7 @@ Guides for deploying every module of the Ego-Kernel MVP.
 | [03](./03-deploy-harvest.md) | Harvest Scanner | Run locally, wire live APIs, schedule as cron/systemd/Docker |
 | [04](./04-quickstart.md) | Quickstart | Zero to running Shadow demo in 5 minutes (Go only, no blockchain) |
 | [05](./05-phase-deployment.md) | Phase Deployment | Full 12-week sprint: Shadow → Hand → Voice |
+| [06](./06-cli-administration.md) | **CLI Administration** | **PIN management, Docker commands, security operations** |
 
 ---
 

@@ -20,11 +20,12 @@ EK-1 now uses **PIN-based JWT authentication** instead of sessions. All protecte
 
 ### Authentication Endpoints
 ```
-POST /auth/pin/setup        # First-time PIN creation
-POST /auth/pin/login        # Login with PIN → JWT token
-POST /auth/pin/verify       # Verify current PIN
-PUT  /auth/pin/change       # Change PIN (requires current PIN)
-POST /auth/pin/logout       # Logout (blacklist token)
+POST /api/v1/auth/pin/setup        # First-time PIN creation
+POST /api/v1/auth/login            # Login with PIN → JWT token
+POST /api/v1/auth/pin/status       # Check if PIN is configured
+PUT  /api/v1/auth/pin/change       # Change PIN (requires current PIN)
+POST /api/v1/auth/logout           # Logout (blacklist token)
+DELETE /api/v1/auth/pin            # Remove PIN protection
 ```
 
 ### PIN Setup Flow (First Time Users)
@@ -84,14 +85,14 @@ POST /auth/pin/logout       # Logout (blacklist token)
 
 ### Core Signals Endpoints
 ```
-GET  /signals                    # All analyzed signals
-GET  /signals/relevant           # High/medium priority needing attention
-GET  /signals/replies            # Signals that need replies
-GET  /signals/summary            # Dashboard counts
-PUT  /signals/:id/status         # Mark done/ignored/snoozed
+GET  /api/v1/signals                    # All analyzed signals
+GET  /api/v1/signals/relevant           # High/medium priority needing attention
+GET  /api/v1/signals/replies            # Signals that need replies
+GET  /api/v1/signals/summary            # Dashboard counts
+PUT  /api/v1/signals/:id/status         # Mark done/ignored/snoozed
 
-GET  /replies/pending            # AI-generated drafts ready to send
-PUT  /replies/:id                # Approve/edit/reject draft replies
+GET  /api/v1/replies/pending            # AI-generated drafts ready to send
+PUT  /api/v1/replies/:id                # Approve/edit/reject draft replies
 ```
 
 ### Signal Data Structure
@@ -192,10 +193,10 @@ The system automatically generates draft replies for signals that `needs_reply: 
 ### What's Kept
 Biometrics are **simplified but preserved** for signal prioritization and user focus management.
 
-### Biometrics Endpoints (Unchanged)
+### Biometrics Endpoints
 ```
-GET /biometrics/checkin
-PUT /biometrics/checkin
+GET /api/v1/biometrics/checkin
+PUT /api/v1/biometrics/checkin
 ```
 
 ### How Biometrics Affect Signals
@@ -237,9 +238,9 @@ The system applies biometric-based prioritization:
 
 ### Profile Endpoints (Unchanged)
 ```
-GET /profile
-PUT /profile/preferences
-PUT /profile/connection
+GET /api/v1/profile
+PUT /api/v1/profile/preferences
+PUT /api/v1/profile/connection
 ```
 
 ### Simplified Preferences

@@ -259,8 +259,8 @@ func main() {
 	// @Tags         system
 	// @Produce      json
 	// @Success      200  {object}  map[string]interface{}
-	// @Router       /health [get]
-	app.Get("/health", func(c *fiber.Ctx) error {
+	// @Router       /api/v1/health [get]
+	app.Get("/api/v1/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok"})
 	})
 
@@ -273,21 +273,24 @@ func main() {
 
 	waAdapter.RegisterRoutes(app)
 
+	// ── API v1 Group ─────────────────────────────────────────────────────────
+	api := app.Group("/api/v1")
+
 	// ── JWT Authentication & Authorization ────────────────────────────────
 	jwtHandler := auth.NewJWTHandler(pinStore, jwtService, tokenDenylist)
 	jwtMiddleware := auth.NewJWTMiddleware(jwtService, tokenDenylist)
 
 	// Register JWT auth endpoints (public - no auth required)
-	jwtHandler.RegisterJWTRoutes(app)
+	jwtHandler.RegisterJWTRoutes(api)
 
 	// Register OAuth callback route (public - external services need access)
 	domain := os.Getenv("DOMAIN")
 	apiBaseURL := os.Getenv("API_BASE_URL")
 	if apiBaseURL == "" {
 		if domain != "" {
-			apiBaseURL = "https://" + domain
+			apiBaseURL = "https://" + domain + "/api/v1"
 		} else {
-			apiBaseURL = "http://localhost:3000"
+			apiBaseURL = "http://localhost:3000/api/v1"
 		}
 	}
 	frontendOrigin := os.Getenv("FRONTEND_ORIGIN")
@@ -295,21 +298,20 @@ func main() {
 		frontendOrigin = "http://localhost:8080"
 	}
 	integrationsHandler := integrations.NewHandler(servicesStore, apiBaseURL, frontendOrigin)
-	integrationsHandler.RegisterPublicRoutes(app)
+	integrationsHandler.RegisterPublicRoutes(api)
 
-	// Apply JWT middleware to protect all routes
-	app.Use(jwtMiddleware.RequireAuth())
+	// Apply JWT middleware to protect API v1 routes
+	api.Use(jwtMiddleware.RequireAuth())
 
-	// ── Protected Routes (require authentication) ──────────────────────────
-	profile.NewHandler(profileStore, aiClient, narrativesFn).RegisterRoutes(app)
-	auth.NewHandler(authStore, profileStore).RegisterRoutes(app)
-	biometrics.NewHandler(checkInStore).RegisterRoutes(app)
-	integrationsHandler.RegisterRoutes(app)
-	notifications.NewHandler(notifsStore).RegisterRoutes(app)
-	scheduler.NewHandler(sched).RegisterRoutes(app)
-	signals.NewHandler(signalsStore).RegisterRoutes(app)
+	// ── Protected API v1 Routes (require authentication) ───────────────────
+	profile.NewHandler(profileStore, aiClient, narrativesFn).RegisterRoutes(api)
+	biometrics.NewHandler(checkInStore).RegisterRoutes(api)
+	integrationsHandler.RegisterRoutes(api)
+	notifications.NewHandler(notifsStore).RegisterRoutes(api)
+	scheduler.NewHandler(sched).RegisterRoutes(api)
+	signals.NewHandler(signalsStore).RegisterRoutes(api)
 	// TODO: Chat handler temporarily disabled during cleanup - can be re-enabled later
-	// chat.NewHandler(...).RegisterRoutes(app)
+	// chat.NewHandler(...).RegisterRoutes(api)
 
 	if domain != "" {
 		cacheDir := os.Getenv("CERT_CACHE_DIR")
