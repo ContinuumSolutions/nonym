@@ -44,5 +44,4 @@ Thumbs.db
 tmp/
 data/postgres/
 data/*
-pkg/*
 node_modules/*
