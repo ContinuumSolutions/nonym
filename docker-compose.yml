@@ -2,7 +2,13 @@ version: '3.8'
 
 name: sovereign-privacy-gateway
 
-# Development Configuration for Sovereign Privacy Gateway
+# Unified configuration for Sovereign Privacy Gateway
+# Use profiles to control which services to start:
+# - Default: gateway + nginx (core functionality)
+# - monitoring: add prometheus, grafana, alertmanager
+# - logging: add loki, promtail
+# - backup: add database backup service
+# - full: all services
 services:
 
   # ── Main Privacy Gateway ──────────────────────────────────────────────────
@@ -10,58 +16,412 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: development
-    ports:
-      - "8080:8080"   # Main privacy gateway endpoint
-      - "8081:8081"   # Dashboard interface
+      target: ${GATEWAY_TARGET:-development}
+      args:
+        - CGO_ENABLED=1
+        - GOOS=linux
+        - GOARCH=amd64
     environment:
       - PORT=8080
       - DASHBOARD_PORT=8081
       - DATABASE_PATH=/data/gateway.db
-      - LOG_LEVEL=debug
-      - STRICT_MODE=false
-      # Add your API keys via .env file
+      - LOG_LEVEL=${LOG_LEVEL:-debug}
+      - STRICT_MODE=${STRICT_MODE:-false}
+      - RETENTION_DAYS=${RETENTION_DAYS:-30}
+      - MAX_CONCURRENCY=${MAX_CONCURRENCY:-100}
+      # API Keys (loaded from .env file)
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      # Database configuration
+      - DB_HOST=${DB_HOST:-postgres}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME:-gateway}
+      - DB_USER=${DB_USER:-gateway}
+      - DB_PASSWORD=${DB_PASSWORD:-gateway_password}
+      - DB_SSL_MODE=${DB_SSL_MODE:-disable}
+      # Authentication
+      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
+      - SESSION_SECRET=${SESSION_SECRET:-your-super-secret-session-key}
     volumes:
-      - .:/app
       - gateway-data:/data
-      - ./logs:/app/logs
+      - gateway-logs:/app/logs
+      - .:/app:ro  # Only in development
+    networks:
+      - gateway-network
+      - database-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD-SHELL", "curl -f http://localhost:${PORT:-8080}/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-    networks:
-      - default
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: ${GATEWAY_MEMORY_LIMIT:-1G}
+          cpus: ${GATEWAY_CPU_LIMIT:-1.0}
+        reservations:
+          memory: ${GATEWAY_MEMORY_RESERVATION:-512M}
+          cpus: ${GATEWAY_CPU_RESERVATION:-0.5}
+    security_opt:
+      - no-new-privileges:true
 
-  # ── Reverse Proxy (Optional) ───────────────────────────────────────────────
+  # ── Database ───────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=${DB_NAME:-gateway}
+      - POSTGRES_USER=${DB_USER:-gateway}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-gateway_password}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - database-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-gateway} -d ${DB_NAME:-gateway}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    security_opt:
+      - no-new-privileges:true
+
+  # ── Reverse Proxy ──────────────────────────────────────────────────────────
   nginx:
     image: nginx:alpine
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./logs/nginx:/var/log/nginx
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - gateway-logs:/var/log/nginx
+      - nginx-cache:/var/cache/nginx
+    networks:
+      - gateway-network
+      - monitoring-network
     depends_on:
       - gateway
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      test: ["CMD-SHELL", "curl -f http://localhost/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
-    networks:
-      - default
-    profiles: ["proxy"]
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.25'
+    security_opt:
+      - no-new-privileges:true
 
+  # ── Monitoring Stack ───────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - gateway-network
+      - monitoring-network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=90d'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+      - '--web.external-url=http://localhost/prometheus/'
+      - '--web.route-prefix=/'
+    restart: unless-stopped
+    profiles: ["monitoring", "full"]
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9090/-/healthy || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  grafana:
+    image: grafana/grafana:latest
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./monitoring/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+    networks:
+      - gateway-network
+      - monitoring-network
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel,grafana-clock-panel,grafana-simple-json-datasource
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_SECURITY_DISABLE_GRAVATAR=true
+      - GF_SERVER_ROOT_URL=http://localhost/grafana/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      - GF_SERVER_DOMAIN=localhost
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    profiles: ["monitoring", "full"]
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    networks:
+      - gateway-network
+      - monitoring-network
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://localhost/alertmanager/'
+      - '--web.route-prefix=/'
+    restart: unless-stopped
+    profiles: ["monitoring", "full"]
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9093/-/healthy || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Log Management ─────────────────────────────────────────────────────────
+  loki:
+    image: grafana/loki:latest
+    volumes:
+      - loki-data:/loki
+      - ./monitoring/loki.yml:/etc/loki/local-config.yaml:ro
+    networks:
+      - monitoring-network
+    command: -config.file=/etc/loki/local-config.yaml
+    restart: unless-stopped
+    profiles: ["logging", "full"]
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  promtail:
+    image: grafana/promtail:latest
+    volumes:
+      - gateway-logs:/var/log/gateway:ro
+      - ./monitoring/promtail.yml:/etc/promtail/config.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - monitoring-network
+    command: -config.file=/etc/promtail/config.yml
+    restart: unless-stopped
+    depends_on:
+      - loki
+    profiles: ["logging", "full"]
+
+  # ── Database Backup ────────────────────────────────────────────────────────
+  backup:
+    image: postgres:15-alpine
+    volumes:
+      - backup-storage:/backups
+    networks:
+      - database-network
+    environment:
+      - PGHOST=postgres
+      - PGDATABASE=${DB_NAME:-gateway}
+      - PGUSER=${DB_USER:-gateway}
+      - PGPASSWORD=${DB_PASSWORD:-gateway_password}
+      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-7}
+    command: >
+      sh -c "
+        while true; do
+          echo 'Starting backup...' &&
+          timestamp=$$(date +%Y%m%d_%H%M%S) &&
+          pg_dump > /backups/gateway_backup_$${timestamp}.sql &&
+          echo 'Backup completed: gateway_backup_'$${timestamp}'.sql' &&
+          find /backups -name 'gateway_backup_*.sql' -mtime +${BACKUP_RETENTION_DAYS:-7} -delete &&
+          echo 'Old backups cleaned up' &&
+          sleep 86400
+        done
+      "
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles: ["backup", "full"]
+    security_opt:
+      - no-new-privileges:true
+
+  # ── Redis Cache ────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis-data:/data
+      - ./redis/redis.conf:/etc/redis/redis.conf:ro
+    networks:
+      - database-network
+    command: redis-server /etc/redis/redis.conf
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+    security_opt:
+      - no-new-privileges:true
+    profiles: ["cache", "full"]
+
+# ── Network Configuration ──────────────────────────────────────────────────────
+networks:
+  gateway-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.80.0/24
+    driver_opts:
+      com.docker.network.bridge.name: spg-gateway
+
+  monitoring-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.81.0/24
+    driver_opts:
+      com.docker.network.bridge.name: spg-monitoring
+
+  database-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.82.0/24
+    driver_opts:
+      com.docker.network.bridge.name: spg-database
+
+# ── Persistent Storage ─────────────────────────────────────────────────────────
 volumes:
+  # Gateway data
   gateway-data:
     driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_DIR:-./data}/gateway
 
-networks:
-  default:
-    driver: bridge
+  # Application logs
+  gateway-logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_DIR:-./data}/logs
+
+  # Database storage
+  postgres-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_DIR:-./data}/postgres
+
+  redis-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_DIR:-./data}/redis
+
+  # Monitoring data
+  prometheus-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_DIR:-./data}/prometheus
+
+  grafana-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_DIR:-./data}/grafana
+
+  alertmanager-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_DIR:-./data}/alertmanager
+
+  loki-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_DIR:-./data}/loki
+
+  # Backup storage
+  backup-storage:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_DIR:-./data}/backups
+
+  # Nginx cache
+  nginx-cache:
+    driver: local
+
+# ── Environment Configurations ─────────────────────────────────────────────────
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+# Apply logging to all services
+x-service-defaults: &service-defaults
+  logging: *default-logging
+  security_opt:
+    - no-new-privileges:true

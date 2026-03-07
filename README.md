@@ -63,6 +63,8 @@ The Sovereign Privacy Gateway acts as a transparent reverse proxy that:
 
 ### Prerequisites
 - Docker & Docker Compose
+- Make (optional, for convenience commands)
+- Go 1.24+ (optional, for building admin CLI)
 - API keys from at least one AI provider
 - 2GB+ RAM
 
@@ -72,14 +74,18 @@ The Sovereign Privacy Gateway acts as a transparent reverse proxy that:
 git clone https://github.com/sovereignprivacy/gateway
 cd gateway
 
-# Run automated setup
-./scripts/setup-production.sh
+# Set up environment (creates data directories and .env file)
+make setup
+
+# OR manually:
+cp .env.example .env
+mkdir -p data/{gateway,logs,postgres,redis}
 ```
 
 ### 2. Configure API Keys
 
 ```bash
-# Edit the generated .env file
+# Edit the .env file
 nano .env
 
 # Add your API keys:
@@ -88,24 +94,49 @@ ANTHROPIC_API_KEY=sk-ant-your-anthropic-api-key
 GOOGLE_API_KEY=your-google-ai-api-key
 ```
 
-### 3. Start Services
+### 3. Choose Your Deployment
+
+The new unified `docker-compose.yml` supports different profiles:
 
 ```bash
-# Development (with hot reload)
-docker compose up -d
+# Basic development (Gateway + Nginx + Database)
+make dev
 
-# Production (with monitoring)
-docker compose -f docker-compose.prod.yml --profile monitoring up -d
+# With monitoring (adds Grafana, Prometheus, Alertmanager)
+make monitoring
+
+# With logging (adds Loki, Promtail)
+make logging
+
+# Full production stack (everything)
+make full
+
+# OR use docker compose directly:
+docker compose --profile monitoring up -d
 ```
 
-### 4. Test the Gateway
+### 4. Access the Modern Dashboard
+
+Visit **http://localhost** (note: port 80, not 8081!) to access the modern Tailwind CSS dashboard.
+
+**Default Login:**
+- Email: `admin@localhost`
+- Password: `admin123`
+
+**Quick Access URLs:**
+- **Dashboard**: http://localhost
+- **Monitoring**: http://localhost/monitoring (Grafana)
+- **Metrics**: http://localhost/metrics (Prometheus)
+- **Alerts**: http://localhost/alerts (Alertmanager)
+
+### 5. Test the Gateway
 
 ```bash
 # Health check
-curl http://localhost:8080/health
+curl http://localhost/health
 
 # Test PII detection with OpenAI
-curl -X POST http://localhost:8080/v1/chat/completions \
+curl -X POST http://localhost/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer your-openai-key" \
   -d '{
@@ -125,9 +156,23 @@ The gateway will:
 3. Send the anonymized request to OpenAI
 4. Restore the original data in the response
 
-### 5. Access the Dashboard
+### 6. User Management
 
-Visit **http://localhost:8081** to access the real-time monitoring dashboard.
+Build the admin CLI for user management:
+
+```bash
+# Build admin CLI
+make admin-cli
+
+# Create a new user
+./bin/admin user create
+
+# List users
+./bin/admin user list
+
+# Reset password
+./bin/admin user reset-password user@example.com
+```
 
 ## API Usage
 
@@ -213,27 +258,43 @@ The gateway automatically applies different privacy policies:
 
 ## Deployment
 
-### Development Environment
+### Unified Docker Compose
+
+The new unified `docker-compose.yml` replaces the old multi-file approach. Use profiles to control which services to start:
 
 ```bash
-# Hot-reload development with debugging
-docker compose up -d
+# Development Environment
+make dev                    # Basic: Gateway + Nginx + PostgreSQL + Redis
 
-# View logs
-docker compose logs -f gateway
+# Production Profiles
+make monitoring            # + Prometheus + Grafana + Alertmanager
+make logging              # + Loki + Promtail
+make backup              # + Database backup service
+make full                # All services
+
+# Manual profile usage
+docker compose --profile monitoring up -d
+docker compose --profile logging up -d
+docker compose --profile full up -d
 ```
 
-### Production Environment
+### Build Commands
 
 ```bash
-# Production deployment with optimizations
-docker compose -f docker-compose.prod.yml up -d
+# Build gateway application
+make build
 
-# With full monitoring stack
-docker compose -f docker-compose.prod.yml --profile monitoring up -d
+# Build admin CLI
+make admin-cli
 
-# With log aggregation
-docker compose -f docker-compose.prod.yml --profile logging up -d
+# Run tests
+make test
+
+# View logs
+make logs
+
+# Check service health
+make health
 ```
 
 ### Kubernetes Deployment
