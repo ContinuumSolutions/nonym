@@ -7,6 +7,7 @@ import Login from './views/Login.vue'
 import ProtectedEvents from './views/ProtectedEvents.vue'
 import Integrations from './views/Integrations.vue'
 import Account from './views/Account.vue'
+import Documentation from './views/Documentation.vue'
 import './style.css'
 
 const routes = [
@@ -15,6 +16,7 @@ const routes = [
   { path: '/protected-events', component: ProtectedEvents, meta: { requiresAuth: true } },
   { path: '/integrations', component: Integrations, meta: { requiresAuth: true } },
   { path: '/account', component: Account, meta: { requiresAuth: true } },
+  { path: '/documentation', component: Documentation, meta: { requiresAuth: true } },
   { path: '/login', component: Login },
   { path: '/signup', component: Login, props: { mode: 'signup' } }
 ]

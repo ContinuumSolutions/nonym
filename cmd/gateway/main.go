@@ -108,6 +108,11 @@ func initializeServices(config *Config) error {
 
 	// Initialize audit database
 	if err := audit.Initialize(config.DatabasePath); err != nil {
+
+	// Initialize events tables
+	if err := audit.InitializeEventsTables(); err != nil {
+		return fmt.Errorf("failed to initialize events tables: %w", err)
+	}
 		return fmt.Errorf("failed to initialize audit system: %w", err)
 	}
 
@@ -236,6 +241,13 @@ func startDashboardServer(config *Config, errChan chan<- error) {
 	protected.Get("/transactions", audit.HandleGetTransactions)
 	protected.Get("/protection-events", audit.HandleGetTransactions)
 	protected.Get("/protection-stats", auth.HandleProtectionStats)
+	
+	// Events API
+	protected.Get("/events", audit.HandleGetEvents)
+	protected.Get("/events/:id", audit.HandleGetEvent)
+	protected.Patch("/events/:id/status", audit.HandleUpdateEventStatus)
+	protected.Post("/events/webhook", audit.HandleCreateWebhook)
+	protected.Get("/events/webhooks", audit.HandleGetWebhooks)
 	
 	// Settings
 	protected.Get("/settings", audit.HandleGetSettings)
