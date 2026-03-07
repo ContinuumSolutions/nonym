@@ -9,7 +9,7 @@ The Sovereign Privacy Gateway acts as a transparent reverse proxy that:
 - **Anonymizes data** with tokenization before sending to AI providers
 - **De-anonymizes responses** to restore original context for users
 - **Routes intelligently** based on content sensitivity and provider capabilities
-- **Provides real-time monitoring** via a comprehensive dashboard
+- **Provides real-time monitoring** via a modern Vue.js dashboard
 
 ## Architecture
 
@@ -21,7 +21,8 @@ The Sovereign Privacy Gateway acts as a transparent reverse proxy that:
 └─────────────────┘    │  & Tokenization  │    └─────────────────┘
                        │                  │
                        │  ┌─────────────┐ │
-                       │  │  Dashboard  │ │
+                       │  │ Vue.js      │ │
+                       │  │ Dashboard   │ │
                        │  │ (Real-time  │ │
                        │  │ Monitoring) │ │
                        └──┴─────────────┴─┘
@@ -47,11 +48,11 @@ The Sovereign Privacy Gateway acts as a transparent reverse proxy that:
 - **Load balancing** across multiple AI endpoints
 - **Custom routing rules** based on sensitivity levels
 
-### 📊 **Monitoring & Audit**
-- **Real-time dashboard** with transaction monitoring
-- **Comprehensive logging** of all anonymization events
+### 📊 **Modern Dashboard**
+- **Vue.js interface** with responsive design and Tailwind CSS
+- **Real-time monitoring** of privacy protection events
+- **Authentication system** with login/signup functionality
 - **Statistics and analytics** for privacy compliance
-- **Prometheus metrics** with Grafana dashboards
 
 ## Supported AI Providers
 
@@ -63,8 +64,7 @@ The Sovereign Privacy Gateway acts as a transparent reverse proxy that:
 
 ### Prerequisites
 - Docker & Docker Compose
-- Make (optional, for convenience commands)
-- Go 1.24+ (optional, for building admin CLI)
+- Make (for convenience commands)
 - API keys from at least one AI provider
 - 2GB+ RAM
 
@@ -74,12 +74,8 @@ The Sovereign Privacy Gateway acts as a transparent reverse proxy that:
 git clone https://github.com/sovereignprivacy/gateway
 cd gateway
 
-# Set up environment (creates data directories and .env file)
+# Set up environment
 make setup
-
-# OR manually:
-cp .env.example .env
-mkdir -p data/{gateway,logs,postgres,redis}
 ```
 
 ### 2. Configure API Keys
@@ -94,40 +90,23 @@ ANTHROPIC_API_KEY=sk-ant-your-anthropic-api-key
 GOOGLE_API_KEY=your-google-ai-api-key
 ```
 
-### 3. Choose Your Deployment
-
-The new unified `docker-compose.yml` supports different profiles:
+### 3. Start the Stack
 
 ```bash
-# Basic development (Gateway + Nginx + Database)
-make dev
+# Start all services (Gateway + Vue Dashboard + Database + Redis + Nginx)
+make up
 
-# With monitoring (adds Grafana, Prometheus, Alertmanager)
-make monitoring
-
-# With logging (adds Loki, Promtail)
-make logging
-
-# Full production stack (everything)
-make full
-
-# OR use docker compose directly:
-docker compose --profile monitoring up -d
+# Or use docker compose directly:
+docker compose up -d
 ```
 
-### 4. Access the Modern Dashboard
+### 4. Access the Vue.js Dashboard
 
-Visit **http://localhost** (note: port 80, not 8081!) to access the modern Tailwind CSS dashboard.
+Visit **http://localhost** to access the modern Vue.js dashboard with Tailwind CSS styling.
 
 **Default Login:**
 - Email: `admin@localhost`
 - Password: `admin123`
-
-**Quick Access URLs:**
-- **Dashboard**: http://localhost
-- **Monitoring**: http://localhost/monitoring (Grafana)
-- **Metrics**: http://localhost/metrics (Prometheus)
-- **Alerts**: http://localhost/alerts (Alertmanager)
 
 ### 5. Test the Gateway
 
@@ -156,22 +135,32 @@ The gateway will:
 3. Send the anonymized request to OpenAI
 4. Restore the original data in the response
 
-### 6. User Management
+## Available Make Commands
 
-Build the admin CLI for user management:
-
+### Core Operations
 ```bash
-# Build admin CLI
-make admin-cli
+make setup          # Initial setup (creates .env, directories)
+make up              # Start all services
+make down            # Stop all services
+make restart         # Restart all services
+make logs            # View logs from all services
+make status          # Check service health
+```
 
-# Create a new user
-./bin/admin user create
+### Development
+```bash
+make build           # Build the Go gateway application
+make test            # Run all tests
+make clean           # Clean up containers and volumes
+make rebuild         # Rebuild and restart services
+```
 
-# List users
-./bin/admin user list
-
-# Reset password
-./bin/admin user reset-password user@example.com
+### Utilities
+```bash
+make db-shell        # Connect to PostgreSQL database
+make redis-shell     # Connect to Redis instance
+make gateway-shell   # Connect to gateway container
+make dashboard-shell # Connect to dashboard container
 ```
 
 ## API Usage
@@ -187,7 +176,7 @@ import openai
 # openai.api_base = "https://api.openai.com/v1"
 
 # After: Through Privacy Gateway
-openai.api_base = "http://localhost:8080/v1"
+openai.api_base = "http://localhost/v1"
 
 # Use OpenAI SDK normally - PII protection is automatic
 response = openai.ChatCompletion.create(
@@ -235,17 +224,24 @@ Routes to Anthropic for privacy-sensitive content.
 ```bash
 # Gateway Configuration
 PORT=8080
-DASHBOARD_PORT=8081
 LOG_LEVEL=info
 
 # Privacy Settings
 STRICT_MODE=false    # Set to true to block high-sensitivity data
-RETENTION_DAYS=30    # Audit log retention
 
 # AI Provider API Keys
 OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=sk-ant-...
 GOOGLE_API_KEY=...
+
+# Database Configuration
+DB_NAME=gateway
+DB_USER=gateway
+DB_PASSWORD=gateway_password
+
+# Authentication
+JWT_SECRET=change-in-production
+SESSION_SECRET=change-in-production
 ```
 
 ### Content-Based Routing
@@ -256,56 +252,22 @@ The gateway automatically applies different privacy policies:
 - **Medium Sensitivity** (Email, Phone Numbers): Anonymized with secure tokenization
 - **Low Sensitivity** (General text): Passed through with monitoring
 
-## Deployment
+## System Architecture
 
-### Unified Docker Compose
+### Services
 
-The new unified `docker-compose.yml` replaces the old multi-file approach. Use profiles to control which services to start:
+The complete stack consists of 5 Docker services:
 
-```bash
-# Development Environment
-make dev                    # Basic: Gateway + Nginx + PostgreSQL + Redis
+1. **postgres** - Database for audit logs and user data
+2. **redis** - Session storage and caching
+3. **gateway** - Go application (privacy engine)
+4. **dashboard** - Vue.js frontend application
+5. **nginx** - Reverse proxy and load balancer
 
-# Production Profiles
-make monitoring            # + Prometheus + Grafana + Alertmanager
-make logging              # + Loki + Promtail
-make backup              # + Database backup service
-make full                # All services
+### Networks
 
-# Manual profile usage
-docker compose --profile monitoring up -d
-docker compose --profile logging up -d
-docker compose --profile full up -d
-```
-
-### Build Commands
-
-```bash
-# Build gateway application
-make build
-
-# Build admin CLI
-make admin-cli
-
-# Run tests
-make test
-
-# View logs
-make logs
-
-# Check service health
-make health
-```
-
-### Kubernetes Deployment
-
-```bash
-# Apply Kubernetes manifests (coming soon)
-kubectl apply -f k8s/
-
-# Or use Helm chart (coming soon)
-helm install privacy-gateway ./charts/privacy-gateway
-```
+- **frontend** - Dashboard and Nginx communication
+- **backend** - Gateway, database, and Redis communication
 
 ## Security & Compliance
 
@@ -328,31 +290,32 @@ helm install privacy-gateway ./charts/privacy-gateway
 - X-Frame-Options, X-Content-Type-Options
 - Rate limiting and DDoS protection
 
-## Monitoring & Observability
+## Dashboard Features
 
-### Built-in Dashboard
-- Real-time transaction monitoring
+### Modern Vue.js Interface
+- **Responsive design** with Tailwind CSS
+- **Lucide icons** for consistent iconography
+- **Stripe-inspired** color scheme and styling
+- **Dark mode support** (coming soon)
+
+### Real-time Monitoring
+- Live transaction monitoring
 - PII detection statistics
 - Provider health and performance
 - Privacy compliance metrics
 
-### Metrics & Alerting
-- **Prometheus metrics** export
-- **Grafana dashboards** for visualization
-- **Custom alert rules** for privacy violations
-- **Log aggregation** with Loki
-
-### Health Checks
-- `/health` - Overall system health
-- `/gateway/status` - Detailed component status
-- `/gateway/stats` - Performance statistics
+### Authentication System
+- Secure login/signup flow
+- JWT-based session management
+- Protected routes and navigation guards
+- User management dashboard
 
 ## Testing
 
 ### Unit Tests
 ```bash
 # Run all tests
-go test ./...
+make test
 
 # Test specific components
 go test ./pkg/ner -v          # PII detection engine
@@ -374,12 +337,6 @@ go test ./cmd/gateway -v
 go test -bench=. ./pkg/...
 ```
 
-### Verification Script
-```bash
-# Comprehensive system verification
-./scripts/verify-setup.sh
-```
-
 ## Development
 
 ### Project Structure
@@ -390,11 +347,25 @@ go test -bench=. ./pkg/...
 │   ├── ner/             # Named Entity Recognition engine
 │   ├── router/          # Provider selection and routing
 │   └── audit/           # Logging and dashboard API
-├── dashboard/           # Web dashboard interface
+├── dashboard/           # Vue.js dashboard application
 ├── nginx/               # Nginx configuration
-├── monitoring/          # Prometheus, Grafana configs
-├── scripts/             # Setup and utility scripts
-└── docs/               # Documentation
+├── database/            # Database initialization scripts
+├── redis/               # Redis configuration
+└── scripts/             # Setup and utility scripts
+```
+
+### Vue.js Dashboard
+```
+dashboard/
+├── src/
+│   ├── components/      # Reusable Vue components
+│   ├── views/          # Page components (Login, Dashboard)
+│   ├── stores/         # Pinia state management
+│   ├── services/       # API service layer
+│   └── router/         # Vue Router configuration
+├── public/             # Static assets
+├── Dockerfile          # Multi-stage Docker build
+└── package.json        # Dependencies and scripts
 ```
 
 ### Building from Source
@@ -402,28 +373,14 @@ go test -bench=. ./pkg/...
 # Build the gateway binary
 go build -o gateway ./cmd/gateway
 
-# Build with optimizations
-CGO_ENABLED=1 go build -ldflags="-w -s" -o gateway ./cmd/gateway
+# Build Vue.js dashboard
+cd dashboard
+npm install
+npm run build
 
-# Cross-compile
-GOOS=linux GOARCH=amd64 go build -o gateway-linux ./cmd/gateway
+# Build with Docker
+docker compose build
 ```
-
-### Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make changes and add tests
-4. Commit your changes (`git commit -m 'Add amazing feature'`)
-5. Push to the branch (`git push origin feature/amazing-feature`)
-6. Open a Pull Request
-
-## Documentation
-
-- **[Installation Guide](docs/installation.md)** - Complete setup instructions
-- **[API Reference](docs/api-reference.md)** - API documentation (coming soon)
-- **[Configuration Guide](docs/configuration.md)** - Advanced configuration (coming soon)
-- **[Security Guide](docs/security.md)** - Security best practices (coming soon)
 
 ## License
 
@@ -442,23 +399,6 @@ For commercial licensing, contact: licensing@sovereignprivacy.com
 - **Issues**: [GitHub Issues](https://github.com/sovereignprivacy/gateway/issues) for bug reports and feature requests
 - **Discussions**: [GitHub Discussions](https://github.com/sovereignprivacy/gateway/discussions) for questions and community
 - **Security**: security@sovereignprivacy.com for security issues
-
-## Roadmap
-
-### v1.1 - Enhanced NER
-- [ ] Advanced ML models for entity detection
-- [ ] Custom entity type definitions
-- [ ] Multi-language PII detection
-
-### v1.2 - Enterprise Features
-- [ ] SSO/SAML integration
-- [ ] Advanced access controls
-- [ ] Multi-tenant support
-
-### v1.3 - AI Enhancements
-- [ ] LLM-powered content classification
-- [ ] Intent-based routing
-- [ ] Automated policy learning
 
 ---
 

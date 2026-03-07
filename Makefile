@@ -1,151 +1,199 @@
 # Sovereign Privacy Gateway Makefile
 
-.PHONY: help build admin-cli dev prod monitoring logging backup clean test
+.PHONY: help setup up down restart logs status build test clean rebuild
 
 # Default target
 help:
 	@echo "Sovereign Privacy Gateway - Build Commands"
 	@echo ""
+	@echo "Core Operations:"
+	@echo "  setup       Initial setup (creates .env, directories)"
+	@echo "  up          Start all services (Gateway + Vue Dashboard + Database + Redis + Nginx)"
+	@echo "  down        Stop all services"
+	@echo "  restart     Restart all services"
+	@echo "  logs        View logs from all services"
+	@echo "  status      Check service health"
+	@echo ""
 	@echo "Development:"
-	@echo "  dev         Start development environment (gateway + nginx + postgres)"
-	@echo "  monitoring  Start with monitoring stack (Grafana, Prometheus, Alertmanager)"
-	@echo "  logging     Start with logging stack (Loki, Promtail)"
-	@echo "  backup      Start with backup service"
-	@echo "  full        Start all services"
+	@echo "  build       Build the Go gateway application"
+	@echo "  test        Run all tests"
 	@echo "  clean       Clean up containers and volumes"
+	@echo "  rebuild     Rebuild and restart services"
 	@echo ""
-	@echo "Administration:"
-	@echo "  admin-cli   Build admin CLI tool"
-	@echo "  user-create Create a new user (requires admin-cli)"
-	@echo "  user-list   List users in organization (requires admin-cli)"
-	@echo "  org-list    List all organizations (requires admin-cli)"
-	@echo ""
-	@echo "Build:"
-	@echo "  build       Build gateway application"
-	@echo "  test        Run tests"
+	@echo "Utilities:"
+	@echo "  db-shell        Connect to PostgreSQL database"
+	@echo "  redis-shell     Connect to Redis instance"
+	@echo "  gateway-shell   Connect to gateway container"
+	@echo "  dashboard-shell Connect to dashboard container"
 	@echo ""
 	@echo "Examples:"
-	@echo "  make dev                    # Start basic development environment"
-	@echo "  make monitoring             # Start with monitoring enabled"
-	@echo "  make admin-cli && ./admin   # Build and use admin CLI"
-
-# Development environments
-dev:
-	@echo "🚀 Starting Sovereign Privacy Gateway (Development)"
-	@mkdir -p data/{gateway,logs,postgres,redis}
-	docker compose up -d postgres redis nginx gateway
-
-monitoring:
-	@echo "📊 Starting with monitoring stack"
-	@mkdir -p data/{gateway,logs,postgres,redis,prometheus,grafana,alertmanager}
-	docker compose --profile monitoring up -d
-
-logging:
-	@echo "📝 Starting with logging stack"
-	@mkdir -p data/{gateway,logs,postgres,redis,loki}
-	docker compose --profile logging up -d
-
-backup:
-	@echo "💾 Starting with backup service"
-	@mkdir -p data/{gateway,logs,postgres,redis,backups}
-	docker compose --profile backup up -d
-
-full:
-	@echo "🔥 Starting ALL services"
-	@mkdir -p data/{gateway,logs,postgres,redis,prometheus,grafana,alertmanager,loki,backups}
-	docker compose --profile full up -d
-
-# Build commands
-build:
-	@echo "🔨 Building gateway application"
-	cd cmd/gateway && go build -o ../../bin/gateway .
-
-admin-cli:
-	@echo "🔧 Building admin CLI"
-	@mkdir -p bin
-	cd cmd/admin && go build -o ../../bin/admin .
-	@echo "✅ Admin CLI built: ./bin/admin"
-	@echo ""
-	@echo "Usage examples:"
-	@echo "  ./bin/admin user create              # Create a new user"
-	@echo "  ./bin/admin user list default       # List users in default org"
-	@echo "  ./bin/admin user reset-password user@example.com"
-	@echo "  ./bin/admin org create              # Create a new organization"
-	@echo "  ./bin/admin org list                # List all organizations"
-
-# Admin CLI shortcuts
-user-create: admin-cli
-	@echo "👤 Creating new user..."
-	./bin/admin user create
-
-user-list: admin-cli
-	@echo "📋 Listing users..."
-	./bin/admin user list
-
-org-list: admin-cli
-	@echo "🏢 Listing organizations..."
-	./bin/admin org list
-
-# Testing
-test:
-	@echo "🧪 Running tests"
-	go test ./...
-
-# Cleanup
-clean:
-	@echo "🧹 Cleaning up containers and volumes"
-	docker compose down -v
-	docker system prune -f
-
-stop:
-	@echo "⏹️ Stopping all services"
-	docker compose down
-
-restart:
-	@echo "🔄 Restarting services"
-	docker compose restart
-
-logs:
-	@echo "📋 Showing gateway logs"
-	docker compose logs -f gateway
-
-status:
-	@echo "📊 Service status"
-	docker compose ps
-
-# Database operations
-db-shell:
-	@echo "🐘 Opening database shell"
-	docker compose exec postgres psql -U gateway -d gateway
-
-db-backup:
-	@echo "💾 Creating database backup"
-	@mkdir -p backups
-	docker compose exec postgres pg_dump -U gateway gateway > backups/gateway_$(shell date +%Y%m%d_%H%M%S).sql
+	@echo "  make setup && make up    # Initial setup and start"
+	@echo "  make logs                # View all service logs"
+	@echo "  make down && make clean  # Stop and cleanup"
 
 # Environment setup
 setup:
 	@echo "⚙️ Setting up development environment"
 	@if [ ! -f .env ]; then \
 		echo "Creating .env file from template..."; \
-		cp .env.example .env; \
-		echo "✅ Please edit .env file with your API keys"; \
+		if [ -f .env.example ]; then \
+			cp .env.example .env; \
+		else \
+			echo "# Sovereign Privacy Gateway Configuration" > .env; \
+			echo "# AI Provider API Keys" >> .env; \
+			echo "OPENAI_API_KEY=sk-your-openai-api-key" >> .env; \
+			echo "ANTHROPIC_API_KEY=sk-ant-your-anthropic-api-key" >> .env; \
+			echo "GOOGLE_API_KEY=your-google-ai-api-key" >> .env; \
+			echo "# Gateway Configuration" >> .env; \
+			echo "PORT=8080" >> .env; \
+			echo "LOG_LEVEL=info" >> .env; \
+			echo "STRICT_MODE=false" >> .env; \
+			echo "# Database Configuration" >> .env; \
+			echo "DB_NAME=gateway" >> .env; \
+			echo "DB_USER=gateway" >> .env; \
+			echo "DB_PASSWORD=gateway_password" >> .env; \
+			echo "# Authentication" >> .env; \
+			echo "JWT_SECRET=change-in-production-$(shell openssl rand -hex 32)" >> .env; \
+			echo "SESSION_SECRET=change-in-production-$(shell openssl rand -hex 32)" >> .env; \
+		fi; \
+		echo "✅ Created .env file - please edit with your API keys"; \
+	else \
+		echo "✅ .env file already exists"; \
 	fi
-	@mkdir -p data/{gateway,logs,postgres,redis,prometheus,grafana,alertmanager,loki,backups}
-	@echo "📁 Created data directories"
+	@echo "📁 Creating data directories..."
+	@mkdir -p data/{postgres,redis}
+	@echo "✅ Setup complete!"
 
-# Health checks
+# Core operations
+up:
+	@echo "🚀 Starting Sovereign Privacy Gateway with Vue.js Dashboard"
+	@make setup
+	docker compose up -d
+	@echo ""
+	@echo "✅ Services started!"
+	@echo "🌐 Dashboard: http://localhost"
+	@echo "🔧 Default login: admin@localhost / admin123"
+
+down:
+	@echo "⏹️ Stopping all services"
+	docker compose down
+
+restart:
+	@echo "🔄 Restarting all services"
+	docker compose restart
+
+# Monitoring and logs
+logs:
+	@echo "📋 Showing logs from all services"
+	docker compose logs -f
+
+status:
+	@echo "📊 Service Status"
+	@echo "=================="
+	docker compose ps
+	@echo ""
+	@echo "🩺 Health Check"
+	@echo "==============="
+	@curl -s http://localhost/health | jq '.' 2>/dev/null || echo "❌ Gateway health check failed"
+	@echo ""
+
+# Development
+build:
+	@echo "🔨 Building gateway application"
+	@mkdir -p bin
+	cd cmd/gateway && go build -o ../../bin/gateway .
+	@echo "✅ Gateway built: ./bin/gateway"
+
+test:
+	@echo "🧪 Running tests"
+	go test ./... -v
+
+clean:
+	@echo "🧹 Cleaning up containers and volumes"
+	docker compose down -v
+	docker system prune -f
+
+rebuild:
+	@echo "🔄 Rebuilding and restarting services"
+	docker compose down
+	docker compose build --no-cache
+	docker compose up -d
+
+# Shell access
+db-shell:
+	@echo "🐘 Opening PostgreSQL database shell"
+	docker compose exec postgres psql -U ${DB_USER:-gateway} -d ${DB_NAME:-gateway}
+
+redis-shell:
+	@echo "🔴 Opening Redis shell"
+	docker compose exec redis redis-cli
+
+gateway-shell:
+	@echo "🚪 Opening gateway container shell"
+	docker compose exec gateway sh
+
+dashboard-shell:
+	@echo "🖥️ Opening dashboard container shell"
+	docker compose exec dashboard sh
+
+# Health and debugging
 health:
-	@echo "🩺 Checking service health"
-	@echo "Gateway: " && curl -s http://localhost/health | jq '.' || echo "❌ Gateway not responding"
-	@echo "Nginx: " && curl -s -o /dev/null -w "%{http_code}" http://localhost && echo " ✅ Nginx OK" || echo " ❌ Nginx not responding"
+	@echo "🩺 Comprehensive Health Check"
+	@echo "============================="
+	@echo "Testing gateway health endpoint..."
+	@curl -s http://localhost/health | jq '.' 2>/dev/null && echo "✅ Gateway: OK" || echo "❌ Gateway: FAILED"
+	@echo ""
+	@echo "Testing dashboard availability..."
+	@curl -s -o /dev/null -w "%{http_code}" http://localhost >/dev/null && echo "✅ Dashboard: OK" || echo "❌ Dashboard: FAILED"
+	@echo ""
+	@echo "Testing API endpoint..."
+	@curl -s -o /dev/null -w "%{http_code}" http://localhost/api/health >/dev/null && echo "✅ API: OK" || echo "❌ API: FAILED"
+
+# Database operations
+db-backup:
+	@echo "💾 Creating database backup"
+	@mkdir -p backups
+	docker compose exec postgres pg_dump -U ${DB_USER:-gateway} ${DB_NAME:-gateway} > backups/gateway_$(shell date +%Y%m%d_%H%M%S).sql
+	@echo "✅ Backup created in backups/ directory"
+
+db-restore:
+	@echo "📥 Restoring database from backup"
+	@echo "Available backups:"
+	@ls -la backups/*.sql 2>/dev/null || echo "No backups found in backups/ directory"
+	@echo "Usage: docker compose exec postgres psql -U gateway -d gateway < backups/your-backup.sql"
+
+# Development utilities
+dev-setup:
+	@echo "🛠️ Setting up development environment"
+	@make setup
+	@echo "Installing Go dependencies..."
+	go mod download
+	go mod tidy
+	@echo "✅ Development environment ready"
+
+dashboard-build:
+	@echo "🏗️ Building Vue.js dashboard locally"
+	cd dashboard && npm install && npm run build
+	@echo "✅ Dashboard built"
+
+dashboard-dev:
+	@echo "🖥️ Starting dashboard in development mode"
+	cd dashboard && npm run dev
+
+# Quick commands
+quick-start: setup up
+
+quick-stop: down clean
+
+reset: down clean up
 
 # SSL setup (optional)
 ssl-setup:
-	@echo "🔒 Setting up SSL certificates"
+	@echo "🔒 Setting up self-signed SSL certificates"
 	@mkdir -p nginx/ssl
-	@openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+	openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
 		-keyout nginx/ssl/key.pem \
 		-out nginx/ssl/cert.pem \
-		-subj "/C=US/ST=State/L=City/O=Organization/CN=localhost"
-	@echo "✅ Self-signed SSL certificates created"
+		-subj "/C=US/ST=State/L=City/O=SovereignPrivacy/CN=localhost"
+	@echo "✅ Self-signed SSL certificates created in nginx/ssl/"
+	@echo "⚠️  Remember to update nginx configuration to use HTTPS"

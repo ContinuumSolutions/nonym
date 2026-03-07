@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Inter', sans-serif;
+  }
+}
+
+@layer components {
+  .gradient-bg {
+    background: linear-gradient(135deg, #635bff 0%, #7c73ff 100%);
+  }
+
+  .card {
+    @apply bg-white rounded-2xl border border-neutral-200 shadow-sm;
+  }
+
+  .btn-primary {
+    @apply gradient-bg text-white px-4 py-2 rounded-xl hover:opacity-90 transition font-medium;
+  }
+
+  .btn-secondary {
+    @apply bg-neutral-200 text-neutral-800 px-4 py-2 rounded-xl hover:bg-neutral-300 transition font-medium;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-3 border border-neutral-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent;
+  }
+}
+
+.counter-up {
+  animation: counterUp 2s ease-out forwards;
+}
+
+@keyframes counterUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
+}
