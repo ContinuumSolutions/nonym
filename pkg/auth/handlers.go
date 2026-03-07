@@ -16,11 +16,28 @@ func HandleRegister(c *fiber.Ctx) error {
 	}
 
 	// Basic validation
-	if req.Email == "" || req.Password == "" || req.Name == "" {
+	if req.Email == "" || req.Password == "" {
 		return c.Status(400).JSON(fiber.Map{
-			"error": "Email, password, and name are required",
+			"error": "Email and password are required",
 		})
 	}
+
+	// Combine firstName and lastName or use name field
+	var fullName string
+	if req.FirstName != "" || req.LastName != "" {
+		fullName = strings.TrimSpace(req.FirstName + " " + req.LastName)
+	} else {
+		fullName = req.Name
+	}
+
+	if fullName == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Name (or firstName/lastName) is required",
+		})
+	}
+
+	// Update the request with combined name
+	req.Name = fullName
 
 	// Register user
 	user, err := RegisterUser(&req)

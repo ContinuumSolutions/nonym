@@ -152,13 +152,25 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 		})
 	})
 
-	// Authentication routes using proper handlers
-	authGroup := app.Group("/api/v1/auth")
+	// Direct test route to debug routing
+	app.Get("/api/v1/debug", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{"message": "Direct route works!"})
+	})
 
-	authGroup.Post("/login", auth.HandleLogin)
-	authGroup.Post("/register", auth.HandleRegister)
-	authGroup.Get("/me", auth.AuthMiddleware, auth.HandleGetMe)
-	authGroup.Post("/logout", auth.AuthMiddleware, auth.HandleLogout)
+	// Simple test without /api/v1 pattern
+
+	// Authentication routes - temporary inline handlers for testing
+	// Test direct registration instead of group
+
+	// Debug endpoint to test route registration
+	app.Get("/gateway/auth/test", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{"message": "Auth routes are working!"})
+	})
+
+	app.Post("/gateway/auth/login", func(c *fiber.Ctx) error { return c.JSON(fiber.Map{"status": "ok", "endpoint": c.Path()}) })
+	app.Post("/gateway/auth/register", func(c *fiber.Ctx) error { return c.JSON(fiber.Map{"status": "ok", "endpoint": c.Path()}) })
+	app.Get("/gateway/auth/me", func(c *fiber.Ctx) error { return c.JSON(fiber.Map{"status": "ok", "endpoint": c.Path()}) })
+	app.Post("/gateway/auth/logout", func(c *fiber.Ctx) error { return c.JSON(fiber.Map{"status": "ok", "endpoint": c.Path()}) })
 
 	// Main proxy endpoints (for AI providers) - specific patterns to avoid auth conflicts
 	app.All("/v1/chat/*", interceptor.HandleProxy)
@@ -185,6 +197,9 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 	// Privacy gateway specific routes
 	app.Get("/gateway/status", interceptor.HandleStatus)
 	app.Get("/gateway/stats", interceptor.HandleStats)
+	app.Get("/gateway/auth-test", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{"message": "Gateway route works!"})
+	})
 
 	log.Printf("Privacy Gateway starting on port %s", config.Port)
 	if err := app.Listen(":" + config.Port); err != nil {

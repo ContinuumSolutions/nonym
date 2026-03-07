@@ -30,9 +30,12 @@ type UserSession struct {
 
 // RegisterRequest represents a registration request
 type RegisterRequest struct {
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required,min=8"`
-	Name     string `json:"name" validate:"required,min=2"`
+	Email        string `json:"email" validate:"required,email"`
+	Password     string `json:"password" validate:"required,min=8"`
+	Name         string `json:"name,omitempty"`
+	FirstName    string `json:"firstName,omitempty"`
+	LastName     string `json:"lastName,omitempty"`
+	Organization string `json:"organization,omitempty"`
 }
 
 // LoginRequest represents a login request
