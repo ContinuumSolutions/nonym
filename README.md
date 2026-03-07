@@ -60,29 +60,40 @@ The Sovereign Privacy Gateway acts as a transparent reverse proxy that:
 - Docker & Docker Compose
 - 8GB+ RAM (for local LLM support)
 
-### 1. Clone and Build
+### 1. Clone and Setup
 
 ```bash
 git clone https://github.com/sovereignprivacy/gateway
 cd gateway
-go mod tidy
+
+# Run production setup script
+./scripts/setup-production.sh
 ```
 
 ### 2. Configure Environment
 
 ```bash
-cp .env.example .env
-# Edit .env with your API keys and configuration
+# Edit the generated .env file
+cp .env.production .env
+nano .env
+
+# Add your API keys:
+# OPENAI_API_KEY=sk-your-openai-api-key
+# ANTHROPIC_API_KEY=sk-ant-your-anthropic-api-key
+# GOOGLE_API_KEY=your-google-ai-api-key
 ```
 
-### 3. Start with Docker Compose
+### 3. Start Services
 
 ```bash
-# Start all services (Gateway + Dashboard + Ollama)
+# Development (with hot reload)
 docker compose up -d
 
-# Or just the gateway for development
-docker compose up gateway
+# Production (with monitoring)
+docker compose -f docker-compose.prod.yml up -d
+
+# With full monitoring stack
+docker compose -f docker-compose.prod.yml --profile monitoring up -d
 ```
 
 ### 4. Test the Gateway
@@ -199,30 +210,20 @@ rules:
 
 ```bash
 # Use production configuration
-docker compose -f docker-compose.yml up -d
+docker compose -f docker-compose.prod.yml up -d
 
 # With monitoring stack
-docker compose --profile monitoring up -d
+docker compose -f docker-compose.prod.yml --profile monitoring up -d
 
 # With log aggregation
-docker compose --profile logging up -d
-```
-
-### Kubernetes Deployment
-
-```bash
-# Apply Kubernetes manifests
-kubectl apply -f k8s/
-
-# Or use Helm
-helm install privacy-gateway ./charts/privacy-gateway
+docker compose -f docker-compose.prod.yml --profile logging up -d
 ```
 
 ### Environment-Specific Configurations
 
-- **Development**: Single instance with debug logging
-- **Staging**: Multi-instance with metrics collection
-- **Production**: High availability with SSL termination
+- **Development**: `docker-compose.yml` - Single instance with debug logging
+- **Production**: `docker-compose.prod.yml` - Multi-instance with metrics collection
+- **Full Stack**: `--profile monitoring --profile logging` - Complete observability
 
 ## Security & Compliance
 
@@ -273,6 +274,12 @@ go test ./...
 # Test specific components
 go test ./pkg/ner -v
 go test ./pkg/interceptor -v
+go test ./pkg/router -v
+go test ./pkg/audit -v
+
+# Run with coverage
+go test -coverprofile=coverage.out ./...
+go tool cover -html=coverage.out
 ```
 
 ### Integration Tests
@@ -304,9 +311,9 @@ go test -bench=BenchmarkProxy ./pkg/interceptor
 │   ├── router/          # Provider selection and routing
 │   └── audit/           # Logging and dashboard API
 ├── dashboard/           # Web dashboard interface
-├── api/                 # Protocol buffer definitions
 ├── nginx/               # Nginx configuration
-└── docs/               # Documentation
+├── monitoring/          # Prometheus, Grafana configs
+└── scripts/            # Setup and utility scripts
 ```
 
 ### Building from Source

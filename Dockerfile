@@ -1,88 +1,134 @@
-# Multi-stage build for Sovereign Privacy Gateway
+# Sovereign Privacy Gateway - Production Docker Image
+# Multi-stage build for optimal security and size
+
+# ────────────────────────────────────────────────────────────────────────────
+# Stage 1: Build Environment
+# ────────────────────────────────────────────────────────────────────────────
 FROM golang:1.24-alpine AS builder
 
 # Install build dependencies
-RUN apk add --no-cache git gcc musl-dev sqlite-dev
+RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev sqlite-dev
 
 # Set working directory
-WORKDIR /app
+WORKDIR /build
 
-# Copy go mod files
+# Copy dependency files
 COPY go.mod go.sum ./
 
 # Download dependencies
-RUN go mod download
+RUN go mod download && go mod verify
 
 # Copy source code
 COPY . .
 
-# Build the gateway binary
-RUN CGO_ENABLED=1 GOOS=linux go build \
-    -ldflags="-w -s -extldflags '-static'" \
+# Build the application with optimization
+ARG CGO_ENABLED=1
+ARG GOOS=linux
+ARG GOARCH=amd64
+RUN CGO_ENABLED=${CGO_ENABLED} GOOS=${GOOS} GOARCH=${GOARCH} go build \
+    -ldflags='-w -s -extldflags "-static"' \
     -a -installsuffix cgo \
-    -o gateway ./cmd/gateway
+    -o gateway \
+    ./cmd/gateway
 
-# Production stage
+# Verify the binary
+RUN chmod +x gateway
+
+# ────────────────────────────────────────────────────────────────────────────
+# Stage 2: Production Runtime
+# ────────────────────────────────────────────────────────────────────────────
 FROM alpine:latest AS production
 
 # Install runtime dependencies
 RUN apk --no-cache add \
     ca-certificates \
     curl \
-    sqlite \
+    wget \
     tzdata \
+    sqlite \
     && rm -rf /var/cache/apk/*
 
 # Create non-root user
-RUN addgroup -g 1001 spg && \
-    adduser -D -s /bin/sh -u 1001 -G spg spg
-
-# Create necessary directories
-RUN mkdir -p /app /data /app/logs && \
-    chown -R spg:spg /app /data
-
-# Copy binary and assets
-COPY --from=builder /app/gateway /app/
-COPY --from=builder /app/dashboard /app/dashboard
-
-# Set ownership
-RUN chown -R spg:spg /app
-
-# Switch to non-root user
-USER spg
+RUN addgroup -g 1001 -S spguser && \
+    adduser -u 1001 -S spguser -G spguser
 
 # Set working directory
 WORKDIR /app
 
+# Copy binary from builder
+COPY --from=builder --chown=spguser:spguser /build/gateway /app/gateway
+
+# Copy dashboard files
+COPY --chown=spguser:spguser dashboard/ /app/dashboard/
+
+# Create directories with proper permissions
+RUN mkdir -p /data /app/logs /tmp && \
+    chown -R spguser:spguser /app /data && \
+    chmod 755 /app/gateway && \
+    chmod -R 755 /app/dashboard && \
+    chmod 755 /data
+
+# Switch to non-root user
+USER spguser
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-8080}/health || exit 1
+
 # Expose ports
 EXPOSE 8080 8081
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+# Environment defaults
+ENV PORT=8080 \
+    DASHBOARD_PORT=8081 \
+    DATABASE_PATH=/data/gateway.db \
+    LOG_LEVEL=info \
+    STRICT_MODE=false
 
-# Run the gateway
-CMD ["./gateway"]
+# Start the application
+CMD ["/app/gateway"]
 
-# Development stage
-FROM production AS development
-
-# Switch back to root for development tools
-USER root
+# ────────────────────────────────────────────────────────────────────────────
+# Stage 3: Development Environment
+# ────────────────────────────────────────────────────────────────────────────
+FROM golang:1.24-alpine AS development
 
 # Install development tools
 RUN apk add --no-cache \
     git \
+    ca-certificates \
+    tzdata \
+    gcc \
+    musl-dev \
+    sqlite-dev \
+    curl \
     make \
-    bash \
-    vim
+    bash
 
-# Install Go for development
-COPY --from=builder /usr/local/go /usr/local/go
-ENV PATH="/usr/local/go/bin:${PATH}"
+WORKDIR /app
 
-# Switch back to spg user
-USER spg
+# Copy source
+COPY . .
+
+# Download dependencies
+RUN go mod download
+
+# Create development user
+RUN addgroup -g 1001 -S devuser && \
+    adduser -u 1001 -S devuser -G devuser && \
+    chown -R devuser:devuser /app
+
+# Create data directories
+RUN mkdir -p /data /tmp && \
+    chown -R devuser:devuser /data
+
+USER devuser
+
+# Development environment variables
+ENV PORT=8080 \
+    DASHBOARD_PORT=8081 \
+    LOG_LEVEL=debug \
+    DATABASE_PATH=/data/gateway.db
 
 # Default command for development
-CMD ["./gateway"]
+CMD ["go", "run", "./cmd/gateway"]

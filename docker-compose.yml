@@ -2,13 +2,15 @@ version: '3.8'
 
 name: sovereign-privacy-gateway
 
+# Development Configuration for Sovereign Privacy Gateway
 services:
-  # ── Sovereign Privacy Gateway ─────────────────────────────────────────────
+
+  # ── Main Privacy Gateway ──────────────────────────────────────────────────
   gateway:
     build:
       context: .
       dockerfile: Dockerfile
-      target: production
+      target: development
     ports:
       - "8080:8080"   # Main privacy gateway endpoint
       - "8081:8081"   # Dashboard interface
@@ -16,13 +18,14 @@ services:
       - PORT=8080
       - DASHBOARD_PORT=8081
       - DATABASE_PATH=/data/gateway.db
-      - LOG_LEVEL=info
+      - LOG_LEVEL=debug
       - LOCAL_LLM_URL=http://ollama:11434
+      - STRICT_MODE=false
     volumes:
+      - .:/app
       - gateway-data:/data
       - ./logs:/app/logs
     depends_on:
-      - database
       - ollama
     restart: unless-stopped
     healthcheck:
@@ -31,22 +34,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: '0.5'
-        reservations:
-          memory: 256M
-          cpus: '0.25'
-
-  # ── Database ───────────────────────────────────────────────────────────────
-  database:
-    image: alpine:latest
-    command: ["sh", "-c", "mkdir -p /data && touch /data/.keep && sleep infinity"]
-    volumes:
-      - gateway-data:/data
-    restart: unless-stopped
+    networks:
+      - default
 
   # ── Local LLM (Ollama) ─────────────────────────────────────────────────────
   ollama:
@@ -66,14 +55,8 @@ services:
       timeout: 15s
       retries: 5
       start_period: 60s
-    deploy:
-      resources:
-        limits:
-          memory: 8G
-          cpus: '4.0'
-        reservations:
-          memory: 2G
-          cpus: '1.0'
+    networks:
+      - default
 
   # Pull default model on startup
   ollama-setup:
@@ -93,16 +76,16 @@ services:
       ollama:
         condition: service_healthy
     restart: "no"
+    networks:
+      - default
 
-  # ── Reverse Proxy & Load Balancer ─────────────────────────────────────────
+  # ── Reverse Proxy ─────────────────────────────────────────────────────────
   nginx:
     image: nginx:alpine
     ports:
       - "80:80"
-      - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
       - ./logs/nginx:/var/log/nginx
     depends_on:
       - gateway
@@ -112,99 +95,16 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-    deploy:
-      resources:
-        limits:
-          memory: 128M
-          cpus: '0.2'
-
-  # ── Monitoring & Metrics ──────────────────────────────────────────────────
-  prometheus:
-    image: prom/prometheus:latest
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus-data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
-      - '--storage.tsdb.retention.time=15d'
-      - '--web.enable-lifecycle'
-    restart: unless-stopped
-    profiles: ["monitoring"]
-
-  grafana:
-    image: grafana/grafana:latest
-    ports:
-      - "3000:3000"
-    volumes:
-      - grafana-data:/var/lib/grafana
-      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
-      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
-      - GF_INSTALL_PLUGINS=grafana-piechart-panel
-    restart: unless-stopped
-    depends_on:
-      - prometheus
-    profiles: ["monitoring"]
-
-  # ── Log Management ────────────────────────────────────────────────────────
-  loki:
-    image: grafana/loki:latest
-    ports:
-      - "3100:3100"
-    volumes:
-      - loki-data:/loki
-      - ./monitoring/loki.yml:/etc/loki/local-config.yaml:ro
-    command: -config.file=/etc/loki/local-config.yaml
-    restart: unless-stopped
-    profiles: ["logging"]
-
-  promtail:
-    image: grafana/promtail:latest
-    volumes:
-      - ./logs:/var/log/gateway:ro
-      - ./monitoring/promtail.yml:/etc/promtail/config.yml:ro
-    command: -config.file=/etc/promtail/config.yml
-    restart: unless-stopped
-    depends_on:
-      - loki
-    profiles: ["logging"]
+    networks:
+      - default
+    profiles: ["proxy"]
 
 volumes:
   gateway-data:
     driver: local
   ollama-models:
     driver: local
-  prometheus-data:
-    driver: local
-  grafana-data:
-    driver: local
-  loki-data:
-    driver: local
 
 networks:
   default:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
-
-# Production deployment configuration
-x-production: &production-config
-  restart: unless-stopped
-  logging:
-    driver: "json-file"
-    options:
-      max-size: "10m"
-      max-file: "3"
-
-# Development overrides
-x-development: &development-config
-  restart: "no"
-  logging:
-    driver: "local"
