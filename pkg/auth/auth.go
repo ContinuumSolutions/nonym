@@ -66,6 +66,36 @@ func createAuthTables() error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`,
 		`CREATE INDEX IF NOT EXISTS idx_users_active ON users(active)`,
+		`CREATE TABLE IF NOT EXISTS api_keys (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			key_hash TEXT NOT NULL,
+			masked_key TEXT NOT NULL,
+			permissions TEXT NOT NULL,
+			user_id TEXT NOT NULL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			expires_at DATETIME,
+			status TEXT DEFAULT 'active',
+			last_used DATETIME
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id)`,
+		`CREATE TABLE IF NOT EXISTS provider_configs (
+			user_id TEXT PRIMARY KEY,
+			config_data TEXT NOT NULL,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE TABLE IF NOT EXISTS organizations (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			industry TEXT,
+			size TEXT,
+			country TEXT,
+			description TEXT,
+			owner_id INTEGER NOT NULL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (owner_id) REFERENCES users (id)
+		)`,
 	}
 
 	for _, query := range queries {

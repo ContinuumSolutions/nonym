@@ -4,11 +4,17 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import Dashboard from './views/Dashboard.vue'
 import Login from './views/Login.vue'
+import ProtectedEvents from './views/ProtectedEvents.vue'
+import Integrations from './views/Integrations.vue'
+import Account from './views/Account.vue'
 import './style.css'
 
 const routes = [
   { path: '/', redirect: '/dashboard' },
   { path: '/dashboard', component: Dashboard, meta: { requiresAuth: true } },
+  { path: '/protected-events', component: ProtectedEvents, meta: { requiresAuth: true } },
+  { path: '/integrations', component: Integrations, meta: { requiresAuth: true } },
+  { path: '/account', component: Account, meta: { requiresAuth: true } },
   { path: '/login', component: Login },
   { path: '/signup', component: Login, props: { mode: 'signup' } }
 ]

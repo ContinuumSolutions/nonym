@@ -218,14 +218,56 @@ func startDashboardServer(config *Config, errChan chan<- error) {
 	app.Use(cors.New())
 
 	// Serve static dashboard files
-	app.Static("/", "./dashboard/public")
+	app.Static("/", "./dashboard/dist")
 
-	// Dashboard API routes
-	api := app.Group("/api")
-	api.Get("/transactions", audit.HandleGetTransactions)
-	api.Get("/statistics", audit.HandleGetStatistics)
-	api.Get("/settings", audit.HandleGetSettings)
-	api.Put("/settings", audit.HandleUpdateSettings)
+	// Public API routes (no auth required)
+	api := app.Group("/api/v1")
+	
+	// Authentication routes
+	api.Post("/auth/login", auth.HandleLogin)
+	api.Post("/auth/register", auth.HandleRegister)
+	api.Post("/auth/logout", auth.HandleLogout)
+
+	// Protected API routes (require authentication)
+	protected := api.Use(auth.AuthMiddleware)
+	
+	// Dashboard data
+	protected.Get("/statistics", audit.HandleGetStatistics)
+	protected.Get("/transactions", audit.HandleGetTransactions)
+	protected.Get("/protection-events", audit.HandleGetTransactions)
+	protected.Get("/protection-stats", auth.HandleProtectionStats)
+	
+	// Settings
+	protected.Get("/settings", audit.HandleGetSettings)
+	protected.Put("/settings", audit.HandleUpdateSettings)
+	
+	// API Keys management
+	protected.Get("/api-keys", auth.HandleGetAPIKeys)
+	protected.Post("/api-keys", auth.HandleCreateAPIKey)
+	protected.Patch("/api-keys/:id/revoke", auth.HandleRevokeAPIKey)
+	protected.Delete("/api-keys/:id", auth.HandleDeleteAPIKey)
+	
+	// Provider configuration
+	protected.Get("/provider-config", auth.HandleGetProviderConfig)
+	protected.Put("/provider-config", auth.HandleSaveProviderConfig)
+	protected.Post("/providers/:provider/test", auth.HandleTestProviderConnection)
+	
+	// Organization management
+	protected.Get("/organization", auth.HandleGetOrganization)
+	protected.Put("/organization", auth.HandleUpdateOrganization)
+	
+	// Team management
+	protected.Get("/team/members", auth.HandleGetTeamMembers)
+	protected.Post("/team/members", auth.HandleInviteTeamMember)
+	protected.Delete("/team/members/:id", auth.HandleRemoveTeamMember)
+	
+	// Security settings
+	protected.Put("/security/2fa", auth.HandleUpdateTwoFactor)
+	protected.Delete("/security/sessions/:id", auth.HandleTerminateSession)
+	protected.Put("/security/settings", auth.HandleUpdateSecuritySettings)
+	
+	// User profile
+	protected.Get("/auth/me", auth.HandleGetMe)
 
 	// WebSocket for real-time updates
 	app.Get("/ws", audit.HandleWebSocket)

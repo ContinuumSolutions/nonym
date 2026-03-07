@@ -1,9 +1,6 @@
 <template>
-  <div class="min-h-screen">
-    <!-- Header -->
-    <DashboardHeader @refresh="loadData" @logout="handleLogout" />
-
-    <div class="max-w-7xl mx-auto px-4 py-8">
+  <DashboardLayout>
+    <div class="p-8">
       <!-- Hero Stats -->
       <div class="mb-8">
         <h2 class="text-3xl font-bold text-neutral-800 mb-2">Privacy Protection Dashboard</h2>
@@ -52,13 +49,13 @@
       <!-- Recent Activity -->
       <RecentActivity :events="events" :loading="eventsLoading" />
     </div>
-  </div>
+  </DashboardLayout>
 </template>
 
 <script>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import DashboardHeader from '../components/DashboardHeader.vue'
+import DashboardLayout from '../components/DashboardLayout.vue'
 import MetricCard from '../components/MetricCard.vue'
 import ProtectionImpact from '../components/ProtectionImpact.vue'
 import RecentActivity from '../components/RecentActivity.vue'
@@ -68,7 +65,7 @@ import { apiService } from '../services/api'
 export default {
   name: 'Dashboard',
   components: {
-    DashboardHeader,
+    DashboardLayout,
     MetricCard,
     ProtectionImpact,
     RecentActivity
@@ -129,10 +126,6 @@ export default {
       { time: '14:18', action: 'Anonymized', type: 'Email', protection: 'Token replaced', status: 'Protected' },
     ]
 
-    const handleLogout = () => {
-      authStore.logout()
-      router.push('/login')
-    }
 
     onMounted(() => {
       loadData()
@@ -149,8 +142,7 @@ export default {
       stats,
       events,
       eventsLoading,
-      loadData,
-      handleLogout
+      loadData
     }
   }
 }
