@@ -19,14 +19,15 @@ services:
       - DASHBOARD_PORT=8081
       - DATABASE_PATH=/data/gateway.db
       - LOG_LEVEL=debug
-      - LOCAL_LLM_URL=http://ollama:11434
       - STRICT_MODE=false
+      # Add your API keys via .env file
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
     volumes:
       - .:/app
       - gateway-data:/data
       - ./logs:/app/logs
-    depends_on:
-      - ollama
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
@@ -37,49 +38,7 @@ services:
     networks:
       - default
 
-  # ── Local LLM (Ollama) ─────────────────────────────────────────────────────
-  ollama:
-    image: ollama/ollama:latest
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama-models:/root/.ollama
-    environment:
-      - OLLAMA_KEEP_ALIVE=30m
-      - OLLAMA_NUM_PARALLEL=2
-      - OLLAMA_MAX_LOADED_MODELS=2
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "ollama list || exit 1"]
-      interval: 30s
-      timeout: 15s
-      retries: 5
-      start_period: 60s
-    networks:
-      - default
-
-  # Pull default model on startup
-  ollama-setup:
-    image: ollama/ollama:latest
-    volumes:
-      - ollama-models:/root/.ollama
-    environment:
-      - OLLAMA_HOST=http://ollama:11434
-    command: >
-      sh -c "
-        echo 'Waiting for Ollama service...' &&
-        sleep 30 &&
-        ollama pull llama3.2:1b &&
-        echo 'Model downloaded successfully'
-      "
-    depends_on:
-      ollama:
-        condition: service_healthy
-    restart: "no"
-    networks:
-      - default
-
-  # ── Reverse Proxy ─────────────────────────────────────────────────────────
+  # ── Reverse Proxy (Optional) ───────────────────────────────────────────────
   nginx:
     image: nginx:alpine
     ports:
@@ -101,8 +60,6 @@ services:
 
 volumes:
   gateway-data:
-    driver: local
-  ollama-models:
     driver: local
 
 networks:

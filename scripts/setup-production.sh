@@ -25,7 +25,7 @@ check_prerequisites() {
     info "Checking prerequisites..."
 
     command -v docker >/dev/null 2>&1 || error "Docker is not installed"
-    command -v docker-compose >/dev/null 2>&1 || error "Docker Compose is not installed"
+    command -v docker compose >/dev/null 2>&1 || error "Docker Compose is not installed"
 
     # Check Docker is running
     docker info >/dev/null 2>&1 || error "Docker is not running"
@@ -39,7 +39,7 @@ create_directories() {
 
     local data_dir="${DATA_DIR:-./data}"
 
-    mkdir -p "$data_dir"/{gateway,ollama,prometheus,grafana,alertmanager,loki,backups,logs}
+    mkdir -p "$data_dir"/{gateway,prometheus,grafana,alertmanager,loki,backups,logs}
     mkdir -p ./nginx/ssl
     mkdir -p ./monitoring/{prometheus,grafana,loki,alertmanager}
 
@@ -53,7 +53,7 @@ setup_environment() {
     if [[ ! -f .env ]]; then
         cp .env.production .env
         warn "Created .env file from template"
-        warn "Please edit .env with your actual configuration before continuing"
+        warn "Please edit .env with your actual API keys before continuing"
 
         # Generate secure passwords
         local grafana_password
@@ -67,6 +67,7 @@ setup_environment() {
         sed -i.bak "s/change-this-to-a-random-64-character-string-for-production/$session_secret/g" .env
 
         info "Generated secure passwords in .env file"
+        info "Grafana admin password: $grafana_password"
     else
         warn ".env file already exists - skipping environment setup"
     fi
@@ -139,6 +140,24 @@ groups:
         annotations:
           summary: "Service is down"
           description: "Sovereign Privacy Gateway is not responding"
+
+      - alert: HighPIIDetection
+        expr: rate(pii_detections_total[5m]) > 50
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High PII detection rate"
+          description: "Detected {{ $value }} PII instances per second"
+
+      - alert: BlockedRequests
+        expr: rate(blocked_requests_total[5m]) > 10
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High blocked request rate"
+          description: "{{ $value }} requests blocked per second"
 EOF
 
     # Grafana datasources
@@ -153,6 +172,8 @@ datasources:
     access: proxy
     url: http://prometheus:9090
     isDefault: true
+    jsonData:
+      timeInterval: "15s"
 EOF
 
     success "Monitoring configuration created"
@@ -197,10 +218,11 @@ http {
     add_header X-Frame-Options DENY always;
     add_header X-Content-Type-Options nosniff always;
     add_header X-XSS-Protection "1; mode=block" always;
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 
     # Rate limiting
     limit_req_zone $binary_remote_addr zone=gateway:10m rate=10r/s;
+    limit_req_zone $binary_remote_addr zone=dashboard:10m rate=5r/s;
 
     upstream gateway {
         server gateway:8080;
@@ -216,9 +238,6 @@ http {
         listen 80;
         server_name _;
 
-        # Rate limiting
-        limit_req zone=gateway burst=20 nodelay;
-
         # Health check (bypass rate limiting)
         location = /health {
             proxy_pass http://gateway;
@@ -230,6 +249,8 @@ http {
 
         # Privacy Gateway API
         location ~ ^/(v1|api)/ {
+            limit_req zone=gateway burst=20 nodelay;
+
             proxy_pass http://gateway;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -237,10 +258,25 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
             proxy_buffering off;
             proxy_request_buffering off;
+            proxy_read_timeout 300;
+            proxy_connect_timeout 10;
+        }
+
+        # Gateway status endpoints
+        location ~ ^/gateway/(status|stats)$ {
+            limit_req zone=dashboard burst=10 nodelay;
+
+            proxy_pass http://gateway;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
         }
 
         # Dashboard
         location / {
+            limit_req zone=dashboard burst=15 nodelay;
+
             proxy_pass http://dashboard;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -266,11 +302,11 @@ set_permissions() {
     local data_dir="${DATA_DIR:-./data}"
 
     # Set directory permissions
-    find "$data_dir" -type d -exec chmod 755 {} \;
+    find "$data_dir" -type d -exec chmod 755 {} \; 2>/dev/null || true
 
     # Set file permissions
-    find "./monitoring" -type f -exec chmod 644 {} \;
-    find "./nginx" -type f -exec chmod 644 {} \;
+    find "./monitoring" -type f -exec chmod 644 {} \; 2>/dev/null || true
+    find "./nginx" -type f -exec chmod 644 {} \; 2>/dev/null || true
 
     # Make scripts executable
     chmod +x scripts/*.sh 2>/dev/null || true
@@ -282,7 +318,8 @@ set_permissions() {
 validate_config() {
     info "Validating Docker Compose configuration..."
 
-    docker-compose -f docker-compose.prod.yml config >/dev/null || error "Docker Compose configuration is invalid"
+    docker compose -f docker-compose.yml config >/dev/null || error "Development Docker Compose configuration is invalid"
+    docker compose -f docker-compose.prod.yml config >/dev/null || error "Production Docker Compose configuration is invalid"
 
     success "Configuration validation passed"
 }
@@ -291,9 +328,61 @@ validate_config() {
 pull_images() {
     info "Pulling Docker images..."
 
-    docker-compose -f docker-compose.prod.yml pull
+    docker compose -f docker-compose.prod.yml pull
 
     success "Docker images pulled"
+}
+
+# Create API key reminder
+create_api_key_reminder() {
+    info "Creating API key setup reminder..."
+
+    cat > ./API_KEYS_SETUP.md << 'EOF'
+# API Keys Setup Required
+
+Before starting the Privacy Gateway, you need to configure at least one AI provider API key.
+
+## Required Steps:
+
+1. Edit the `.env` file and add your API keys:
+
+```bash
+# OpenAI (recommended for general use)
+OPENAI_API_KEY=sk-your-openai-api-key-here
+
+# Anthropic (recommended for privacy-sensitive content)
+ANTHROPIC_API_KEY=sk-ant-your-anthropic-api-key-here
+
+# Google AI (recommended for embeddings)
+GOOGLE_API_KEY=your-google-ai-api-key-here
+```
+
+2. Get API keys from:
+   - OpenAI: https://platform.openai.com/api-keys
+   - Anthropic: https://console.anthropic.com/
+   - Google AI: https://aistudio.google.com/app/apikey
+
+3. After adding keys, start the gateway:
+```bash
+# Development
+docker compose up -d
+
+# Production
+docker compose -f docker-compose.prod.yml up -d
+```
+
+4. Test the setup:
+```bash
+curl http://localhost:8080/health
+```
+
+## Need Help?
+
+- See docs/installation.md for detailed setup instructions
+- Run ./scripts/verify-setup.sh to validate your configuration
+EOF
+
+    success "API key setup reminder created"
 }
 
 # Main setup process
@@ -310,17 +399,23 @@ main() {
     set_permissions
     validate_config
     pull_images
+    create_api_key_reminder
 
     echo
     success "🎉 Production setup completed successfully!"
     echo
-    info "Next steps:"
-    echo "  1. Edit .env file with your API keys and configuration"
-    echo "  2. Review monitoring/prometheus.yml and monitoring/alerts.yml"
-    echo "  3. Configure SSL certificates in nginx/ssl/ (if using HTTPS)"
-    echo "  4. Run: docker-compose -f docker-compose.prod.yml up -d"
-    echo "  5. Access dashboard at http://localhost:8081"
-    echo "  6. Access monitoring at http://localhost:3000 (Grafana)"
+    info "IMPORTANT: Configure your API keys before starting!"
+    echo
+    warn "Next steps:"
+    echo "  1. Edit .env file with your AI provider API keys"
+    echo "  2. See API_KEYS_SETUP.md for detailed instructions"
+    echo "  3. Review monitoring/prometheus.yml and monitoring/alerts.yml"
+    echo "  4. Configure SSL certificates in nginx/ssl/ (if using HTTPS)"
+    echo "  5. Run: docker compose -f docker-compose.prod.yml up -d"
+    echo "  6. Access dashboard at http://localhost:8081"
+    echo "  7. Access monitoring at http://localhost:3000 (Grafana)"
+    echo
+    info "Documentation: docs/installation.md"
     echo
 }
 

@@ -140,7 +140,7 @@ func (r *Router) loadProviders(configs map[string]ProviderConfig) error {
 		}
 	}
 
-	// Local LLM Configuration (Ollama)
+	// Local LLM Configuration (Optional)
 	if config, exists := configs["local"]; exists && config.Enabled {
 		r.providers["local"] = &Provider{
 			Name:        "local",

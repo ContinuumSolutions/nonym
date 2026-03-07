@@ -42,7 +42,7 @@ The Sovereign Privacy Gateway acts as a transparent reverse proxy that:
 - **Connection pooling** for upstream providers
 
 ### 🎯 **Intelligent Routing**
-- **Content-based routing**: Financial data → Local LLM, General queries → Cloud AI
+- **Content-based routing**: Financial data can be blocked, General queries → Fastest provider
 - **Provider health checking** with automatic failover
 - **Load balancing** across multiple AI endpoints
 - **Custom routing rules** based on sensitivity levels
@@ -51,14 +51,20 @@ The Sovereign Privacy Gateway acts as a transparent reverse proxy that:
 - **Real-time dashboard** with transaction monitoring
 - **Comprehensive logging** of all anonymization events
 - **Statistics and analytics** for privacy compliance
-- **WebSocket updates** for live monitoring
+- **Prometheus metrics** with Grafana dashboards
+
+## Supported AI Providers
+
+- **OpenAI** (GPT-4, GPT-3.5-turbo, etc.)
+- **Anthropic** (Claude 3.5, Claude 3, etc.)
+- **Google AI** (Gemini Pro, Gemini Flash, etc.)
 
 ## Quick Start
 
 ### Prerequisites
-- Go 1.24+
 - Docker & Docker Compose
-- 8GB+ RAM (for local LLM support)
+- API keys from at least one AI provider
+- 2GB+ RAM
 
 ### 1. Clone and Setup
 
@@ -66,21 +72,20 @@ The Sovereign Privacy Gateway acts as a transparent reverse proxy that:
 git clone https://github.com/sovereignprivacy/gateway
 cd gateway
 
-# Run production setup script
+# Run automated setup
 ./scripts/setup-production.sh
 ```
 
-### 2. Configure Environment
+### 2. Configure API Keys
 
 ```bash
 # Edit the generated .env file
-cp .env.production .env
 nano .env
 
 # Add your API keys:
-# OPENAI_API_KEY=sk-your-openai-api-key
-# ANTHROPIC_API_KEY=sk-ant-your-anthropic-api-key
-# GOOGLE_API_KEY=your-google-ai-api-key
+OPENAI_API_KEY=sk-your-openai-api-key
+ANTHROPIC_API_KEY=sk-ant-your-anthropic-api-key
+GOOGLE_API_KEY=your-google-ai-api-key
 ```
 
 ### 3. Start Services
@@ -90,9 +95,6 @@ nano .env
 docker compose up -d
 
 # Production (with monitoring)
-docker compose -f docker-compose.prod.yml up -d
-
-# With full monitoring stack
 docker compose -f docker-compose.prod.yml --profile monitoring up -d
 ```
 
@@ -125,7 +127,7 @@ The gateway will:
 
 ### 5. Access the Dashboard
 
-Visit http://localhost:8081 to access the real-time monitoring dashboard.
+Visit **http://localhost:8081** to access the real-time monitoring dashboard.
 
 ## API Usage
 
@@ -156,15 +158,30 @@ The gateway automatically routes based on content sensitivity:
 ```json
 {
   "model": "gpt-4",
-  "provider": "local",  // Force routing to local LLM
   "messages": [
     {
       "role": "user",
-      "content": "Sensitive financial data..."
+      "content": "General business question..."
     }
   ]
 }
 ```
+
+Routes to the fastest available provider (typically OpenAI).
+
+```json
+{
+  "model": "claude-3-sonnet",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Personal healthcare data..."
+    }
+  ]
+}
+```
+
+Routes to Anthropic for privacy-sensitive content.
 
 ## Configuration
 
@@ -174,56 +191,60 @@ The gateway automatically routes based on content sensitivity:
 # Gateway Configuration
 PORT=8080
 DASHBOARD_PORT=8081
-DATABASE_PATH=/data/gateway.db
 LOG_LEVEL=info
 
-# Provider URLs
+# Privacy Settings
+STRICT_MODE=false    # Set to true to block high-sensitivity data
+RETENTION_DAYS=30    # Audit log retention
+
+# AI Provider API Keys
 OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=sk-ant-...
 GOOGLE_API_KEY=...
-LOCAL_LLM_URL=http://localhost:11434
-
-# Privacy Settings
-STRICT_MODE=false
-RETENTION_DAYS=30
 ```
 
-### Routing Rules
+### Content-Based Routing
 
-Configure custom routing in `config/routing.yaml`:
+The gateway automatically applies different privacy policies:
 
-```yaml
-rules:
-  - pattern: "/v1/chat/completions"
-    provider: "local"
-    conditions: ["contains:financial", "contains:medical"]
-    security_level: "high"
-
-  - pattern: "/v1/embeddings"
-    provider: "google"
-    security_level: "standard"
-```
+- **High Sensitivity** (SSN, Credit Cards): Blocked in strict mode, heavily anonymized otherwise
+- **Medium Sensitivity** (Email, Phone Numbers): Anonymized with secure tokenization
+- **Low Sensitivity** (General text): Passed through with monitoring
 
 ## Deployment
 
-### Production Docker Compose
+### Development Environment
 
 ```bash
-# Use production configuration
+# Hot-reload development with debugging
+docker compose up -d
+
+# View logs
+docker compose logs -f gateway
+```
+
+### Production Environment
+
+```bash
+# Production deployment with optimizations
 docker compose -f docker-compose.prod.yml up -d
 
-# With monitoring stack
+# With full monitoring stack
 docker compose -f docker-compose.prod.yml --profile monitoring up -d
 
 # With log aggregation
 docker compose -f docker-compose.prod.yml --profile logging up -d
 ```
 
-### Environment-Specific Configurations
+### Kubernetes Deployment
 
-- **Development**: `docker-compose.yml` - Single instance with debug logging
-- **Production**: `docker-compose.prod.yml` - Multi-instance with metrics collection
-- **Full Stack**: `--profile monitoring --profile logging` - Complete observability
+```bash
+# Apply Kubernetes manifests (coming soon)
+kubectl apply -f k8s/
+
+# Or use Helm chart (coming soon)
+helm install privacy-gateway ./charts/privacy-gateway
+```
 
 ## Security & Compliance
 
@@ -232,6 +253,7 @@ docker compose -f docker-compose.prod.yml --profile logging up -d
 - **Encryption at rest** for audit logs and configuration
 - **TLS termination** at nginx layer
 - **Network isolation** with Docker networks
+- **Non-root containers** with read-only filesystems
 
 ### Compliance Features
 - **Audit trail** of all anonymization events
@@ -254,10 +276,10 @@ docker compose -f docker-compose.prod.yml --profile logging up -d
 - Privacy compliance metrics
 
 ### Metrics & Alerting
-- Prometheus metrics export
-- Grafana dashboards
-- Custom alert rules for privacy violations
-- Log aggregation with Loki
+- **Prometheus metrics** export
+- **Grafana dashboards** for visualization
+- **Custom alert rules** for privacy violations
+- **Log aggregation** with Loki
 
 ### Health Checks
 - `/health` - Overall system health
@@ -272,10 +294,10 @@ docker compose -f docker-compose.prod.yml --profile logging up -d
 go test ./...
 
 # Test specific components
-go test ./pkg/ner -v
-go test ./pkg/interceptor -v
-go test ./pkg/router -v
-go test ./pkg/audit -v
+go test ./pkg/ner -v          # PII detection engine
+go test ./pkg/router -v       # Provider routing
+go test ./pkg/interceptor -v  # HTTP proxy
+go test ./pkg/audit -v        # Audit logging
 
 # Run with coverage
 go test -coverprofile=coverage.out ./...
@@ -287,17 +309,14 @@ go tool cover -html=coverage.out
 # End-to-end testing
 go test ./cmd/gateway -v
 
-# Load testing
+# Performance benchmarks
 go test -bench=. ./pkg/...
 ```
 
-### Performance Benchmarks
+### Verification Script
 ```bash
-# Benchmark PII detection
-go test -bench=BenchmarkNER ./pkg/ner
-
-# Benchmark proxy performance
-go test -bench=BenchmarkProxy ./pkg/interceptor
+# Comprehensive system verification
+./scripts/verify-setup.sh
 ```
 
 ## Development
@@ -313,7 +332,8 @@ go test -bench=BenchmarkProxy ./pkg/interceptor
 ├── dashboard/           # Web dashboard interface
 ├── nginx/               # Nginx configuration
 ├── monitoring/          # Prometheus, Grafana configs
-└── scripts/            # Setup and utility scripts
+├── scripts/             # Setup and utility scripts
+└── docs/               # Documentation
 ```
 
 ### Building from Source
@@ -324,7 +344,7 @@ go build -o gateway ./cmd/gateway
 # Build with optimizations
 CGO_ENABLED=1 go build -ldflags="-w -s" -o gateway ./cmd/gateway
 
-# Cross-compile for different platforms
+# Cross-compile
 GOOS=linux GOARCH=amd64 go build -o gateway-linux ./cmd/gateway
 ```
 
@@ -337,11 +357,12 @@ GOOS=linux GOARCH=amd64 go build -o gateway-linux ./cmd/gateway
 5. Push to the branch (`git push origin feature/amazing-feature`)
 6. Open a Pull Request
 
-### Code Style
-- Follow Go naming conventions
-- Use `gofmt` and `golint`
-- Write tests for new features
-- Update documentation
+## Documentation
+
+- **[Installation Guide](docs/installation.md)** - Complete setup instructions
+- **[API Reference](docs/api-reference.md)** - API documentation (coming soon)
+- **[Configuration Guide](docs/configuration.md)** - Advanced configuration (coming soon)
+- **[Security Guide](docs/security.md)** - Security best practices (coming soon)
 
 ## License
 
@@ -357,8 +378,8 @@ For commercial licensing, contact: licensing@sovereignprivacy.com
 ## Support & Community
 
 - **Documentation**: https://docs.sovereignprivacy.com
-- **Issues**: GitHub Issues for bug reports and feature requests
-- **Discussions**: GitHub Discussions for questions and community
+- **Issues**: [GitHub Issues](https://github.com/sovereignprivacy/gateway/issues) for bug reports and feature requests
+- **Discussions**: [GitHub Discussions](https://github.com/sovereignprivacy/gateway/discussions) for questions and community
 - **Security**: security@sovereignprivacy.com for security issues
 
 ## Roadmap
