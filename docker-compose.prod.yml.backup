@@ -3,7 +3,6 @@ version: '3.8'
 name: sovereign-privacy-gateway-prod
 
 # Production-ready configuration for Sovereign Privacy Gateway
-# All services accessible via nginx on port 80/443
 services:
 
   # ── Main Privacy Gateway ──────────────────────────────────────────────────
@@ -93,7 +92,8 @@ services:
   # ── Monitoring Stack ───────────────────────────────────────────────────────
   prometheus:
     image: prom/prometheus:latest
-    # No external ports - accessed via nginx at /prometheus/
+    ports:
+      - "9090:9090"
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
@@ -109,28 +109,20 @@ services:
       - '--storage.tsdb.retention.time=90d'
       - '--web.enable-lifecycle'
       - '--web.enable-admin-api'
-      - '--web.external-url=http://localhost/prometheus/'
-      - '--web.route-prefix=/'
     restart: unless-stopped
     profiles: ["monitoring", "full"]
     security_opt:
       - no-new-privileges:true
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
   grafana:
     image: grafana/grafana:latest
-    # No external ports - accessed via nginx at /grafana/
+    ports:
+      - "3000:3000"
     volumes:
       - grafana-data:/var/lib/grafana
       - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
       - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
-      - ./monitoring/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
     networks:
-      - gateway-network
       - monitoring-network
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
@@ -139,51 +131,37 @@ services:
       - GF_SECURITY_ALLOW_EMBEDDING=true
       - GF_AUTH_ANONYMOUS_ENABLED=false
       - GF_SECURITY_DISABLE_GRAVATAR=true
-      # Configure for reverse proxy at /grafana/
-      - GF_SERVER_ROOT_URL=http://localhost/grafana/
-      - GF_SERVER_SERVE_FROM_SUB_PATH=true
-      - GF_SERVER_DOMAIN=localhost
     restart: unless-stopped
     depends_on:
       - prometheus
     profiles: ["monitoring", "full"]
     security_opt:
       - no-new-privileges:true
-    healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
   # ── Alerting ───────────────────────────────────────────────────────────────
   alertmanager:
     image: prom/alertmanager:latest
-    # No external ports - accessed via nginx at /alertmanager/
+    ports:
+      - "9093:9093"
     volumes:
       - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager-data:/alertmanager
     networks:
-      - gateway-network
       - monitoring-network
     command:
       - '--config.file=/etc/alertmanager/alertmanager.yml'
       - '--storage.path=/alertmanager'
-      - '--web.external-url=http://localhost/alertmanager/'
-      - '--web.route-prefix=/'
+      - '--web.external-url=http://localhost:9093'
     restart: unless-stopped
     profiles: ["monitoring", "full"]
     security_opt:
       - no-new-privileges:true
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9093/-/healthy"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
   # ── Log Management ─────────────────────────────────────────────────────────
   loki:
     image: grafana/loki:latest
-    # No external ports - could be accessed via nginx if needed
+    ports:
+      - "3100:3100"
     volumes:
       - loki-data:/loki
       - ./monitoring/loki.yml:/etc/loki/local-config.yaml:ro
