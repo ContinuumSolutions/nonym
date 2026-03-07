@@ -1,0 +1,69 @@
+#!/bin/bash
+
+# Create a simplified ValidateToken function that only validates JWT without sessions
+cat > /tmp/validate_token_fix.go << 'EOF'
+
+// ValidateToken validates a JWT token and returns the user (JWT-only, no session check)
+func ValidateToken(tokenString string) (*User, error) {
+	if db == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+
+	// Parse token
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return jwtSecret, nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("invalid token: %w", err)
+	}
+
+	if !token.Valid {
+		return nil, fmt.Errorf("token is not valid")
+	}
+
+	// Extract claims
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, fmt.Errorf("invalid token claims")
+	}
+
+	// Get user ID
+	userIDFloat, ok := claims["user_id"].(float64)
+	if !ok {
+		return nil, fmt.Errorf("invalid user ID in token")
+	}
+	userID := int(userIDFloat)
+
+	// Get user directly (skip session validation)
+	user, err := getUserByID(userID)
+	if err != nil {
+		return nil, fmt.Errorf("user not found: %w", err)
+	}
+
+	if !user.Active {
+		return nil, fmt.Errorf("user account is disabled")
+	}
+
+	return user, nil
+}
+
+EOF
+
+# Replace the ValidateToken function
+sed -i '/^\/\/ ValidateToken validates a JWT token/,/^}$/ {
+/^\/\/ ValidateToken validates a JWT token/r /tmp/validate_token_fix.go
+d
+}' /workspaces/EK-1/pkg/auth/auth.go
+
+# Also update LoginUser to not call createSession
+sed -i '/Create session/,/log.Printf.*User logged in/ {
+/sessionID, err := createSession/,/}/c\
+\t// Skip session creation for simplicity\
+\tsessionID := "jwt-only"
+}' /workspaces/EK-1/pkg/auth/auth.go
+
+echo "Applied JWT-only authentication patch"

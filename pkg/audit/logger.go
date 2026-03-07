@@ -360,3 +360,7 @@ func broadcastTransaction(transaction *Transaction) {
 			transaction.ID, transaction.Status, transaction.RedactionCount)
 	}
 }
+// GetDatabase returns the database connection for sharing with other packages
+func GetDatabase() *sql.DB {
+	return db
+}

@@ -15,6 +15,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/joho/godotenv"
 	"github.com/sovereignprivacy/gateway/pkg/audit"
+	"github.com/sovereignprivacy/gateway/pkg/auth"
 	"github.com/sovereignprivacy/gateway/pkg/interceptor"
 	"github.com/sovereignprivacy/gateway/pkg/ner"
 	"github.com/sovereignprivacy/gateway/pkg/router"
@@ -111,6 +112,11 @@ func initializeServices(config *Config) error {
 	}
 
 	// Initialize router with provider configs
+
+	// Initialize authentication system
+	if err := auth.Initialize(audit.GetDatabase()); err != nil {
+		return fmt.Errorf("failed to initialize auth system: %w", err)
+	}
 	if err := router.Initialize(config.Providers); err != nil {
 		return fmt.Errorf("failed to initialize router: %w", err)
 	}
@@ -146,9 +152,20 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 		})
 	})
 
-	// Main proxy endpoints
+	// Authentication routes (must come BEFORE /api/* proxy route)
+	authGroup := app.Group("/api/auth")
+	authGroup.Post("/login", auth.HandleLogin)
+	authGroup.Post("/register", auth.HandleRegister)
+	authGroup.Post("/logout", auth.HandleLogout)
+	authGroup.Get("/me", auth.AuthMiddleware, auth.HandleGetMe)
+
+	// Main proxy endpoints (for AI providers)
 	app.All("/v1/*", interceptor.HandleProxy)
-	app.All("/api/*", interceptor.HandleProxy)
+	// Exclude auth routes - only proxy specific API patterns
+	app.All("/api/chat/*", interceptor.HandleProxy)
+	app.All("/api/completions/*", interceptor.HandleProxy)
+	app.All("/api/models/*", interceptor.HandleProxy)
+	app.All("/api/embeddings/*", interceptor.HandleProxy)
 
 	// Privacy gateway specific routes
 	app.Get("/gateway/status", interceptor.HandleStatus)
