@@ -1,21 +1,68 @@
-Ego-Kernel Business Source License 1.1
+Sovereign Privacy Gateway Commercial License
 
-Parameters
-Licensor: Continuum Solutions Limited (Ego Kernel)
-Software: The Ego-Kernel (EK-1) Orchestrator (Golang), including all sub-modules and associated documentation.
-Change Date: February 26, 2026 + 3 Years (February 29, 2029).
-Change License: Apache License, Version 2.0.
+Copyright (c) 2026 Sovereign Privacy Gateway Contributors
 
-Additional Use Grant: You are authorized to use the Software for Personal, Non-Commercial use and for Research purposes without restriction. Use by any entity (or affiliated group) with more than $3,000,000 (USD) in annual revenue or total funding is prohibited without a separate commercial license from the Licensor.
+IMPORTANT: READ CAREFULLY BEFORE USING, DISTRIBUTING OR MODIFYING THIS SOFTWARE.
 
-1. License Terms
-The Licensor hereby grants you the right to copy, modify, create derivative works, redistribute, and make non-commercial use of the Software in accordance with the terms of this License.
+This software and its documentation are licensed, not sold. By using, distributing or modifying this software, you agree to the terms and conditions set forth below.
 
-2. Commercial Use
-Any use of the Software that does not fall within the Additional Use Grant (specifically commercial use by organizations exceeding the revenue/funding threshold) requires a commercial agreement. This ensures that the "Sovereignty Tax" is paid by those extracting massive enterprise value from the protocol.
+1. GRANT OF LICENSE
 
-3. Change to Open Source
-On the Change Date, or the fourth anniversary of the first public release of a version of the Software (whichever is earlier), this License will automatically convert to the Change License (Apache 2.0).
+Subject to the terms and conditions of this License, Licensor hereby grants you a limited, non-exclusive, non-transferable, revocable license to use, modify, and distribute the Software solely for the purposes and under the conditions specified herein.
 
-4. Notices
-You must include a copy of this License and all original copyright notices in any copy or derivative work of the Software you distribute.
+2. PERMITTED USES
+
+You may:
+- Use the Software for personal, academic, and research purposes
+- Use the Software for internal business purposes within a single organization
+- Modify the Software for your own use
+- Distribute modified versions under the same license terms
+
+3. COMMERCIAL RESTRICTIONS
+
+You may NOT without explicit written permission from the Licensor:
+- Use the Software to provide commercial services to third parties
+- Distribute the Software or derivative works for commercial purposes
+- Sublicense, sell, rent, or lease the Software
+- Use the Software in a production environment serving external customers
+- Remove or alter any proprietary notices, labels, or marks
+
+4. DISTRIBUTION CONDITIONS
+
+If you distribute the Software or derivative works, you must:
+- Include this complete license with all copies
+- Clearly mark any modifications you have made
+- Provide source code for any derivative works
+- Ensure recipients agree to these same license terms
+
+5. COMMERCIAL LICENSING
+
+For commercial use beyond the scope permitted above, including but not limited to:
+- SaaS offerings using this Software
+- Commercial redistribution
+- Integration into commercial products
+- Enterprise deployments serving external customers
+
+Please contact the Licensor for commercial licensing terms.
+
+6. INTELLECTUAL PROPERTY
+
+The Software contains proprietary and confidential information. All rights, title, and interest in and to the Software remain with the Licensor.
+
+7. DISCLAIMER OF WARRANTIES
+
+THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
+
+8. LIMITATION OF LIABILITY
+
+IN NO EVENT SHALL THE LICENSOR BE LIABLE FOR ANY DAMAGES ARISING FROM THE USE OF THIS SOFTWARE, INCLUDING BUT NOT LIMITED TO DIRECT, INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES.
+
+9. TERMINATION
+
+This License is effective until terminated. Your rights under this License will terminate automatically if you fail to comply with any of its terms. Upon termination, you must destroy all copies of the Software.
+
+10. GOVERNING LAW
+
+This License shall be governed by the laws of [Jurisdiction] without regard to conflict of law principles.
+
+For commercial licensing inquiries, contact: licensing@sovereignprivacy.com

@@ -1,8 +1,54 @@
-name: ek1
+version: '3.8'
+
+name: sovereign-privacy-gateway
 
 services:
+  # ── Sovereign Privacy Gateway ─────────────────────────────────────────────
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    ports:
+      - "8080:8080"   # Main privacy gateway endpoint
+      - "8081:8081"   # Dashboard interface
+    environment:
+      - PORT=8080
+      - DASHBOARD_PORT=8081
+      - DATABASE_PATH=/data/gateway.db
+      - LOG_LEVEL=info
+      - LOCAL_LLM_URL=http://ollama:11434
+    volumes:
+      - gateway-data:/data
+      - ./logs:/app/logs
+    depends_on:
+      - database
+      - ollama
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
 
-  # ── Ollama LLM ─────────────────────────────────────────────────────────────
+  # ── Database ───────────────────────────────────────────────────────────────
+  database:
+    image: alpine:latest
+    command: ["sh", "-c", "mkdir -p /data && touch /data/.keep && sleep infinity"]
+    volumes:
+      - gateway-data:/data
+    restart: unless-stopped
+
+  # ── Local LLM (Ollama) ─────────────────────────────────────────────────────
   ollama:
     image: ollama/ollama:latest
     ports:
@@ -10,70 +56,155 @@ services:
     volumes:
       - ollama-models:/root/.ollama
     environment:
-      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-30m}
+      - OLLAMA_KEEP_ALIVE=30m
+      - OLLAMA_NUM_PARALLEL=2
+      - OLLAMA_MAX_LOADED_MODELS=2
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "ollama list || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 12
-      start_period: 30s
-    restart: unless-stopped
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: '4.0'
+        reservations:
+          memory: 2G
+          cpus: '1.0'
 
-  # Pull the model once on first start, then exits.
-  # Change the command to match OLLAMA_MODEL in your .env if you switch models.
-  ollama-pull:
+  # Pull default model on startup
+  ollama-setup:
     image: ollama/ollama:latest
     volumes:
       - ollama-models:/root/.ollama
     environment:
-      OLLAMA_HOST: http://ollama:11434
-    command: pull ${OLLAMA_MODEL:-llama3.2:1b}
+      - OLLAMA_HOST=http://ollama:11434
+    command: >
+      sh -c "
+        echo 'Waiting for Ollama service...' &&
+        sleep 30 &&
+        ollama pull llama3.2:1b &&
+        echo 'Model downloaded successfully'
+      "
     depends_on:
       ollama:
         condition: service_healthy
     restart: "no"
 
-  # ── EK-1 Ego-Kernel ────────────────────────────────────────────────────────
-  ek1:
-    build: .
-    expose:
-      - "3000"
-    env_file:
-      - .env
-    environment:
-      OLLAMA_HOST: http://ollama:11434
-    volumes:
-      - ek1-data:/data
-    depends_on:
-      ollama:
-        condition: service_healthy
-      ollama-pull:
-        condition: service_completed_successfully
-    restart: unless-stopped
-
-  # ── EK-1 Dashboard (frontend) ───────────────────────────────────────────────
-  # dashboard:
-  #   image: egokernel/ek1-dashboard:latest
-  #   environment:
-  #     API_BASE_URL: ""
-  #   depends_on:
-  #     - ek1
-  #   restart: unless-stopped
-
-  # ── Reverse proxy ───────────────────────────────────────────────────────────
-  # Single external entry point. Serves the SPA and proxies API calls to ek1
-  # so the browser only ever talks to one origin over the same scheme.
+  # ── Reverse Proxy & Load Balancer ─────────────────────────────────────────
   nginx:
     image: nginx:alpine
     ports:
       - "80:80"
+      - "443:443"
     volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./logs/nginx:/var/log/nginx
     depends_on:
-      - ek1
-      # - dashboard
+      - gateway
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.2'
+
+  # ── Monitoring & Metrics ──────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    profiles: ["monitoring"]
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    profiles: ["monitoring"]
+
+  # ── Log Management ────────────────────────────────────────────────────────
+  loki:
+    image: grafana/loki:latest
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki-data:/loki
+      - ./monitoring/loki.yml:/etc/loki/local-config.yaml:ro
+    command: -config.file=/etc/loki/local-config.yaml
+    restart: unless-stopped
+    profiles: ["logging"]
+
+  promtail:
+    image: grafana/promtail:latest
+    volumes:
+      - ./logs:/var/log/gateway:ro
+      - ./monitoring/promtail.yml:/etc/promtail/config.yml:ro
+    command: -config.file=/etc/promtail/config.yml
+    restart: unless-stopped
+    depends_on:
+      - loki
+    profiles: ["logging"]
 
 volumes:
-  ollama-models:   # Ollama model weights — persisted across restarts
-  ek1-data:        # SQLite database (ek1.db) — persisted across restarts
+  gateway-data:
+    driver: local
+  ollama-models:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+  loki-data:
+    driver: local
+
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# Production deployment configuration
+x-production: &production-config
+  restart: unless-stopped
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+# Development overrides
+x-development: &development-config
+  restart: "no"
+  logging:
+    driver: "local"

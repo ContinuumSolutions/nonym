@@ -1,245 +1,376 @@
-# Ego-Kernel (EK-1)
+# Sovereign Privacy Gateway
 
-**A digital version of you that handles life's boring, draining parts - so you can focus on what actually matters.**
+A high-performance Privacy Air-Gap middleware written in Go that intercepts data between internal systems and external AI models. The gateway uses Named Entity Recognition (NER) to detect and anonymize Personally Identifiable Information (PII) in real-time, ensuring sensitive data never leaves your infrastructure.
 
-> **Read the Whitepaper:**
-> [Manifesto](https://github.com/EgoKernel/The-Protocol/blob/main/Manifesto.md) - the philosophy and declaration of cognitive independence
-> [Technical Whitepaper](https://github.com/EgoKernel/The-Protocol/blob/main/EK1-Whitepaper.md) - full architecture, all formulas, and protocol specifications
+## Overview
 
----
+The Sovereign Privacy Gateway acts as a transparent reverse proxy that:
+- **Detects PII** using advanced pattern matching and NER algorithms
+- **Anonymizes data** with tokenization before sending to AI providers
+- **De-anonymizes responses** to restore original context for users
+- **Routes intelligently** based on content sensitivity and provider capabilities
+- **Provides real-time monitoring** via a comprehensive dashboard
 
-## The Problem Nobody Talks About
-
-Think about your last week. How much of it did you actually *live*?
-
-How much was spent replying to emails that went nowhere? Sitting in meetings that should have been a text message? Worrying about a bill, a negotiation, a favour you forgot to follow up on? Dealing with someone who wasted two hours of your time with no intention of delivering anything?
-
-Research suggests we spend **roughly 80% of our cognitive energy on "life administration"** - the maintenance of just existing in a modern, connected world. Scheduling. Filtering. Deciding. Negotiating. Following up. Defending our time.
-
-We are powerful, creative people running an ancient operating system that was never built for this world. The result? Most of us spend our best mental energy on the least meaningful things.
-
-**Ego-Kernel is the fix.**
-
----
-
-## What Is the Ego-Kernel?
-
-Imagine if your most trusted, most capable version of yourself never slept, never got tired, never got emotionally rattled - and quietly handled the friction of your life in the background while you slept, created, connected, and lived.
-
-That is the Ego-Kernel.
-
-It is not a chatbot. It does not give suggestions you then have to act on. It is a **digital extension of your identity** - a private, encrypted piece of software that learns your values, priorities, and decision-making style, then acts on them. Automatically. Faithfully.
-
-It does not *remind* you. It *handles* it.
-
-> "The Ego-Kernel is your shadow. It works while you rest, negotiates while you create, and protects your time while you live."
-
----
-
-## A Day in Your Life - With EK-1
-
-Here is what a Tuesday looks like when your Kernel is running:
-
-**3:00 AM** - While you sleep, it spots a brief dip in energy prices and quietly moves your idle compute credits into a short-term position. You wake up $420 richer. You never knew there was a decision to make.
-
-**8:00 AM** - It checks your sleep data. Your cortisol is elevated. It cancels your 9am status call and sends a polished, professional note to the attendees asking them to submit updates in writing. Your morning is clear.
-
-**11:30 AM** - A legal firm tries to dig through your financial records over a 5-year-old paperwork error. Your Kernel detects the probe, feeds it false trails, and files a counter-complaint that raises the firm's insurance cost. You find out about this over lunch, as a footnote.
-
-**2:00 PM** - A close contact just lost their biggest client. Your Kernel sends a warm, genuine offer of help - and quietly logs that they now owe you a favour, redeemable at your discretion.
-
-**6:00 PM** - The fridge sensors say you are running low on food. Your Kernel negotiates with a local farm's system, gets a 15% discount because of your reputation score, and schedules a drone delivery to arrive as you walk in the door.
-
-**10:00 PM** - You have been in "execution mode" for four hours. Your Kernel locks your work apps, and plays a vinyl album it bought for you at 2pm - one you loved years ago and forgot about. It is reminding you that you are human.
-
-You did nothing. The code did everything. You lived.
-
----
-
-## The Core Idea - Explained Simply
-
-### Your Values, Written in Code
-
-Every person has values. Maybe you hate wasting time more than you hate losing money. Maybe you care deeply about your reputation. Maybe you want steady, safe financial growth rather than big risky swings.
-
-Right now, those values live only in your head - and they only get applied when *you* are awake, focused, and paying attention.
-
-The Ego-Kernel takes your values and **turns them into rules the software runs by**. Every decision it makes - every email it filters, every trade it considers, every negotiation it enters - is checked against your personal value system first. Not a generic AI's values. Yours.
-
-### Your Reputation, Made Unbreakable
-
-In today's world, your reputation is fragile. Someone can lie about you, ghost you, waste your time, or make a promise and vanish - and there is little you can do.
-
-The Ego-Kernel includes a **Reputation Ledger**: a public, tamper-proof record on the blockchain that tracks every interaction. When someone delivers on a promise, it is recorded. When someone betrays one, that is recorded too - permanently, mathematically, without the possibility of spin or denial.
-
-Over time, your reputation becomes a verifiable asset. A high score means others' systems trust you instantly - better contract terms, faster approvals, zero friction. A low score means the opposite: other Kernels refuse to deal with you at all.
-
-Honesty stops being a virtue and starts being the only economically rational choice.
-
-### Your Privacy, Guaranteed
-
-Everything the Kernel knows about you - your values, your finances, your preferences - stays encrypted on your own hardware. The outside world sees only the results (a contract signed, a trade settled, a meeting declined) but never the reasoning behind them.
-
-This is called **Zero-Knowledge privacy**: the Kernel can *prove* it acted correctly without revealing *how* it decided. You become, to the outside world, a black box of competence.
-
----
-
-## Who Is This For?
-
-**You do not need to be technical to benefit from this.**
-
-| If you are... | The Ego-Kernel... |
-|--------------|-------------------|
-| A freelancer or consultant | Automatically declines low-value clients and negotiates better rates |
-| An entrepreneur | Tracks who owes you favours and converts social debt into real leverage |
-| A professional overwhelmed by email | Filters 99% of noise and only escalates genuine opportunities |
-| An investor | Evaluates trades against your personal risk tolerance 24/7 |
-| Anyone who values their time | Guards your calendar like a fortress |
-| A parent or caregiver | Handles the logistics so you can be present for the things that matter |
-
----
-
-## What Makes This Different from Every Other AI Tool
-
-Every AI tool you have ever used makes *you* do the work. It gives you a draft. You edit it. It suggests a reply. You send it. It finds a flight. You book it.
-
-You are still the bottleneck.
-
-**The Ego-Kernel removes you from the loop - for the decisions that do not need you.**
-
-The line it draws is simple: if a decision is logical and your values are clear, the Kernel executes it. If a situation is genuinely novel, emotionally complex, or crosses a threshold you set, it pauses and asks you. You spend your cognitive energy only on the things that truly deserve it.
-
----
-
-## The Community It Creates
-
-When many people run Ego-Kernels, something remarkable happens to society.
-
-### A World Where Your Word Is Your Bond
-
-Because every Kernel interaction is logged and signed, promises become real. When two Kernels agree to something, both parties know it is recorded. Breaking that agreement has a measurable, lasting cost. This creates a culture where **integrity is not just moral - it is practical**.
-
-### Time-Wasters Lose Their Power
-
-Every meeting that wastes your time, every email chain that leads nowhere, every manipulative pitch - these cost the sender reputation points automatically. Over time, the people who respect others' time rise in the network. Those who do not find themselves increasingly locked out. **The economy naturally rewards substance over noise.**
-
-### Reciprocity Becomes Visible
-
-Friendships and professional relationships often fail because of invisible imbalances - one person always giving, the other always taking, neither aware of the drift. The Kernel tracks this quietly and creates gentle nudges toward balance. It does not weaponise relationships. It **makes reciprocity visible**, so the relationship can be honest.
-
-### Trust Becomes Infrastructure
-
-Today, trust is slow to build and fast to lose. In the Ego-Kernel network, trust is computed, verifiable, and portable. Walk into a new market, a new city, a new opportunity - and your reputation precedes you, mathematically. No references needed. No lengthy vetting. **Trust travels with you.**
-
----
-
-## The Three Stages of EK-1
-
-We are building this in three stages, from simple to transformative:
-
-### Stage 1 - The Shadow
-*"What would your best self have decided today?"*
-
-Your Kernel watches your life - your emails, calendar, finances - and shows you a log of every decision it *would* have made, compared to what you actually did. No action is taken yet. You just see the mirror. This alone is eye-opening.
-
-### Stage 2 - The Hand
-*"Handle the small stuff automatically."*
-
-The Kernel gets a small wallet and permission to settle minor disputes on your behalf. A delivery was late? Refunded automatically. A subscription renewed at a higher price? Cancelled and renegotiated without you lifting a finger. Small wins, but they prove the system works.
-
-### Stage 3 - The Voice
-*"Two digital selves negotiate faster than two humans can shake hands."*
-
-Your Kernel meets other Kernels. They negotiate in milliseconds over shared resources, opportunities, contracts. Conflicts that would take humans weeks of awkward back-and-forth resolve in under a second, with both parties' values respected and the outcome recorded permanently.
-
----
-
-## The Technology (Plain English)
-
-| What it does | How it does it |
-|--------------|----------------|
-| Stores your identity and reputation | On the Solana blockchain - public, permanent, tamper-proof |
-| Makes decisions based on your values | A Go program running in a private, encrypted environment |
-| Negotiates with other Kernels | A protocol called the "Titan Handshake" - structured, fast, fair |
-| Keeps your data private | Zero-Knowledge cryptography - proves actions without revealing reasons |
-| Prevents the system from drifting away from "you" | Every 1,000 decisions, it makes a deliberate "irrational human choice" to recalibrate |
-
-You do not need to understand any of this to use it. But it is all open, auditable, and yours.
-
----
-
-## Open-Core: Built in Public, Owned by You
-
-The rules of the network - how Kernels talk to each other, how reputation is calculated, how privacy is enforced - are **open source**. Anyone can read them, audit them, and build on them.
-
-The intelligence layer - the specific logic that makes *your* Kernel act like *you* - is private and encrypted. It belongs to you.
-
-This is not a platform you rent from a corporation. It is infrastructure you own.
-
----
-
-## Project Structure
+## Architecture
 
 ```
-egokernel/
-├── cmd/ek1/              - Entry point: run your Kernel
-├── src/
-│   ├── brain/            - Decision engine (values, triage, soul-drift guard)
-│   ├── protocols/        - Titan Handshake (P2P negotiation)
-│   └── ledger/           - Reputation scoring
-├── programs/ek-logic/    - On-chain Rust program (Solana)
-├── scripts/harvest/      - Social leverage scanner
-├── whitepaper/           - Manifesto + full technical whitepaper
-└── docs/                 - Deployment guides
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   Client App    │───▶│  Privacy Gateway │───▶│  AI Provider    │
+│                 │    │                  │    │ (OpenAI/etc.)   │
+│ Original Data   │    │  PII Detection   │    │ Anonymized Data │
+└─────────────────┘    │  & Tokenization  │    └─────────────────┘
+                       │                  │
+                       │  ┌─────────────┐ │
+                       │  │  Dashboard  │ │
+                       │  │ (Real-time  │ │
+                       │  │ Monitoring) │ │
+                       └──┴─────────────┴─┘
 ```
 
----
+## Features
 
-## Get Started
+### 🔒 **Privacy Protection**
+- **Real-time PII Detection**: Email addresses, SSNs, credit cards, API keys, phone numbers
+- **Smart Anonymization**: Context-preserving tokenization with secure de-anonymization
+- **Strict Mode**: Block requests with high-sensitivity data entirely
+- **Confidence Scoring**: AI-powered detection accuracy metrics
 
-**No blockchain account needed for Stage 1. Just Go 1.22+.**
+### 🚀 **High Performance**
+- **Zero-allocation networking** for minimal latency (<20ms processing time)
+- **Concurrent processing** with configurable goroutine pools
+- **Streaming support** for real-time AI responses
+- **Connection pooling** for upstream providers
+
+### 🎯 **Intelligent Routing**
+- **Content-based routing**: Financial data → Local LLM, General queries → Cloud AI
+- **Provider health checking** with automatic failover
+- **Load balancing** across multiple AI endpoints
+- **Custom routing rules** based on sensitivity levels
+
+### 📊 **Monitoring & Audit**
+- **Real-time dashboard** with transaction monitoring
+- **Comprehensive logging** of all anonymization events
+- **Statistics and analytics** for privacy compliance
+- **WebSocket updates** for live monitoring
+
+## Quick Start
+
+### Prerequisites
+- Go 1.24+
+- Docker & Docker Compose
+- 8GB+ RAM (for local LLM support)
+
+### 1. Clone and Build
 
 ```bash
-# Clone
-git clone https://github.com/egokernel/ek1.git
-cd ek1
-
-# Run the Shadow demo - see what your Kernel would have decided today
-go run ./cmd/ek1/
-
-# Scan your network for hidden value and outstanding social debts
-go run ./scripts/harvest/scan.go
-
-# Run tests
-go test ./src/brain/... ./src/ledger/... -v
+git clone https://github.com/sovereignprivacy/gateway
+cd gateway
+go mod tidy
 ```
 
-Full deployment guides are in the [`docs/`](./docs/README.md) folder.
+### 2. Configure Environment
+
+```bash
+cp .env.example .env
+# Edit .env with your API keys and configuration
+```
+
+### 3. Start with Docker Compose
+
+```bash
+# Start all services (Gateway + Dashboard + Ollama)
+docker compose up -d
+
+# Or just the gateway for development
+docker compose up gateway
+```
+
+### 4. Test the Gateway
+
+```bash
+# Health check
+curl http://localhost:8080/health
+
+# Test PII detection with OpenAI
+curl -X POST http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-openai-key" \
+  -d '{
+    "model": "gpt-4",
+    "messages": [
+      {
+        "role": "user",
+        "content": "My email is john@example.com and my SSN is 123-45-6789"
+      }
+    ]
+  }'
+```
+
+The gateway will:
+1. Detect the email and SSN
+2. Replace them with tokens like `{{EMAIL_A1B2C3}}` and `{{SSN_D4E5F6}}`
+3. Send the anonymized request to OpenAI
+4. Restore the original data in the response
+
+### 5. Access the Dashboard
+
+Visit http://localhost:8081 to access the real-time monitoring dashboard.
+
+## API Usage
+
+### Standard AI Provider Integration
+
+Instead of calling AI providers directly, point your applications to the gateway:
+
+```python
+import openai
+
+# Before: Direct to OpenAI
+# openai.api_base = "https://api.openai.com/v1"
+
+# After: Through Privacy Gateway
+openai.api_base = "http://localhost:8080/v1"
+
+# Use OpenAI SDK normally - PII protection is automatic
+response = openai.ChatCompletion.create(
+    model="gpt-4",
+    messages=[{"role": "user", "content": "Analyze this customer data..."}]
+)
+```
+
+### Provider Routing
+
+The gateway automatically routes based on content sensitivity:
+
+```json
+{
+  "model": "gpt-4",
+  "provider": "local",  // Force routing to local LLM
+  "messages": [
+    {
+      "role": "user",
+      "content": "Sensitive financial data..."
+    }
+  ]
+}
+```
+
+## Configuration
+
+### Environment Variables
+
+```bash
+# Gateway Configuration
+PORT=8080
+DASHBOARD_PORT=8081
+DATABASE_PATH=/data/gateway.db
+LOG_LEVEL=info
+
+# Provider URLs
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+GOOGLE_API_KEY=...
+LOCAL_LLM_URL=http://localhost:11434
+
+# Privacy Settings
+STRICT_MODE=false
+RETENTION_DAYS=30
+```
+
+### Routing Rules
+
+Configure custom routing in `config/routing.yaml`:
+
+```yaml
+rules:
+  - pattern: "/v1/chat/completions"
+    provider: "local"
+    conditions: ["contains:financial", "contains:medical"]
+    security_level: "high"
+
+  - pattern: "/v1/embeddings"
+    provider: "google"
+    security_level: "standard"
+```
+
+## Deployment
+
+### Production Docker Compose
+
+```bash
+# Use production configuration
+docker compose -f docker-compose.yml up -d
+
+# With monitoring stack
+docker compose --profile monitoring up -d
+
+# With log aggregation
+docker compose --profile logging up -d
+```
+
+### Kubernetes Deployment
+
+```bash
+# Apply Kubernetes manifests
+kubectl apply -f k8s/
+
+# Or use Helm
+helm install privacy-gateway ./charts/privacy-gateway
+```
+
+### Environment-Specific Configurations
+
+- **Development**: Single instance with debug logging
+- **Staging**: Multi-instance with metrics collection
+- **Production**: High availability with SSL termination
+
+## Security & Compliance
+
+### Data Protection
+- **No data persistence** of original PII (only anonymized tokens)
+- **Encryption at rest** for audit logs and configuration
+- **TLS termination** at nginx layer
+- **Network isolation** with Docker networks
+
+### Compliance Features
+- **Audit trail** of all anonymization events
+- **Data retention policies** with automatic cleanup
+- **Privacy impact assessments** via dashboard analytics
+- **GDPR/CCPA compliance** through data minimization
+
+### Security Headers
+- Content Security Policy (CSP)
+- HTTP Strict Transport Security (HSTS)
+- X-Frame-Options, X-Content-Type-Options
+- Rate limiting and DDoS protection
+
+## Monitoring & Observability
+
+### Built-in Dashboard
+- Real-time transaction monitoring
+- PII detection statistics
+- Provider health and performance
+- Privacy compliance metrics
+
+### Metrics & Alerting
+- Prometheus metrics export
+- Grafana dashboards
+- Custom alert rules for privacy violations
+- Log aggregation with Loki
+
+### Health Checks
+- `/health` - Overall system health
+- `/gateway/status` - Detailed component status
+- `/gateway/stats` - Performance statistics
+
+## Testing
+
+### Unit Tests
+```bash
+# Run all tests
+go test ./...
+
+# Test specific components
+go test ./pkg/ner -v
+go test ./pkg/interceptor -v
+```
+
+### Integration Tests
+```bash
+# End-to-end testing
+go test ./cmd/gateway -v
+
+# Load testing
+go test -bench=. ./pkg/...
+```
+
+### Performance Benchmarks
+```bash
+# Benchmark PII detection
+go test -bench=BenchmarkNER ./pkg/ner
+
+# Benchmark proxy performance
+go test -bench=BenchmarkProxy ./pkg/interceptor
+```
+
+## Development
+
+### Project Structure
+```
+├── cmd/gateway/          # Main application entry point
+├── pkg/
+│   ├── interceptor/      # HTTP proxy and request handling
+│   ├── ner/             # Named Entity Recognition engine
+│   ├── router/          # Provider selection and routing
+│   └── audit/           # Logging and dashboard API
+├── dashboard/           # Web dashboard interface
+├── api/                 # Protocol buffer definitions
+├── nginx/               # Nginx configuration
+└── docs/               # Documentation
+```
+
+### Building from Source
+```bash
+# Build the gateway binary
+go build -o gateway ./cmd/gateway
+
+# Build with optimizations
+CGO_ENABLED=1 go build -ldflags="-w -s" -o gateway ./cmd/gateway
+
+# Cross-compile for different platforms
+GOOS=linux GOARCH=amd64 go build -o gateway-linux ./cmd/gateway
+```
+
+### Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make changes and add tests
+4. Commit your changes (`git commit -m 'Add amazing feature'`)
+5. Push to the branch (`git push origin feature/amazing-feature`)
+6. Open a Pull Request
+
+### Code Style
+- Follow Go naming conventions
+- Use `gofmt` and `golint`
+- Write tests for new features
+- Update documentation
+
+## License
+
+This project is licensed under the **Sovereign Privacy Gateway Commercial License**.
+
+- ✅ **Free for personal, academic, and research use**
+- ✅ **Free for internal business use within a single organization**
+- ❌ **Commercial redistribution requires licensing**
+- ❌ **SaaS offerings require commercial license**
+
+For commercial licensing, contact: licensing@sovereignprivacy.com
+
+## Support & Community
+
+- **Documentation**: https://docs.sovereignprivacy.com
+- **Issues**: GitHub Issues for bug reports and feature requests
+- **Discussions**: GitHub Discussions for questions and community
+- **Security**: security@sovereignprivacy.com for security issues
+
+## Roadmap
+
+### v1.1 - Enhanced NER
+- [ ] Advanced ML models for entity detection
+- [ ] Custom entity type definitions
+- [ ] Multi-language PII detection
+
+### v1.2 - Enterprise Features
+- [ ] SSO/SAML integration
+- [ ] Advanced access controls
+- [ ] Multi-tenant support
+
+### v1.3 - AI Enhancements
+- [ ] LLM-powered content classification
+- [ ] Intent-based routing
+- [ ] Automated policy learning
 
 ---
 
-## Our Values as a Project
-
-We build this with a clear set of beliefs:
-
-- **Time is the only non-renewable resource.** Everything we build defends it.
-- **Your data belongs to you.** Not to us. Not to advertisers. Not to governments.
-- **Integrity should be the default, not the exception.** We build systems where honesty is the rational choice.
-- **Automation should expand freedom, not replace meaning.** The Kernel handles maintenance. You handle living.
-- **Open protocols, sovereign individuals.** The rules are public. The choices are yours.
-
----
-
-## Contributing
-
-This project is in active development. If you believe that people deserve to spend their finite time on what actually matters - and that technology should serve that goal rather than exploit it - you are in the right place.
-
-Read the [Manifesto](https://github.com/EgoKernel/The-Protocol/blob/main/Manifesto.md) first. Then the [Technical Whitepaper](https://github.com/EgoKernel/The-Protocol/blob/main/EK1-Whitepaper.md). Then open an issue, read the code, or start a discussion. The first 1,000 Kernels are initializing.
-
----
-
-*"You stop being a worker. You become a Sovereign Architect. You spend your life on high-level creativity and human connection, while your code-self handles the maintenance of being."*
-
-## Sovereign Integrity
-
-#### We believe in Open Source, but we also believe in sustainable development. The BUSL 1.1 allows us to prevent the 'Big Tech Vampirism' of 2024-2025, ensuring that the value generated by the Ego-Kernel stays with the Architects and the Users.
+**Protecting your data sovereignty, one request at a time.**
