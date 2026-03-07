@@ -1,0 +1,8 @@
+# Python dependencies for LangChain-powered data analysis
+langchain>=0.1.0
+langchain-community>=0.0.10
+ollama>=0.1.0
+
+# Core dependencies
+sqlite3  # Usually included with Python
+json     # Built-in module
