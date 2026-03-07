@@ -1,4 +1,4 @@
-name: sovereign-privacy-gateway
+name: ek1
 
 # Complete Privacy Protection Stack
 services:
@@ -90,6 +90,8 @@ services:
       context: ./dashboard
       dockerfile: Dockerfile
     restart: unless-stopped
+    ports:
+      - "8081:8081"
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost/health || exit 1"]
       interval: 30s
