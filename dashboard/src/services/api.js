@@ -38,12 +38,12 @@ export const apiService = {
   },
 
   async signup(userData) {
-    const response = await api.post('/auth/signup', userData)
+    const response = await api.post('/auth/register', userData)
     return response.data
   },
 
   async checkAuth() {
-    const response = await api.get('/auth/check')
+    const response = await api.get('/auth/me')
     return response.data
   },
 
