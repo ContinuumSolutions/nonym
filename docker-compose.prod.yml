@@ -242,7 +242,7 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.20.0.0/16
+        - subnet: 192.168.80.0/24
     driver_opts:
       com.docker.network.bridge.name: spg-gateway
 
@@ -250,7 +250,7 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.21.0.0/16
+        - subnet: 192.168.81.0/24
     driver_opts:
       com.docker.network.bridge.name: spg-monitoring
 
