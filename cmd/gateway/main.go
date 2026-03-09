@@ -227,7 +227,7 @@ func startDashboardServer(config *Config, errChan chan<- error) {
 
 	// Public API routes (no auth required)
 	api := app.Group("/api/v1")
-	
+
 	// Authentication routes
 	api.Post("/auth/login", auth.HandleLogin)
 	api.Post("/auth/register", auth.HandleRegister)
@@ -235,51 +235,60 @@ func startDashboardServer(config *Config, errChan chan<- error) {
 
 	// Protected API routes (require authentication)
 	protected := api.Use(auth.AuthMiddleware)
-	
-	// Dashboard data
-	protected.Get("/statistics", audit.HandleGetStatistics)
-	protected.Get("/transactions", audit.HandleGetTransactions)
-	protected.Get("/protection-events", audit.HandleGetTransactions)
-	protected.Get("/protection-stats", auth.HandleProtectionStats)
-	
+
+	// Dashboard data endpoints - FIXED TO MATCH FRONTEND
+	protected.Get("/statistics", audit.HandleGetStatisticsV1)
+	protected.Get("/transactions", audit.HandleGetTransactionsV1)
+	protected.Get("/protection-events", audit.HandleGetProtectionEvents)
+	protected.Get("/protection-stats", audit.HandleGetProtectionStats)
+
 	// Events API
 	protected.Get("/events", audit.HandleGetEvents)
 	protected.Get("/events/:id", audit.HandleGetEvent)
 	protected.Patch("/events/:id/status", audit.HandleUpdateEventStatus)
 	protected.Post("/events/webhook", audit.HandleCreateWebhook)
 	protected.Get("/events/webhooks", audit.HandleGetWebhooks)
-	
+
 	// Settings
 	protected.Get("/settings", audit.HandleGetSettings)
 	protected.Put("/settings", audit.HandleUpdateSettings)
-	
+
 	// API Keys management
 	protected.Get("/api-keys", auth.HandleGetAPIKeys)
 	protected.Post("/api-keys", auth.HandleCreateAPIKey)
 	protected.Patch("/api-keys/:id/revoke", auth.HandleRevokeAPIKey)
 	protected.Delete("/api-keys/:id", auth.HandleDeleteAPIKey)
-	
+
 	// Provider configuration
 	protected.Get("/provider-config", auth.HandleGetProviderConfig)
 	protected.Put("/provider-config", auth.HandleSaveProviderConfig)
 	protected.Post("/providers/:provider/test", auth.HandleTestProviderConnection)
-	
+
 	// Organization management
-	protected.Get("/organization", auth.HandleGetOrganization)
-	protected.Put("/organization", auth.HandleUpdateOrganization)
-	
+	protected.Get("/organization", auth.HandleGetOrganizationV1)
+	protected.Put("/organization", auth.HandleUpdateOrganizationV1)
+
 	// Team management
-	protected.Get("/team/members", auth.HandleGetTeamMembers)
-	protected.Post("/team/members", auth.HandleInviteTeamMember)
-	protected.Delete("/team/members/:id", auth.HandleRemoveTeamMember)
-	
+	protected.Get("/team/members", auth.HandleGetTeamMembersV1)
+	protected.Post("/team/members", auth.HandleInviteTeamMemberV1)
+	protected.Delete("/team/members/:id", auth.HandleRemoveTeamMemberV1)
+
 	// Security settings
-	protected.Put("/security/2fa", auth.HandleUpdateTwoFactor)
-	protected.Delete("/security/sessions/:id", auth.HandleTerminateSession)
-	protected.Put("/security/settings", auth.HandleUpdateSecuritySettings)
-	
+	protected.Put("/security/2fa", auth.HandleUpdateTwoFactorV1)
+	protected.Delete("/security/sessions/:id", auth.HandleTerminateSessionV1)
+	protected.Put("/security/settings", auth.HandleUpdateSecuritySettingsV1)
+
 	// User profile
 	protected.Get("/auth/me", auth.HandleGetMe)
+
+	// Health check
+	protected.Get("/health", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{
+			"status":    "healthy",
+			"timestamp": time.Now().Unix(),
+			"version":   "1.0.0",
+		})
+	})
 
 	// WebSocket for real-time updates
 	app.Get("/ws", audit.HandleWebSocket)
