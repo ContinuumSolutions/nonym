@@ -86,8 +86,8 @@ func HandleGetProtectionEvents(c *fiber.Ctx) error {
 	// Get user ID from context if available
 	userID := getUserIDFromContextAudit(c)
 
-	// Generate sample data or fetch from database
-	events, total := generateProtectionEvents(limit, offset, eventType, status, provider, timeRange, userID)
+	// Fetch events from database (or return empty if not implemented)
+	events, total := fetchProtectionEvents(limit, offset, eventType, status, provider, timeRange, userID)
 
 	response := &ProtectionEventsResponse{
 		Events:  events,
@@ -154,183 +154,34 @@ func HandleGetTransactionsV1(c *fiber.Ctx) error {
 	})
 }
 
-// generateProtectionEvents generates sample protection events
-func generateProtectionEvents(limit, offset int, eventType, status, provider, timeRange, userID string) ([]ProtectionEvent, int64) {
-	// Sample events data
-	sampleEvents := []ProtectionEvent{
-		{
-			ID:        "evt_001",
-			Timestamp: time.Now().Add(-5 * time.Minute),
-			Type:      "Email",
-			Action:    "Anonymized",
-			Provider:  "OpenAI",
-			Model:     "gpt-3.5-turbo",
-			Status:    "Protected",
-			Protection: "Token replaced",
-			RedactionCount: 1,
-			RedactionDetails: []RedactionDetail{
-				{
-					Type:          "email",
-					OriginalValue: "user@example.com",
-					Token:         "TOKEN_EMAIL_001",
-					Position:      45,
-				},
-			},
-			ProcessingTime: 12.5,
-			Severity:      "medium",
-			ClientIP:      "192.168.1.100",
-			UserAgent:     "Mozilla/5.0",
-			Metadata: map[string]interface{}{
-				"request_size": 256,
-				"model_used":   "gpt-3.5-turbo",
-			},
-		},
-		{
-			ID:         "evt_002",
-			Timestamp:  time.Now().Add(-8 * time.Minute),
-			Type:       "SSN",
-			Action:     "Blocked",
-			Provider:   "Anthropic",
-			Model:      "claude-3-sonnet",
-			Status:     "Blocked",
-			Protection: "Request blocked",
-			RedactionCount: 0,
-			ProcessingTime: 8.2,
-			Severity:      "critical",
-			ClientIP:      "192.168.1.101",
-			UserAgent:     "Python/3.9 requests",
-			Metadata: map[string]interface{}{
-				"block_reason": "strict_mode_enabled",
-				"pii_type":     "ssn",
-			},
-		},
-		{
-			ID:        "evt_003",
-			Timestamp: time.Now().Add(-12 * time.Minute),
-			Type:      "Credit Card",
-			Action:    "Detected",
-			Provider:  "Google",
-			Model:     "gemini-pro",
-			Status:    "Protected",
-			Protection: "Data masked",
-			RedactionCount: 1,
-			RedactionDetails: []RedactionDetail{
-				{
-					Type:          "credit_card",
-					OriginalValue: "**** **** **** 1234",
-					Token:         "TOKEN_CC_001",
-					Position:      78,
-				},
-			},
-			ProcessingTime: 15.8,
-			Severity:      "high",
-			ClientIP:      "192.168.1.102",
-			UserAgent:     "Node.js/18.0",
-		},
-		{
-			ID:        "evt_004",
-			Timestamp: time.Now().Add(-15 * time.Minute),
-			Type:      "Phone",
-			Action:    "Anonymized",
-			Provider:  "OpenAI",
-			Model:     "gpt-4",
-			Status:    "Protected",
-			Protection: "Token replaced",
-			RedactionCount: 1,
-			RedactionDetails: []RedactionDetail{
-				{
-					Type:          "phone",
-					OriginalValue: "+1-555-***-****",
-					Token:         "TOKEN_PHONE_001",
-					Position:      23,
-				},
-			},
-			ProcessingTime: 18.3,
-			Severity:      "medium",
-			ClientIP:      "192.168.1.103",
-			UserAgent:     "curl/7.68.0",
-		},
-		{
-			ID:         "evt_005",
-			Timestamp:  time.Now().Add(-20 * time.Minute),
-			Type:       "API Key",
-			Action:     "Anonymized",
-			Provider:   "Local",
-			Model:      "llama2",
-			Status:     "Protected",
-			Protection: "Token replaced",
-			RedactionCount: 1,
-			RedactionDetails: []RedactionDetail{
-				{
-					Type:          "api_key",
-					OriginalValue: "sk-***",
-					Token:         "TOKEN_API_001",
-					Position:      156,
-				},
-			},
-			ProcessingTime: 9.1,
-			Severity:      "high",
-			ClientIP:      "192.168.1.104",
-			UserAgent:     "PostmanRuntime/7.32.0",
-		},
-	}
+// fetchProtectionEvents fetches protection events from database
+func fetchProtectionEvents(limit, offset int, eventType, status, provider, timeRange, userID string) ([]ProtectionEvent, int64) {
+	// TODO: Implement database query to fetch actual protection events
+	// For now, return empty data until real event logging is implemented
 
-	// Apply filters
-	var filtered []ProtectionEvent
-	for _, event := range sampleEvents {
-		if eventType != "" && event.Type != eventType {
-			continue
-		}
-		if status != "" && event.Status != status {
-			continue
-		}
-		if provider != "" && event.Provider != provider {
-			continue
-		}
+	var events []ProtectionEvent
+	var total int64 = 0
 
-		// Apply time range filter
-		switch timeRange {
-		case "1h":
-			if time.Since(event.Timestamp) > time.Hour {
-				continue
-			}
-		case "24h":
-			if time.Since(event.Timestamp) > 24*time.Hour {
-				continue
-			}
-		case "7d":
-			if time.Since(event.Timestamp) > 7*24*time.Hour {
-				continue
-			}
-		}
+	// Apply filters would go here when implemented
+	_ = eventType
+	_ = status
+	_ = provider
+	_ = timeRange
+	_ = userID
 
-		filtered = append(filtered, event)
-	}
-
-	// Apply pagination
-	start := offset
-	end := offset + limit
-	if start > len(filtered) {
-		start = len(filtered)
-	}
-	if end > len(filtered) {
-		end = len(filtered)
-	}
-
-	result := filtered[start:end]
-	total := int64(len(filtered))
-
-	return result, total
+	return events, total
 }
 
 // calculateProtectionStats calculates protection statistics
 func calculateProtectionStats() *ProtectionStatsResponse {
+	// TODO: Implement actual statistics calculation from database
+	// For now, return zero values until real event logging is implemented
 	return &ProtectionStatsResponse{
-		ProtectedToday: 127,
-		BlockedToday:   23,
-		DetectionRate:  94.2,
-		HighRisk:       5,
-		TotalEvents:    892,
+		ProtectedToday: 0,
+		BlockedToday:   0,
+		DetectionRate:  0.0,
+		HighRisk:       0,
+		TotalEvents:    0,
 		LastUpdate:     time.Now(),
 	}
 }

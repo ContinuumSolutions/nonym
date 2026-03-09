@@ -95,6 +95,21 @@ func GetProviderStatus() map[string]interface{} {
 }
 
 func (r *Router) loadProviders(configs map[string]ProviderConfig) error {
+	// SPG Configuration
+	if config, exists := configs["spg"]; exists && config.Enabled {
+		r.providers["spg"] = &Provider{
+			Name:        "spg",
+			BaseURL:     config.BaseURL,
+			Enabled:     true,
+			HealthCheck: "/gateway/status",
+			Priority:    0, // Highest priority for SPG
+			Headers: map[string]string{
+				"Content-Type": "application/json",
+			},
+			Healthy: true,
+		}
+	}
+
 	// OpenAI Configuration
 	if config, exists := configs["openai"]; exists && config.Enabled {
 		r.providers["openai"] = &Provider{
@@ -160,6 +175,14 @@ func (r *Router) loadProviders(configs map[string]ProviderConfig) error {
 
 func (r *Router) setupDefaultRules() {
 	r.rules = []RoutingRule{
+		// SPG Instance: Route all requests through SPG if available
+		{
+			PathPattern:   "/v1/",
+			Provider:      "spg",
+			Conditions:    []string{},
+			Priority:      0,
+			SecurityLevel: "highest",
+		},
 		// High security: Financial data goes to local LLM
 		{
 			PathPattern:   "/v1/chat/completions",

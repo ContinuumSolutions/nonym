@@ -231,6 +231,22 @@ docker compose -f docker-compose.prod.yml --profile monitoring --profile logging
 
 ## API Provider Setup
 
+### Security & Encryption Notice
+
+**🔒 API Key Security**: All API keys configured through the dashboard are encrypted using AES-256-GCM encryption before storage. Keys are automatically decrypted when routing requests to AI providers, ensuring your credentials remain secure at rest while maintaining seamless operation.
+
+### Integration Configuration
+
+The Privacy Gateway supports integration with external SPG instances. Configure your SPG instance connection through the dashboard:
+
+1. Navigate to **Integrations** → **AI Engines** tab
+2. Configure your **SPG Instance** with:
+   - **SPG API Key**: Your unique SPG instance API key (e.g., `spg_...`)
+   - **SPG Endpoint URL**: Your SPG instance URL (e.g., `https://your-spg-instance.com`)
+3. Test the connection to verify authentication
+
+All provider API keys (OpenAI, Anthropic, Google, SPG) are encrypted with user-specific encryption keys and stored securely in the database.
+
 ### OpenAI Setup
 
 1. Go to [OpenAI API Keys](https://platform.openai.com/api-keys)

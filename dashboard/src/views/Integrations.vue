@@ -150,8 +150,73 @@
 
       <!-- AI Engines Tab -->
       <div v-if="activeTab === 'ai-engines'" class="space-y-6">
+        <!-- Security Notice -->
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div class="flex">
+            <div class="flex-shrink-0">
+              <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+              </svg>
+            </div>
+            <div class="ml-3">
+              <h3 class="text-sm font-medium text-blue-800">Secure API Key Storage</h3>
+              <p class="mt-1 text-sm text-blue-700">
+                All API keys are encrypted using AES-256-GCM encryption before storage and automatically decrypted when routing requests to ensure your credentials remain secure.
+              </p>
+            </div>
+          </div>
+        </div>
+
         <!-- AI Providers -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <!-- Sovereign Privacy Gateway -->
+          <div class="bg-white rounded-lg shadow-sm p-6 border-2 border-blue-100">
+            <div class="flex items-center mb-4">
+              <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded mr-3 flex items-center justify-center">
+                <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                </svg>
+              </div>
+              <h3 class="text-lg font-medium text-gray-900">SPG Instance</h3>
+              <div class="ml-auto">
+                <span :class="[
+                  'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium',
+                  providers.spg.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                ]">
+                  {{ providers.spg.enabled ? 'Connected' : 'Disconnected' }}
+                </span>
+              </div>
+            </div>
+            <div class="space-y-3">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">SPG API Key</label>
+                <input
+                  v-model="providers.spg.apiKey"
+                  :type="showKeys.spg ? 'text' : 'password'"
+                  placeholder="spg_..."
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                <button
+                  @click="showKeys.spg = !showKeys.spg"
+                  class="mt-1 text-xs text-gray-500 hover:text-gray-700">
+                  {{ showKeys.spg ? 'Hide' : 'Show' }} Key
+                </button>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">SPG Endpoint URL</label>
+                <input
+                  v-model="providers.spg.endpoint"
+                  type="text"
+                  placeholder="https://your-spg-instance.com"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+              </div>
+              <button
+                @click="testConnection('spg')"
+                class="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors duration-200">
+                Test Connection
+              </button>
+            </div>
+          </div>
+
           <!-- OpenAI -->
           <div class="bg-white rounded-lg shadow-sm p-6">
             <div class="flex items-center mb-4">
@@ -388,6 +453,12 @@ export default {
 
     // AI Providers
     const providers = ref({
+      spg: {
+        enabled: false,
+        apiKey: '',
+        endpoint: '',
+        models: []
+      },
       openai: {
         enabled: false,
         apiKey: '',
@@ -426,6 +497,7 @@ export default {
     })
 
     const showKeys = ref({
+      spg: false,
       openai: false,
       anthropic: false,
       google: false
@@ -439,10 +511,10 @@ export default {
     const loadApiKeys = async () => {
       try {
         const response = await apiService.getApiKeys()
-        apiKeys.value = response.api_keys || generateSampleApiKeys()
+        apiKeys.value = response.api_keys || []
       } catch (error) {
         console.error('Failed to load API keys:', error)
-        apiKeys.value = generateSampleApiKeys()
+        apiKeys.value = []
       }
     }
 
@@ -457,27 +529,6 @@ export default {
       }
     }
 
-    // Generate sample data
-    const generateSampleApiKeys = () => [
-      {
-        id: 'key_001',
-        name: 'Production Gateway Key',
-        masked_key: 'spg_••••••••••••••••••••••••••••1234',
-        permissions: 'admin',
-        created_at: new Date(Date.now() - 86400000 * 7),
-        expires_at: new Date(Date.now() + 86400000 * 30),
-        status: 'active'
-      },
-      {
-        id: 'key_002',
-        name: 'Development Key',
-        masked_key: 'spg_••••••••••••••••••••••••••••5678',
-        permissions: 'write',
-        created_at: new Date(Date.now() - 86400000 * 2),
-        expires_at: new Date(Date.now() + 86400000 * 90),
-        status: 'active'
-      }
-    ]
 
     // API Key operations
     const generateApiKey = async () => {

@@ -131,41 +131,31 @@ export default {
         // Load statistics
         const statsData = await apiService.getStatistics()
         stats.value = {
-          piiProtected: statsData.pii_protected || 1247,
-          totalRequests: statsData.total_requests || 892,
-          blockedRequests: statsData.blocked_requests || 23,
-          avgTime: statsData.avg_processing_time || 15
+          piiProtected: statsData.pii_protected || 0,
+          totalRequests: statsData.total_requests || 0,
+          blockedRequests: statsData.blocked_requests || 0,
+          avgTime: statsData.avg_processing_time || 0
         }
 
         // Load events
         eventsLoading.value = true
         const eventsData = await apiService.getProtectionEvents()
-        events.value = eventsData.events || generateSampleEvents()
+        events.value = eventsData.events || []
       } catch (error) {
-        console.log('Using demo data')
-        // Use demo data
+        console.log('No data available yet')
+        // Return empty data until real events are logged
         stats.value = {
-          piiProtected: 1247,
-          totalRequests: 892,
-          blockedRequests: 23,
-          avgTime: 15
+          piiProtected: 0,
+          totalRequests: 0,
+          blockedRequests: 0,
+          avgTime: 0
         }
-        events.value = generateSampleEvents()
+        events.value = []
       } finally {
         eventsLoading.value = false
       }
     }
 
-    const generateSampleEvents = () => [
-      { time: '14:32', action: 'Anonymized', type: 'Email', protection: 'Token replaced', status: 'Protected' },
-      { time: '14:31', action: 'Blocked', type: 'SSN', protection: 'Request blocked', status: 'Blocked' },
-      { time: '14:29', action: 'Anonymized', type: 'Phone', protection: 'Token replaced', status: 'Protected' },
-      { time: '14:28', action: 'Anonymized', type: 'Email', protection: 'Token replaced', status: 'Protected' },
-      { time: '14:25', action: 'Detected', type: 'Credit Card', protection: 'Data masked', status: 'Protected' },
-      { time: '14:22', action: 'Anonymized', type: 'API Key', protection: 'Token replaced', status: 'Protected' },
-      { time: '14:20', action: 'Blocked', type: 'SSN', protection: 'Request blocked', status: 'Blocked' },
-      { time: '14:18', action: 'Anonymized', type: 'Email', protection: 'Token replaced', status: 'Protected' },
-    ]
 
     const getStatusColor = (status) => {
       const colors = {

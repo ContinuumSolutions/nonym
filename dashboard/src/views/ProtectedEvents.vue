@@ -318,80 +318,32 @@ export default {
           ...filters.value
         })
 
-        events.value = response.events || generateSampleEvents()
-        totalEvents.value = response.total || events.value.length
+        events.value = response.events || []
+        totalEvents.value = response.total || 0
 
         // Load stats
         const statsResponse = await apiService.getProtectionStats()
         stats.value = statsResponse || {
-          protectedToday: 127,
-          blockedToday: 23,
-          detectionRate: 94.2,
-          highRisk: 5
+          protectedToday: 0,
+          blockedToday: 0,
+          detectionRate: 0.0,
+          highRisk: 0
         }
       } catch (error) {
         console.error('Failed to load events:', error)
-        // Use sample data
-        events.value = generateSampleEvents()
+        // Return empty data until real events are logged
+        events.value = []
         stats.value = {
-          protectedToday: 127,
-          blockedToday: 23,
-          detectionRate: 94.2,
-          highRisk: 5
+          protectedToday: 0,
+          blockedToday: 0,
+          detectionRate: 0.0,
+          highRisk: 0
         }
       } finally {
         loading.value = false
       }
     }
 
-    const generateSampleEvents = () => [
-      {
-        id: 'evt_001',
-        timestamp: new Date(Date.now() - 1000 * 60 * 5),
-        type: 'Email',
-        action: 'Anonymized',
-        provider: 'OpenAI',
-        status: 'Protected',
-        protection: 'Token replaced',
-        redaction_details: [
-          { type: 'email', original_value: 'user@example.com', token: 'TOKEN_EMAIL_001', position: 45 }
-        ]
-      },
-      {
-        id: 'evt_002',
-        timestamp: new Date(Date.now() - 1000 * 60 * 8),
-        type: 'SSN',
-        action: 'Blocked',
-        provider: 'Anthropic',
-        status: 'Blocked',
-        protection: 'Request blocked',
-        redaction_details: []
-      },
-      {
-        id: 'evt_003',
-        timestamp: new Date(Date.now() - 1000 * 60 * 12),
-        type: 'Credit Card',
-        action: 'Detected',
-        provider: 'Google',
-        status: 'Protected',
-        protection: 'Data masked',
-        redaction_details: [
-          { type: 'credit_card', original_value: '**** **** **** 1234', token: 'TOKEN_CC_001', position: 78 }
-        ]
-      },
-      {
-        id: 'evt_004',
-        timestamp: new Date(Date.now() - 1000 * 60 * 15),
-        type: 'Phone',
-        action: 'Anonymized',
-        provider: 'OpenAI',
-        status: 'Protected',
-        protection: 'Token replaced',
-        redaction_details: [
-          { type: 'phone', original_value: '+1-555-***-****', token: 'TOKEN_PHONE_001', position: 23 }
-        ]
-      }
-    ]
 
     const formatTimestamp = (timestamp) => {
       return new Date(timestamp).toLocaleString('en-US', {

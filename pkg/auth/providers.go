@@ -34,6 +34,7 @@ type ProviderConfig struct {
 
 // ProvidersConfig represents the configuration for all AI providers
 type ProvidersConfig struct {
+	SPG       ProviderConfig `json:"spg"`
 	OpenAI    ProviderConfig `json:"openai"`
 	Anthropic ProviderConfig `json:"anthropic"`
 	Google    ProviderConfig `json:"google"`
@@ -130,6 +131,10 @@ func GetProviderConfig(userID string) (*ProvidersConfig, error) {
 		if err.Error() == "sql: no rows in result set" {
 			// Return default configuration
 			return &ProvidersConfig{
+				SPG: ProviderConfig{
+					Enabled: false,
+					Models: []ProviderModel{},
+				},
 				OpenAI: ProviderConfig{
 					Enabled: false,
 					Models: []ProviderModel{
@@ -215,6 +220,8 @@ func SaveProviderConfig(userID string, config *ProvidersConfig) error {
 // TestProviderConnection tests the connection to a provider
 func TestProviderConnection(provider string, config *ProviderTestRequest) (*ProviderTestResponse, error) {
 	switch provider {
+	case "spg":
+		return testSPGConnection(config)
 	case "openai":
 		return testOpenAIConnection(config)
 	case "anthropic":
@@ -229,6 +236,62 @@ func TestProviderConnection(provider string, config *ProviderTestRequest) (*Prov
 			Error:   "Unknown provider",
 		}, nil
 	}
+}
+
+func testSPGConnection(config *ProviderTestRequest) (*ProviderTestResponse, error) {
+	if config.APIKey == "" {
+		return &ProviderTestResponse{
+			Success: false,
+			Error:   "API key is required",
+		}, nil
+	}
+
+	if config.Endpoint == "" {
+		return &ProviderTestResponse{
+			Success: false,
+			Error:   "SPG endpoint URL is required",
+		}, nil
+	}
+
+	// Test SPG gateway health endpoint
+	req, err := http.NewRequest("GET", config.Endpoint+"/gateway/status", nil)
+	if err != nil {
+		return &ProviderTestResponse{
+			Success: false,
+			Error:   "Failed to create request",
+		}, nil
+	}
+
+	req.Header.Set("X-API-Key", config.APIKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return &ProviderTestResponse{
+			Success: false,
+			Error:   "Connection failed: " + err.Error(),
+		}, nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 401 {
+		return &ProviderTestResponse{
+			Success: false,
+			Error:   "Invalid API key",
+		}, nil
+	}
+
+	if resp.StatusCode != 200 {
+		return &ProviderTestResponse{
+			Success: false,
+			Error:   fmt.Sprintf("SPG gateway returned status %d", resp.StatusCode),
+		}, nil
+	}
+
+	return &ProviderTestResponse{
+		Success: true,
+	}, nil
 }
 
 func testOpenAIConnection(config *ProviderTestRequest) (*ProviderTestResponse, error) {
