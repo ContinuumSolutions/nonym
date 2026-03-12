@@ -45,3 +45,4 @@ tmp/
 data/postgres/
 data/*
 node_modules/*
+dashboard/node_modules/*
