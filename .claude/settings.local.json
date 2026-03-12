@@ -56,7 +56,28 @@
       "Bash(netstat:*)",
       "Bash(__NEW_LINE_186a799a0c2df3c4__ echo:*)",
       "Bash(__NEW_LINE_8dc9ef991866d6cb__ echo:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(__NEW_LINE_edd46e79e3f70077__ echo:*)",
+      "Bash(__NEW_LINE_5a88bbfd90e2cd31__ echo:*)",
+      "Bash(__NEW_LINE_836d60906e1aa6d7__ echo:*)",
+      "Bash(__NEW_LINE_2d8c938b70c1ae18__ echo:*)",
+      "Bash(__NEW_LINE_48eaab7579065f41__ echo \"=== Final UI Overlay Check ===\")",
+      "Bash(__NEW_LINE_48eaab7579065f41__ echo \"1. Container health status:\")",
+      "Bash(__NEW_LINE_fac752cab5a36d56__ echo -e \"\\\\n2. Checking if login page is accessible:\")",
+      "Read(//tmp/**)",
+      "Bash(then echo \"✅ Login page overlay fix is active\" else echo \"❌ Login page overlay fix not found\" fi echo -e \"\\\\n4. Checking for blocking elements:\" if grep -E \"\\(fixed.*inset-0|z-50.*fixed\\)\" /tmp/login_page.html)",
+      "Bash(then echo \"⚠️ Potential blocking overlays detected\" else echo \"✅ No blocking overlays found\" fi)",
+      "Bash(__NEW_LINE_d50d75c5814810e4__ echo:*)",
+      "Bash(__NEW_LINE_5b69dd14de8e40a1__ echo:*)",
+      "Bash(__NEW_LINE_ea68278e7806598c__ echo:*)",
+      "Bash(__NEW_LINE_6d1e8c6342dd5f69__ echo:*)",
+      "Bash(__NEW_LINE_7a27f9c2e7b451d8__ echo:*)",
+      "Bash(__NEW_LINE_34d7d2ba91a548af__:*)",
+      "Bash(__NEW_LINE_3033fc6e0fe79f1f__ echo:*)",
+      "Bash(__NEW_LINE_b757f195ae135f7b__ echo:*)",
+      "Bash(__NEW_LINE_51937a2d4b8b3ab0__ echo:*)",
+      "Bash(__NEW_LINE_03b135bcfe11d1f1__ echo:*)",
+      "Bash(__NEW_LINE_6ce08049858786bd__ echo:*)"
     ]
   }
 }

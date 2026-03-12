@@ -349,6 +349,34 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 		})
 	})
 
+	// Transactions endpoint for dashboard
+	app.Get("/api/v1/transactions", authMiddleware, func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{
+			"transactions": []fiber.Map{
+				{
+					"id":          "txn_001",
+					"timestamp":   "2026-03-12T14:20:30Z",
+					"provider":    "openai",
+					"model":       "gpt-4",
+					"tokens":      150,
+					"pii_detected": true,
+					"pii_types":   []string{"email", "phone"},
+					"status":      "completed",
+				},
+				{
+					"id":          "txn_002",
+					"timestamp":   "2026-03-12T14:18:15Z",
+					"provider":    "anthropic",
+					"model":       "claude-3-opus",
+					"tokens":      320,
+					"pii_detected": false,
+					"pii_types":   []string{},
+					"status":      "completed",
+				},
+			},
+			"total": 1250,
+		})
+	})
 
 	// Main proxy endpoints (for AI providers) - specific patterns to avoid auth conflicts
 	app.All("/v1/chat/*", interceptor.HandleProxy)
