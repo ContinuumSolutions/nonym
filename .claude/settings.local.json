@@ -54,7 +54,8 @@
       "Bash(make health:*)",
       "Bash(npm install:*)",
       "Bash(netstat:*)",
-      "Bash(__NEW_LINE_186a799a0c2df3c4__ echo:*)"
+      "Bash(__NEW_LINE_186a799a0c2df3c4__ echo:*)",
+      "Bash(__NEW_LINE_8dc9ef991866d6cb__ echo:*)"
     ]
   }
 }

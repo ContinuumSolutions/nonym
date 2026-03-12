@@ -209,12 +209,12 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 	app.Patch("/api/v1/api-keys/:id/revoke", authMiddleware, auth.HandleRevokeAPIKey)
 	app.Delete("/api/v1/api-keys/:id", authMiddleware, auth.HandleDeleteAPIKey)
 
-	// Test endpoint to verify route registration
-	app.Get("/api/v1/test", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"message": "Test endpoint working"})
+	// Simple test next to working routes
+	app.Get("/api/v1/test-simple", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{"message": "Simple test working"})
 	})
 
-	// Dashboard data endpoints - protected routes with inline implementations
+	// Critical missing endpoints - inline implementations
 	app.Get("/api/v1/statistics", authMiddleware, func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
 			"pii_protected":        150,
@@ -224,32 +224,6 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 		})
 	})
 
-	app.Get("/api/v1/transactions", authMiddleware, func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{
-			"transactions": []fiber.Map{},
-			"total":        0,
-		})
-	})
-
-	app.Get("/api/v1/protection-events", authMiddleware, func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{
-			"events": []fiber.Map{},
-			"total":  0,
-		})
-	})
-
-	app.Get("/api/v1/protection-stats", authMiddleware, func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{
-			"stats": fiber.Map{
-				"emails_protected":      75,
-				"ssns_protected":        12,
-				"credit_cards_blocked":  8,
-				"api_keys_redacted":     25,
-			},
-		})
-	})
-
-	// Organization management
 	app.Get("/api/v1/organization", authMiddleware, func(c *fiber.Ctx) error {
 		user := c.Locals("user").(*auth.User)
 		return c.JSON(fiber.Map{
@@ -271,7 +245,6 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 		return c.JSON(fiber.Map{"message": "Organization updated successfully"})
 	})
 
-	// Team management
 	app.Get("/api/v1/team/members", authMiddleware, func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
 			"members": []fiber.Map{
@@ -300,7 +273,6 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 		return c.JSON(fiber.Map{"message": "Team member removed successfully"})
 	})
 
-	// Provider configuration
 	app.Get("/api/v1/provider-config", authMiddleware, func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
 			"providers": fiber.Map{
@@ -339,7 +311,6 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 		})
 	})
 
-	// Security settings
 	app.Put("/api/v1/security/2fa", authMiddleware, func(c *fiber.Ctx) error {
 		var settingsData fiber.Map
 		if err := c.BodyParser(&settingsData); err != nil {
@@ -360,22 +331,24 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 		return c.JSON(fiber.Map{"message": "Security settings updated successfully"})
 	})
 
-	// Settings
-	app.Get("/api/v1/settings", authMiddleware, func(c *fiber.Ctx) error {
+	app.Get("/api/v1/protection-events", authMiddleware, func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
-			"strict_mode":     false,
-			"log_level":       "info",
-			"retention_days":  30,
+			"events": []fiber.Map{},
+			"total":  0,
 		})
 	})
 
-	app.Put("/api/v1/settings", authMiddleware, func(c *fiber.Ctx) error {
-		var settingsData fiber.Map
-		if err := c.BodyParser(&settingsData); err != nil {
-			return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
-		}
-		return c.JSON(fiber.Map{"message": "Settings updated successfully"})
+	app.Get("/api/v1/protection-stats", authMiddleware, func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{
+			"stats": fiber.Map{
+				"emails_protected":      75,
+				"ssns_protected":        12,
+				"credit_cards_blocked":  8,
+				"api_keys_redacted":     25,
+			},
+		})
 	})
+
 
 	// Main proxy endpoints (for AI providers) - specific patterns to avoid auth conflicts
 	app.All("/v1/chat/*", interceptor.HandleProxy)
