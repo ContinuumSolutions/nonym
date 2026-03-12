@@ -104,14 +104,112 @@ build:
 	cd cmd/gateway && go build -o ../../bin/gateway .
 	@echo "✅ Gateway built: ./bin/gateway"
 
+build-admin:
+	@echo "🔨 Building admin application"
+	@mkdir -p bin
+	cd cmd/admin && go build -o ../../bin/admin .
+	@echo "✅ Admin built: ./bin/admin"
+
+# Test targets
 test:
-	@echo "🧪 Running tests"
-	go test ./... -v
+	@echo "🧪 Running comprehensive test suite"
+	@./test_runner.sh --coverage-threshold 75
+
+test-unit:
+	@echo "🧪 Running unit tests"
+	@./test_runner.sh --unit-only --coverage-threshold 75
+
+test-integration:
+	@echo "🔗 Running integration tests"
+	@./test_runner.sh --integration-only
+
+test-coverage:
+	@echo "📊 Generating test coverage report"
+	@mkdir -p coverage
+	go test -timeout=10m -v -race -coverprofile=coverage/coverage.out ./...
+	go tool cover -html=coverage/coverage.out -o coverage/coverage.html
+	@echo "✅ Coverage report generated: coverage/coverage.html"
+
+benchmark:
+	@echo "⚡ Running benchmark tests"
+	@./test_runner.sh --with-benchmarks
+
+test-deps:
+	@echo "📦 Installing test dependencies"
+	go mod download
+	@if ! command -v bc >/dev/null 2>&1; then \
+		echo "Installing bc for coverage calculations..."; \
+		if command -v apt-get >/dev/null 2>&1; then \
+			sudo apt-get update && sudo apt-get install -y bc; \
+		elif command -v yum >/dev/null 2>&1; then \
+			sudo yum install -y bc; \
+		elif command -v brew >/dev/null 2>&1; then \
+			brew install bc; \
+		else \
+			echo "Please install 'bc' manually"; \
+		fi \
+	fi
+
+# Code quality
+lint:
+	@echo "🔍 Running linters"
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		golangci-lint run --timeout=5m; \
+	else \
+		echo "golangci-lint not found, running go vet only..."; \
+		go vet ./...; \
+	fi
+
+format:
+	@echo "🎨 Formatting Go code"
+	gofmt -s -w .
+	@if command -v goimports >/dev/null 2>&1; then \
+		goimports -w .; \
+	fi
+
+format-check:
+	@echo "🎨 Checking code formatting"
+	@if [ "$$(gofmt -s -l . | wc -l)" -gt 0 ]; then \
+		echo "The following files need formatting:"; \
+		gofmt -s -l .; \
+		exit 1; \
+	fi
+
+security:
+	@echo "🔒 Running security checks"
+	@if command -v gosec >/dev/null 2>&1; then \
+		gosec -fmt=json -out=gosec-report.json -stdout ./...; \
+	fi
+	@if command -v govulncheck >/dev/null 2>&1; then \
+		govulncheck ./...; \
+	fi
+
+# Tool installation
+tools:
+	@echo "🔧 Installing development tools"
+	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	@go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+	@go install golang.org/x/vuln/cmd/govulncheck@latest
+	@go install golang.org/x/tools/cmd/goimports@latest
 
 clean:
 	@echo "🧹 Cleaning up containers and volumes"
 	docker compose down -v
 	docker system prune -f
+
+clean-test:
+	@echo "🧹 Cleaning test artifacts"
+	rm -rf coverage/
+	rm -f coverage-*.out
+	rm -f coverage-report.html
+	rm -f benchmark_results.txt
+	rm -f gosec-report.json
+	go clean -cache
+	go clean -testcache
+
+clean-all: clean clean-test
+	@echo "🧹 Deep cleaning all artifacts"
+	rm -rf bin/
 
 rebuild:
 	@echo "🔄 Rebuilding and restarting services"

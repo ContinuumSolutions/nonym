@@ -1,6 +1,6 @@
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-primary/10 via-neutral-50 to-success/5 flex items-center justify-center p-4">
-    <div class="w-full max-w-md">
+  <div class="login-page flex items-center justify-center p-4">
+    <div class="w-full max-w-md login-form">
       <!-- Logo -->
       <div class="text-center mb-8">
         <div class="gradient-bg w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl">
@@ -179,6 +179,23 @@ export default {
     if (route.path === '/signup') {
       currentMode.value = 'signup'
     }
+
+    // Clear any persistent overlays/modals when login component mounts
+    const clearOverlays = () => {
+      // Remove any fixed overlays
+      const overlays = document.querySelectorAll('.fixed.inset-0, [class*="z-50"]')
+      overlays.forEach(overlay => {
+        if (overlay.closest('.login-page, .login-form')) return // Don't remove login elements
+        overlay.remove()
+      })
+
+      // Reset body scroll
+      document.body.style.overflow = 'auto'
+    }
+
+    // Clear overlays immediately and also on mount
+    clearOverlays()
+    setTimeout(clearOverlays, 100) // Slight delay to catch any late-rendered overlays
 
     return {
       form,

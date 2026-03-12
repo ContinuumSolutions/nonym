@@ -52,3 +52,21 @@
 .fade-enter-from, .fade-leave-to {
   opacity: 0;
 }
+
+/* Login page isolation - prevent any overlay interference */
+.login-page {
+  position: fixed !important;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9999 !important;
+  background: linear-gradient(135deg, rgba(99, 91, 255, 0.1) 0%, rgba(245, 245, 245, 1) 50%, rgba(124, 115, 255, 0.05) 100%);
+}
+
+/* Ensure login form is always clickable */
+.login-form {
+  position: relative;
+  z-index: 10000 !important;
+  pointer-events: auto !important;
+}

@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"bytes"
 	"database/sql"
 	"encoding/json"
 	"net/http/httptest"
@@ -9,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	_ "modernc.org/sqlite"
 )

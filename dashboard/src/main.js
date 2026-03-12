@@ -30,9 +30,18 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
   const isAuthenticated = localStorage.getItem('auth_token')
 
+  // Clear any modal states when navigating to login
+  if (to.path === '/login' || to.path === '/signup') {
+    // Reset any global modal/overlay states
+    document.body.style.overflow = 'auto'
+    // Remove any fixed overlays that might be lingering
+    const overlays = document.querySelectorAll('.fixed.inset-0')
+    overlays.forEach(overlay => overlay.remove())
+  }
+
   if (to.meta.requiresAuth && !isAuthenticated) {
     next('/login')
-  } else if (to.path === '/login' && isAuthenticated) {
+  } else if ((to.path === '/login' || to.path === '/signup') && isAuthenticated) {
     next('/dashboard')
   } else {
     next()
