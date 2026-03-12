@@ -216,23 +216,35 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 
 	// Critical missing endpoints - inline implementations
 	app.Get("/api/v1/statistics", authMiddleware, func(c *fiber.Ctx) error {
+		// Get real statistics from audit system
+		stats, err := audit.GetStatistics()
+		if err != nil {
+			// Return zeros if no data available
+			return c.JSON(fiber.Map{
+				"pii_protected":        0,
+				"total_requests":       0,
+				"blocked_requests":     0,
+				"avg_processing_time": "0ms",
+			})
+		}
 		return c.JSON(fiber.Map{
-			"pii_protected":        150,
-			"total_requests":       1250,
-			"blocked_requests":     25,
-			"avg_processing_time": "12ms",
+			"pii_protected":        stats.RedactedRequests,
+			"total_requests":       stats.TotalRequests,
+			"blocked_requests":     stats.BlockedRequests,
+			"avg_processing_time": fmt.Sprintf("%.0fms", stats.AvgProcessingTime),
 		})
 	})
 
 	app.Get("/api/v1/organization", authMiddleware, func(c *fiber.Ctx) error {
 		user := c.Locals("user").(*auth.User)
+		// Return minimal organization data (can be extended later when org management is implemented)
 		return c.JSON(fiber.Map{
 			"id":          1,
-			"name":        "Sample Organization",
-			"industry":    "Technology",
-			"size":        "10-50",
-			"country":     "US",
-			"description": "Privacy-focused technology company",
+			"name":        "",
+			"industry":    "",
+			"size":        "",
+			"country":     "",
+			"description": "",
 			"owner_id":    user.ID,
 		})
 	})
@@ -246,15 +258,18 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 	})
 
 	app.Get("/api/v1/team/members", authMiddleware, func(c *fiber.Ctx) error {
+		// Get current user (for now, just return current user as only team member)
+		user := c.Locals("user").(*auth.User)
+
 		return c.JSON(fiber.Map{
 			"members": []fiber.Map{
 				{
-					"id":       1,
-					"email":    "admin@gateway.local",
-					"name":     "Administrator",
-					"role":     "admin",
+					"id":       user.ID,
+					"email":    user.Email,
+					"name":     user.Name,
+					"role":     user.Role,
 					"status":   "active",
-					"joined_at": "2026-03-07T14:16:20Z",
+					"joined_at": user.CreatedAt.Format("2006-01-02T15:04:05Z"),
 				},
 			},
 			"total": 1,
@@ -339,42 +354,39 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 	})
 
 	app.Get("/api/v1/protection-stats", authMiddleware, func(c *fiber.Ctx) error {
+		// Return zeros for protection stats (will be populated when real event logging is implemented)
 		return c.JSON(fiber.Map{
 			"stats": fiber.Map{
-				"emails_protected":      75,
-				"ssns_protected":        12,
-				"credit_cards_blocked":  8,
-				"api_keys_redacted":     25,
+				"emails_protected":      0,
+				"ssns_protected":        0,
+				"credit_cards_blocked":  0,
+				"api_keys_redacted":     0,
 			},
 		})
 	})
 
 	// Transactions endpoint for dashboard
 	app.Get("/api/v1/transactions", authMiddleware, func(c *fiber.Ctx) error {
+		// Get real transactions from audit system
+		transactions, err := audit.GetTransactions(10, 0) // Get last 10 transactions
+		if err != nil {
+			// Return empty list if no data available
+			return c.JSON(fiber.Map{
+				"transactions": []fiber.Map{},
+				"total":        0,
+			})
+		}
+
+		// Get total count
+		stats, _ := audit.GetStatistics()
+		totalCount := int64(0)
+		if stats != nil {
+			totalCount = stats.TotalRequests
+		}
+
 		return c.JSON(fiber.Map{
-			"transactions": []fiber.Map{
-				{
-					"id":          "txn_001",
-					"timestamp":   "2026-03-12T14:20:30Z",
-					"provider":    "openai",
-					"model":       "gpt-4",
-					"tokens":      150,
-					"pii_detected": true,
-					"pii_types":   []string{"email", "phone"},
-					"status":      "completed",
-				},
-				{
-					"id":          "txn_002",
-					"timestamp":   "2026-03-12T14:18:15Z",
-					"provider":    "anthropic",
-					"model":       "claude-3-opus",
-					"tokens":      320,
-					"pii_detected": false,
-					"pii_types":   []string{},
-					"status":      "completed",
-				},
-			},
-			"total": 1250,
+			"transactions": transactions,
+			"total":        totalCount,
 		})
 	})
 

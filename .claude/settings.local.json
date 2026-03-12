@@ -77,7 +77,10 @@
       "Bash(__NEW_LINE_b757f195ae135f7b__ echo:*)",
       "Bash(__NEW_LINE_51937a2d4b8b3ab0__ echo:*)",
       "Bash(__NEW_LINE_03b135bcfe11d1f1__ echo:*)",
-      "Bash(__NEW_LINE_6ce08049858786bd__ echo:*)"
+      "Bash(__NEW_LINE_6ce08049858786bd__ echo:*)",
+      "Bash(python:*)",
+      "Bash(export:*)",
+      "Bash(OPENAI_API_KEY=\"sk-test-key\" python:*)"
     ]
   }
 }
