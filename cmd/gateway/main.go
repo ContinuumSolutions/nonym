@@ -347,9 +347,65 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 	})
 
 	app.Get("/api/v1/protection-events", authMiddleware, func(c *fiber.Ctx) error {
+		// Convert transactions to protection events format
+		transactions, err := audit.GetTransactions(50, 0) // Get recent transactions
+		if err != nil {
+				return c.JSON(fiber.Map{
+				"events": []fiber.Map{},
+				"total":  0,
+			})
+		}
+
+
+		// Convert transactions to events format
+		events := []fiber.Map{}
+		for _, tx := range transactions {
+			// Convert transaction to protection event format using struct fields
+			event := fiber.Map{
+				"id":        tx.ID,
+				"timestamp": tx.Timestamp,
+				"provider":  tx.Provider,
+				"status":    "Protected", // Default status for successful redactions
+				"action":    "Redacted",
+			}
+
+			// Determine event type and details from redaction details
+			if len(tx.RedactionDetails) > 0 {
+				firstRedaction := tx.RedactionDetails[0]
+				switch string(firstRedaction.EntityType) {
+				case "CREDIT_CARD":
+					event["type"] = "Credit Card"
+				case "EMAIL":
+					event["type"] = "Email"
+				case "SSN":
+					event["type"] = "SSN"
+				case "PHONE":
+					event["type"] = "Phone"
+				case "API_KEY":
+					event["type"] = "API Key"
+				default:
+					event["type"] = "PII"
+				}
+				event["protection"] = fmt.Sprintf("%d item(s) redacted", len(tx.RedactionDetails))
+				event["redaction_details"] = tx.RedactionDetails
+			} else {
+				event["type"] = "Request"
+				event["protection"] = "No PII detected"
+			}
+
+			events = append(events, event)
+		}
+
+		// Get total count
+		stats, _ := audit.GetStatistics()
+		totalCount := int64(len(events))
+		if stats != nil {
+			totalCount = stats.TotalRequests
+		}
+
 		return c.JSON(fiber.Map{
-			"events": []fiber.Map{},
-			"total":  0,
+			"events": events,
+			"total":  totalCount,
 		})
 	})
 

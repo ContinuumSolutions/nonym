@@ -7,7 +7,7 @@ import requests
 import json
 
 # Gateway URL
-gateway_url = "http://localhost/v1/chat/completions"
+gateway_url = "https://genesis.egokernel.com/v1/chat/completions"
 
 # Test messages with different types of PII
 test_cases = [
@@ -42,7 +42,8 @@ for test in test_cases:
         response = requests.post(
             gateway_url,
             headers={
-                "Authorization": "Bearer sk-test-demo-key",
+                # "Authorization": "Bearer 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",
+                "Authorization": "Bearer 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",
                 "Content-Type": "application/json"
             },
             json=payload,
