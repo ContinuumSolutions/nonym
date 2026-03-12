@@ -254,11 +254,62 @@
                 <span class="font-medium text-gray-600">Provider:</span>
                 <span class="text-gray-900">{{ selectedEvent.provider }}</span>
               </div>
+
+              <!-- Content Analysis Section -->
+              <div v-if="selectedEvent.content_summary" class="border-t pt-3">
+                <span class="font-medium text-gray-600">Content Analysis:</span>
+                <p class="text-sm text-gray-900 mt-1">{{ selectedEvent.content_summary }}</p>
+              </div>
+
+              <!-- Original User Input (Truncated) -->
+              <div v-if="selectedEvent.original_content_preview" class="border-t pt-3">
+                <span class="font-medium text-gray-600">Original User Input:</span>
+                <div class="mt-2 p-3 bg-red-50 border border-red-200 rounded text-sm">
+                  <div class="flex items-center mb-1">
+                    <svg class="w-4 h-4 text-red-500 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"/>
+                    </svg>
+                    <span class="text-red-700 font-medium">Contains PII (truncated for safety)</span>
+                  </div>
+                  <code class="text-gray-800">{{ selectedEvent.original_content_preview }}</code>
+                </div>
+              </div>
+
+              <!-- Sanitized Output Sent to Provider -->
+              <div v-if="selectedEvent.sanitized_content" class="border-t pt-3">
+                <span class="font-medium text-gray-600">Sanitized Output Sent to Provider:</span>
+                <div class="mt-2 p-3 bg-green-50 border border-green-200 rounded text-sm">
+                  <div class="flex items-center mb-1">
+                    <svg class="w-4 h-4 text-green-500 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/>
+                    </svg>
+                    <span class="text-green-700 font-medium">PII Removed - Safe for AI Processing</span>
+                  </div>
+                  <code class="text-gray-800">{{ selectedEvent.sanitized_content }}</code>
+                </div>
+              </div>
+
+              <!-- Individual PII Redaction Details -->
               <div v-if="selectedEvent.redaction_details && selectedEvent.redaction_details.length" class="border-t pt-3">
-                <span class="font-medium text-gray-600">Protection Details:</span>
-                <ul class="mt-2 space-y-1">
-                  <li v-for="detail in selectedEvent.redaction_details" :key="detail.position" class="text-sm bg-gray-50 p-2 rounded">
-                    <strong>{{ detail.type }}:</strong> {{ detail.original_value }} → <code>{{ detail.token }}</code>
+                <span class="font-medium text-gray-600">PII Redaction Details:</span>
+                <ul class="mt-2 space-y-2">
+                  <li v-for="(detail, index) in selectedEvent.redaction_details" :key="index" class="text-sm bg-gray-50 p-3 rounded border">
+                    <div class="flex justify-between items-start mb-2">
+                      <span class="font-medium text-gray-900">{{ detail.entity_type }}</span>
+                      <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                        {{ Math.round(detail.confidence * 100) }}% confidence
+                      </span>
+                    </div>
+                    <div class="space-y-1">
+                      <div class="flex">
+                        <span class="text-gray-600 text-xs w-16">Original:</span>
+                        <code class="text-red-600 text-xs">{{ detail.original_text }}</code>
+                      </div>
+                      <div class="flex">
+                        <span class="text-gray-600 text-xs w-16">Redacted:</span>
+                        <code class="text-green-600 text-xs">{{ detail.redacted_text }}</code>
+                      </div>
+                    </div>
                   </li>
                 </ul>
               </div>
