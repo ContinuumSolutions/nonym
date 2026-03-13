@@ -96,7 +96,8 @@ func Initialize(databasePath string) error {
 }
 
 func createTables() error {
-	queries := []string{
+	// Step 1: Create base tables without organization/user columns
+	baseQueries := []string{
 		`CREATE TABLE IF NOT EXISTS transactions (
 			id TEXT PRIMARY KEY,
 			timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -108,15 +109,8 @@ func createTables() error {
 			redaction_details TEXT DEFAULT '[]',
 			client_ip TEXT DEFAULT '',
 			user_agent TEXT DEFAULT '',
-			error_message TEXT DEFAULT '',
-			organization_id INTEGER NOT NULL,
-			user_id INTEGER
+			error_message TEXT DEFAULT ''
 		)`,
-		`CREATE INDEX IF NOT EXISTS idx_transactions_timestamp ON transactions(timestamp)`,
-		`CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status)`,
-		`CREATE INDEX IF NOT EXISTS idx_transactions_provider ON transactions(provider)`,
-		`CREATE INDEX IF NOT EXISTS idx_transactions_organization ON transactions(organization_id)`,
-		`CREATE INDEX IF NOT EXISTS idx_transactions_user ON transactions(user_id)`,
 		`CREATE TABLE IF NOT EXISTS settings (
 			key TEXT PRIMARY KEY,
 			value TEXT NOT NULL,
@@ -124,13 +118,13 @@ func createTables() error {
 		)`,
 	}
 
-	for _, query := range queries {
+	for _, query := range baseQueries {
 		if _, err := db.Exec(query); err != nil {
-			return fmt.Errorf("failed to execute query %s: %w", query, err)
+			return fmt.Errorf("failed to execute base query %s: %w", query, err)
 		}
 	}
 
-	// Migration: Add organization_id and user_id columns if they don't exist
+	// Step 2: Migration - Add organization_id and user_id columns if they don't exist
 	migrationQueries := []string{
 		`ALTER TABLE transactions ADD COLUMN organization_id INTEGER NOT NULL DEFAULT 1`,
 		`ALTER TABLE transactions ADD COLUMN user_id INTEGER DEFAULT 1`,
@@ -139,9 +133,24 @@ func createTables() error {
 	for _, query := range migrationQueries {
 		if _, err := db.Exec(query); err != nil {
 			// Ignore "duplicate column name" errors - this means the column already exists
-			if !strings.Contains(err.Error(), "duplicate column name") {
+			if !strings.Contains(err.Error(), "duplicate column name") && !strings.Contains(err.Error(), "already exists") {
 				log.Printf("Migration warning: %s: %v", query, err)
 			}
+		}
+	}
+
+	// Step 3: Create indexes after columns exist
+	indexQueries := []string{
+		`CREATE INDEX IF NOT EXISTS idx_transactions_timestamp ON transactions(timestamp)`,
+		`CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status)`,
+		`CREATE INDEX IF NOT EXISTS idx_transactions_provider ON transactions(provider)`,
+		`CREATE INDEX IF NOT EXISTS idx_transactions_organization ON transactions(organization_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_transactions_user ON transactions(user_id)`,
+	}
+
+	for _, query := range indexQueries {
+		if _, err := db.Exec(query); err != nil {
+			return fmt.Errorf("failed to execute index query %s: %w", query, err)
 		}
 	}
 
