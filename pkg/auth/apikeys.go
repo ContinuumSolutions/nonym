@@ -1,15 +1,21 @@
 package auth
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/crypto/pbkdf2"
 )
 
 // APIKey represents an API key for the gateway
@@ -67,6 +73,66 @@ func maskAPIKey(key string) string {
 	return prefix + strings.Repeat("•", 24) + suffix
 }
 
+// encryptAPIKey encrypts an API key for secure storage
+func encryptAPIKey(apiKey, userID string) (string, error) {
+	// Derive encryption key from user ID and a salt
+	salt := []byte("spg-apikey-salt-2024")
+	key := pbkdf2.Key([]byte(userID), salt, 10000, 32, sha256.New)
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", err
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
+		return "", err
+	}
+
+	ciphertext := gcm.Seal(nonce, nonce, []byte(apiKey), nil)
+	return base64.StdEncoding.EncodeToString(ciphertext), nil
+}
+
+// decryptAPIKey decrypts an API key from storage
+func decryptAPIKey(encryptedKey, userID string) (string, error) {
+	// Derive the same encryption key
+	salt := []byte("spg-apikey-salt-2024")
+	key := pbkdf2.Key([]byte(userID), salt, 10000, 32, sha256.New)
+
+	data, err := base64.StdEncoding.DecodeString(encryptedKey)
+	if err != nil {
+		return "", err
+	}
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", err
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+
+	nonceSize := gcm.NonceSize()
+	if len(data) < nonceSize {
+		return "", fmt.Errorf("ciphertext too short")
+	}
+
+	nonce, ciphertext := data[:nonceSize], data[nonceSize:]
+	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return "", err
+	}
+
+	return string(plaintext), nil
+}
+
 // CreateAPIKey creates a new API key
 func CreateAPIKey(req *APIKeyCreateRequest, userID string) (*APIKeyCreateResponse, error) {
 	if db == nil {
@@ -89,10 +155,16 @@ func CreateAPIKey(req *APIKeyCreateRequest, userID string) (*APIKeyCreateRespons
 		return nil, fmt.Errorf("failed to generate API key: %w", err)
 	}
 
-	// Hash the API key
+	// Hash the API key (for authentication)
 	keyHash, err := hashAPIKey(apiKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to hash API key: %w", err)
+	}
+
+	// Encrypt the API key (for secure retrieval)
+	encryptedKey, err := encryptAPIKey(apiKey, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt API key: %w", err)
 	}
 
 	// Parse expiry date
@@ -109,10 +181,10 @@ func CreateAPIKey(req *APIKeyCreateRequest, userID string) (*APIKeyCreateRespons
 	id := fmt.Sprintf("key_%d", time.Now().UnixNano())
 
 	// Insert into database
-	query := `INSERT INTO api_keys (id, name, key_hash, masked_key, permissions, user_id, expires_at, status)
-			  VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+	query := `INSERT INTO api_keys (id, name, key_hash, encrypted_key, masked_key, permissions, user_id, expires_at, status)
+			  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
-	_, err = db.Exec(query, id, req.Name, keyHash, maskAPIKey(apiKey), req.Permissions, userID, expiresAt, "active")
+	_, err = db.Exec(query, id, req.Name, keyHash, encryptedKey, maskAPIKey(apiKey), req.Permissions, userID, expiresAt, "active")
 	if err != nil {
 		return nil, fmt.Errorf("failed to store API key: %w", err)
 	}
@@ -370,42 +442,35 @@ func HandleGetFullAPIKey(c *fiber.Ctx) error {
 		})
 	}
 
-	// Get the API key record to verify ownership
-	apiKeys, err := GetUserAPIKeys(strconv.Itoa(user.ID))
+	// Get the encrypted API key from database
+	userIDStr := strconv.Itoa(user.ID)
+	query := `SELECT encrypted_key, status FROM api_keys WHERE id = ? AND user_id = ?`
+
+	var encryptedKey, status string
+	err := db.QueryRow(query, keyID, userIDStr).Scan(&encryptedKey, &status)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to fetch API keys",
-		})
-	}
-
-	var targetKey *APIKey
-	for _, key := range apiKeys {
-		if key.ID == keyID {
-			targetKey = &key
-			break
-		}
-	}
-
-	if targetKey == nil {
 		return c.Status(404).JSON(fiber.Map{
 			"error": "API key not found or access denied",
 		})
 	}
 
-	if targetKey.Status != "active" {
+	if status != "active" {
 		return c.Status(400).JSON(fiber.Map{
 			"error": "Cannot copy inactive API key",
 		})
 	}
 
-	// For security, we don't store the original API key
-	// We'll return a reconstructed version based on the ID
-	// In production, you might want to implement a more secure approach
-	fullKey := fmt.Sprintf("spg_%s", keyID[4:]) // Remove "key_" prefix and add "spg_" prefix
+	// Decrypt the API key
+	fullKey, err := decryptAPIKey(encryptedKey, userIDStr)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to decrypt API key",
+		})
+	}
 
 	return c.JSON(fiber.Map{
 		"api_key": fullKey,
-		"warning": "This is the only time the full API key will be displayed. Please store it securely.",
+		"warning": "Keep this API key secure. Anyone with access to this key can use your gateway.",
 	})
 }
 

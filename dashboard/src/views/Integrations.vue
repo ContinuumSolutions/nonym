@@ -102,7 +102,13 @@
                       <span>{{ key.masked_key }}</span>
                       <button
                         @click="copyToClipboard(key.id)"
-                        class="ml-2 text-gray-400 hover:text-gray-600">
+                        :disabled="key.status !== 'active'"
+                        :class="[
+                          'ml-2 transition-colors',
+                          key.status === 'active'
+                            ? 'text-gray-400 hover:text-gray-600'
+                            : 'text-gray-300 cursor-not-allowed'
+                        ]">
                         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                           <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"/>
                           <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z"/>
@@ -610,12 +616,27 @@ export default {
               document.body.removeChild(textArea)
             }
           }
+
+          // Show security warning if provided
+          if (response.warning) {
+            console.warn('API Key Security Warning:', response.warning)
+          }
         } else {
           showMessage('Failed to retrieve API key for copying', 'error')
         }
       } catch (error) {
         console.error('Failed to copy API key:', error)
-        showMessage('Failed to copy API key. Please try again.', 'error')
+
+        // Handle specific error cases
+        if (error.response?.status === 404) {
+          showMessage('API key not found or you do not have access to it.', 'error')
+        } else if (error.response?.status === 400) {
+          showMessage('Cannot copy inactive or revoked API key.', 'error')
+        } else if (error.response?.status === 500) {
+          showMessage('API key cannot be retrieved. This may be an older key created before encryption was enabled.', 'error')
+        } else {
+          showMessage('Failed to copy API key. Please try again.', 'error')
+        }
       }
     }
 

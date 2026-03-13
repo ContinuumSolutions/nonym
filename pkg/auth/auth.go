@@ -42,6 +42,11 @@ func Initialize(database *sql.DB) error {
 		return fmt.Errorf("failed to create auth tables: %w", err)
 	}
 
+	// Run migrations for schema updates
+	if err := runAuthMigrations(); err != nil {
+		return fmt.Errorf("failed to run auth migrations: %w", err)
+	}
+
 	// Create default admin user if none exists
 	if err := createDefaultUser(); err != nil {
 		log.Printf("Warning: Failed to create default user: %v", err)
@@ -70,6 +75,7 @@ func createAuthTables() error {
 			id TEXT PRIMARY KEY,
 			name TEXT NOT NULL,
 			key_hash TEXT NOT NULL,
+			encrypted_key TEXT NOT NULL,
 			masked_key TEXT NOT NULL,
 			permissions TEXT NOT NULL,
 			user_id TEXT NOT NULL,
@@ -102,6 +108,16 @@ func createAuthTables() error {
 		if _, err := db.Exec(query); err != nil {
 			return fmt.Errorf("failed to execute query %s: %w", query, err)
 		}
+	}
+
+	return nil
+}
+
+func runAuthMigrations() error {
+	// Migration 1: Add encrypted_key column if it doesn't exist
+	_, err := db.Exec(`ALTER TABLE api_keys ADD COLUMN encrypted_key TEXT DEFAULT ''`)
+	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("failed to add encrypted_key column: %w", err)
 	}
 
 	return nil
