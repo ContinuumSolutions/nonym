@@ -149,10 +149,16 @@ func runAuthMigrations() error {
 		return fmt.Errorf("failed to add encrypted_key column: %w", err)
 	}
 
-	// Migration 2: Add slug column to organizations if it doesn't exist
-	_, err = db.Exec(`ALTER TABLE organizations ADD COLUMN slug TEXT UNIQUE`)
+	// Migration 2: Add slug column to organizations if it doesn't exist (without UNIQUE constraint)
+	_, err = db.Exec(`ALTER TABLE organizations ADD COLUMN slug TEXT`)
 	if err != nil && !strings.Contains(err.Error(), "duplicate column name") && !strings.Contains(err.Error(), "already exists") {
 		log.Printf("Migration warning - slug column: %v", err)
+	}
+
+	// Migration 3: Populate slug column with default values for existing organizations
+	_, err = db.Exec(`UPDATE organizations SET slug = 'org-' || id WHERE slug IS NULL OR slug = ''`)
+	if err != nil {
+		log.Printf("Migration warning - slug population: %v", err)
 	}
 
 	return nil
