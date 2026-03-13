@@ -47,6 +47,11 @@ func Initialize(database *sql.DB) error {
 		return fmt.Errorf("failed to run auth migrations: %w", err)
 	}
 
+	// Create indexes after migrations have run
+	if err := createAuthIndexes(); err != nil {
+		return fmt.Errorf("failed to create auth indexes: %w", err)
+	}
+
 	// Create default admin user if none exists
 	if err := createDefaultUser(); err != nil {
 		log.Printf("Warning: Failed to create default user: %v", err)
@@ -57,11 +62,11 @@ func Initialize(database *sql.DB) error {
 }
 
 func createAuthTables() error {
-	queries := []string{
+	// Step 1: Create base tables without problematic columns
+	baseQueries := []string{
 		`CREATE TABLE IF NOT EXISTS organizations (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			name TEXT NOT NULL,
-			slug TEXT UNIQUE NOT NULL,
 			industry TEXT,
 			size TEXT,
 			country TEXT,
@@ -70,8 +75,6 @@ func createAuthTables() error {
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		)`,
-		`CREATE INDEX IF NOT EXISTS idx_organizations_slug ON organizations(slug)`,
-		`CREATE INDEX IF NOT EXISTS idx_organizations_owner ON organizations(owner_id)`,
 		`CREATE TABLE IF NOT EXISTS users (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			email TEXT UNIQUE NOT NULL,
@@ -85,14 +88,10 @@ func createAuthTables() error {
 			last_login DATETIME,
 			FOREIGN KEY (organization_id) REFERENCES organizations (id) ON DELETE CASCADE
 		)`,
-		`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`,
-		`CREATE INDEX IF NOT EXISTS idx_users_active ON users(active)`,
-		`CREATE INDEX IF NOT EXISTS idx_users_organization ON users(organization_id)`,
 		`CREATE TABLE IF NOT EXISTS api_keys (
 			id TEXT PRIMARY KEY,
 			name TEXT NOT NULL,
 			key_hash TEXT NOT NULL,
-			encrypted_key TEXT NOT NULL,
 			masked_key TEXT NOT NULL,
 			permissions TEXT NOT NULL,
 			user_id TEXT NOT NULL,
@@ -103,8 +102,6 @@ func createAuthTables() error {
 			last_used DATETIME,
 			FOREIGN KEY (organization_id) REFERENCES organizations (id) ON DELETE CASCADE
 		)`,
-		`CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id)`,
-		`CREATE INDEX IF NOT EXISTS idx_api_keys_organization ON api_keys(organization_id)`,
 		`CREATE TABLE IF NOT EXISTS provider_configs (
 			user_id TEXT PRIMARY KEY,
 			organization_id INTEGER NOT NULL,
@@ -112,12 +109,33 @@ func createAuthTables() error {
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY (organization_id) REFERENCES organizations (id) ON DELETE CASCADE
 		)`,
+	}
+
+	for _, query := range baseQueries {
+		if _, err := db.Exec(query); err != nil {
+			return fmt.Errorf("failed to execute base query %s: %w", query, err)
+		}
+	}
+
+	return nil
+}
+
+func createAuthIndexes() error {
+	// Step 2: Create indexes after migrations have run
+	indexQueries := []string{
+		`CREATE INDEX IF NOT EXISTS idx_organizations_slug ON organizations(slug)`,
+		`CREATE INDEX IF NOT EXISTS idx_organizations_owner ON organizations(owner_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`,
+		`CREATE INDEX IF NOT EXISTS idx_users_active ON users(active)`,
+		`CREATE INDEX IF NOT EXISTS idx_users_organization ON users(organization_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_api_keys_organization ON api_keys(organization_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_provider_configs_organization ON provider_configs(organization_id)`,
 	}
 
-	for _, query := range queries {
+	for _, query := range indexQueries {
 		if _, err := db.Exec(query); err != nil {
-			return fmt.Errorf("failed to execute query %s: %w", query, err)
+			return fmt.Errorf("failed to execute index query %s: %w", query, err)
 		}
 	}
 
@@ -129,6 +147,12 @@ func runAuthMigrations() error {
 	_, err := db.Exec(`ALTER TABLE api_keys ADD COLUMN encrypted_key TEXT DEFAULT ''`)
 	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
 		return fmt.Errorf("failed to add encrypted_key column: %w", err)
+	}
+
+	// Migration 2: Add slug column to organizations if it doesn't exist
+	_, err = db.Exec(`ALTER TABLE organizations ADD COLUMN slug TEXT UNIQUE`)
+	if err != nil && !strings.Contains(err.Error(), "duplicate column name") && !strings.Contains(err.Error(), "already exists") {
+		log.Printf("Migration warning - slug column: %v", err)
 	}
 
 	return nil
