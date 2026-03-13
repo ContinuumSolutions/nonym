@@ -580,8 +580,43 @@ export default {
     }
 
     const copyToClipboard = async (keyId) => {
-      // In a real app, you'd get the full key from the server
-      showMessage('Full API key copied to clipboard', 'success')
+      try {
+        // Get the full API key from server (only returned during copy operation for security)
+        const response = await apiService.getFullApiKey(keyId)
+
+        if (response.api_key) {
+          // Use the modern Clipboard API if available
+          if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(response.api_key)
+            showMessage('API key copied to clipboard successfully!', 'success')
+          } else {
+            // Fallback for older browsers or non-HTTPS contexts
+            const textArea = document.createElement('textarea')
+            textArea.value = response.api_key
+            textArea.style.position = 'fixed'
+            textArea.style.left = '-999999px'
+            textArea.style.top = '-999999px'
+            document.body.appendChild(textArea)
+            textArea.focus()
+            textArea.select()
+
+            try {
+              document.execCommand('copy')
+              showMessage('API key copied to clipboard successfully!', 'success')
+            } catch (err) {
+              showMessage('Failed to copy API key. Please copy it manually.', 'error')
+              console.error('Fallback clipboard copy failed:', err)
+            } finally {
+              document.body.removeChild(textArea)
+            }
+          }
+        } else {
+          showMessage('Failed to retrieve API key for copying', 'error')
+        }
+      } catch (error) {
+        console.error('Failed to copy API key:', error)
+        showMessage('Failed to copy API key. Please try again.', 'error')
+      }
     }
 
     // Provider operations

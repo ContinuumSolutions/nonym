@@ -108,15 +108,30 @@ Visit **http://localhost** to access the modern Vue.js dashboard with Tailwind C
 - Email: `admin@localhost`
 - Password: `admin123`
 
-### 5. Test the Gateway
+### 5. Generate Gateway API Key
+
+**⚠️ IMPORTANT: API Key Authentication Required**
+
+As of the latest version, the Sovereign Privacy Gateway requires API key authentication for all proxy requests to enhance security.
+
+1. **Visit the Dashboard**: Go to http://localhost and log in
+2. **Navigate to Integrations**: Click on "Integrations" in the sidebar
+3. **Generate API Key**:
+   - Go to the "API Keys" tab
+   - Click "Generate Key"
+   - Give it a name (e.g., "Development Key")
+   - Copy the generated API key (starts with `spg_`)
+
+### 6. Test the Gateway
 
 ```bash
-# Health check
+# Health check (no auth required)
 curl http://localhost/health
 
-# Test PII detection with OpenAI
+# Test PII detection with your SPG API key
 curl -X POST http://localhost/v1/chat/completions \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: spg_your_gateway_api_key_here" \
   -H "Authorization: Bearer your-openai-key" \
   -d '{
     "model": "gpt-4",
@@ -128,6 +143,10 @@ curl -X POST http://localhost/v1/chat/completions \
     ]
   }'
 ```
+
+**Note**: You need TWO API keys:
+- **SPG API Key** (`X-API-Key` header) - Authenticates you to the gateway
+- **Provider API Key** (`Authorization` header) - Your OpenAI/Anthropic/etc. key
 
 The gateway will:
 1. Detect the email and SSN
@@ -175,8 +194,13 @@ import openai
 # Before: Direct to OpenAI
 # openai.api_base = "https://api.openai.com/v1"
 
-# After: Through Privacy Gateway
+# After: Through Privacy Gateway (with required SPG API key)
 openai.api_base = "http://localhost/v1"
+
+# IMPORTANT: Add SPG API key to all requests
+openai.default_headers = {
+    "X-API-Key": "spg_your_gateway_api_key_here"
+}
 
 # Use OpenAI SDK normally - PII protection is automatic
 response = openai.ChatCompletion.create(
@@ -393,9 +417,25 @@ This project is licensed under the **Sovereign Privacy Gateway Commercial Licens
 
 For commercial licensing, contact: licensing@sovereignprivacy.com
 
+## Migration to v2.0
+
+**⚠️ Breaking Change: API Key Authentication Required**
+
+If you're upgrading from v1.x, API key authentication is now required for all proxy requests. See our [Migration Guide](docs/MIGRATION.md) for step-by-step instructions.
+
+**Quick Migration:**
+1. Generate SPG API key in dashboard
+2. Add `X-API-Key` header to all requests
+3. Keep your existing AI provider keys
+
+[View detailed migration guide →](docs/MIGRATION.md)
+[View client integration examples →](examples/client-integration.md)
+
 ## Support & Community
 
 - **Documentation**: https://docs.sovereignprivacy.com
+- **Migration Guide**: [docs/MIGRATION.md](docs/MIGRATION.md)
+- **Client Examples**: [examples/client-integration.md](examples/client-integration.md)
 - **Issues**: [GitHub Issues](https://github.com/sovereignprivacy/gateway/issues) for bug reports and feature requests
 - **Discussions**: [GitHub Discussions](https://github.com/sovereignprivacy/gateway/discussions) for questions and community
 - **Security**: security@sovereignprivacy.com for security issues

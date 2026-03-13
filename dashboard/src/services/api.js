@@ -107,6 +107,11 @@ export const apiService = {
     return response.data
   },
 
+  async getFullApiKey(keyId) {
+    const response = await api.get(`/api-keys/${keyId}/full`)
+    return response.data
+  },
+
   // Provider Configuration
   async getProviderConfig() {
     const response = await api.get('/provider-config')

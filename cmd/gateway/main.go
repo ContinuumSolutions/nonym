@@ -206,6 +206,7 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 
 	app.Get("/api/v1/api-keys", authMiddleware, auth.HandleGetAPIKeys)
 	app.Post("/api/v1/api-keys", authMiddleware, auth.HandleCreateAPIKey)
+	app.Get("/api/v1/api-keys/:id/full", authMiddleware, auth.HandleGetFullAPIKey)
 	app.Patch("/api/v1/api-keys/:id/revoke", authMiddleware, auth.HandleRevokeAPIKey)
 	app.Delete("/api/v1/api-keys/:id", authMiddleware, auth.HandleDeleteAPIKey)
 
@@ -544,27 +545,28 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 		})
 	})
 
-	// Main proxy endpoints (for AI providers) - specific patterns to avoid auth conflicts
-	app.All("/v1/chat/*", interceptor.HandleProxy)
-	app.All("/v1/completions", interceptor.HandleProxy)
-	app.All("/v1/embeddings", interceptor.HandleProxy)
-	app.All("/v1/models", interceptor.HandleProxy)
-	app.All("/v1/images/*", interceptor.HandleProxy)
-	app.All("/v1/audio/*", interceptor.HandleProxy)
-	app.All("/v1/files", interceptor.HandleProxy)
-	app.All("/v1/files/*", interceptor.HandleProxy)
-	app.All("/v1/fine-tuning/*", interceptor.HandleProxy)
-	app.All("/v1/assistants", interceptor.HandleProxy)
-	app.All("/v1/assistants/*", interceptor.HandleProxy)
-	app.All("/v1/threads", interceptor.HandleProxy)
-	app.All("/v1/threads/*", interceptor.HandleProxy)
-	app.All("/v1/vector_stores", interceptor.HandleProxy)
-	app.All("/v1/vector_stores/*", interceptor.HandleProxy)
+	// Main proxy endpoints (for AI providers) - NOW REQUIRING API KEY AUTHENTICATION
+	// Apply API key middleware to all proxy routes for security
+	app.All("/v1/chat/*", auth.APIKeyMiddleware, interceptor.HandleProxy)
+	app.All("/v1/completions", auth.APIKeyMiddleware, interceptor.HandleProxy)
+	app.All("/v1/embeddings", auth.APIKeyMiddleware, interceptor.HandleProxy)
+	app.All("/v1/models", auth.APIKeyMiddleware, interceptor.HandleProxy)
+	app.All("/v1/images/*", auth.APIKeyMiddleware, interceptor.HandleProxy)
+	app.All("/v1/audio/*", auth.APIKeyMiddleware, interceptor.HandleProxy)
+	app.All("/v1/files", auth.APIKeyMiddleware, interceptor.HandleProxy)
+	app.All("/v1/files/*", auth.APIKeyMiddleware, interceptor.HandleProxy)
+	app.All("/v1/fine-tuning/*", auth.APIKeyMiddleware, interceptor.HandleProxy)
+	app.All("/v1/assistants", auth.APIKeyMiddleware, interceptor.HandleProxy)
+	app.All("/v1/assistants/*", auth.APIKeyMiddleware, interceptor.HandleProxy)
+	app.All("/v1/threads", auth.APIKeyMiddleware, interceptor.HandleProxy)
+	app.All("/v1/threads/*", auth.APIKeyMiddleware, interceptor.HandleProxy)
+	app.All("/v1/vector_stores", auth.APIKeyMiddleware, interceptor.HandleProxy)
+	app.All("/v1/vector_stores/*", auth.APIKeyMiddleware, interceptor.HandleProxy)
 	// Exclude auth routes - only proxy specific API patterns
-	app.All("/api/chat/*", interceptor.HandleProxy)
-	app.All("/api/completions/*", interceptor.HandleProxy)
-	app.All("/api/models/*", interceptor.HandleProxy)
-	app.All("/api/embeddings/*", interceptor.HandleProxy)
+	app.All("/api/chat/*", auth.APIKeyMiddleware, interceptor.HandleProxy)
+	app.All("/api/completions/*", auth.APIKeyMiddleware, interceptor.HandleProxy)
+	app.All("/api/models/*", auth.APIKeyMiddleware, interceptor.HandleProxy)
+	app.All("/api/embeddings/*", auth.APIKeyMiddleware, interceptor.HandleProxy)
 
 	// Privacy gateway specific routes
 	app.Get("/gateway/status", interceptor.HandleStatus)
