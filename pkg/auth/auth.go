@@ -161,6 +161,34 @@ func runAuthMigrations() error {
 		log.Printf("Migration warning - slug population: %v", err)
 	}
 
+	// Migration 4: Add organization_id column to users if it doesn't exist
+	_, err = db.Exec(`ALTER TABLE users ADD COLUMN organization_id INTEGER NOT NULL DEFAULT 1`)
+	if err != nil && !strings.Contains(err.Error(), "duplicate column name") && !strings.Contains(err.Error(), "already exists") {
+		log.Printf("Migration warning - users organization_id column: %v", err)
+	}
+
+	// Migration 5: Add last_login column to users if it doesn't exist
+	_, err = db.Exec(`ALTER TABLE users ADD COLUMN last_login DATETIME`)
+	if err != nil && !strings.Contains(err.Error(), "duplicate column name") && !strings.Contains(err.Error(), "already exists") {
+		log.Printf("Migration warning - users last_login column: %v", err)
+	}
+
+	// Migration 6: Add missing columns to api_keys table
+	apiKeyMigrations := []string{
+		`ALTER TABLE api_keys ADD COLUMN masked_key TEXT DEFAULT ''`,
+		`ALTER TABLE api_keys ADD COLUMN organization_id INTEGER NOT NULL DEFAULT 1`,
+		`ALTER TABLE api_keys ADD COLUMN expires_at DATETIME`,
+		`ALTER TABLE api_keys ADD COLUMN status TEXT DEFAULT 'active'`,
+		`ALTER TABLE api_keys ADD COLUMN last_used DATETIME`,
+	}
+
+	for _, migration := range apiKeyMigrations {
+		_, err = db.Exec(migration)
+		if err != nil && !strings.Contains(err.Error(), "duplicate column name") && !strings.Contains(err.Error(), "already exists") {
+			log.Printf("Migration warning - api_keys: %v", err)
+		}
+	}
+
 	return nil
 }
 
