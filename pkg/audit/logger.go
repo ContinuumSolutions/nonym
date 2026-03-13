@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -126,6 +127,21 @@ func createTables() error {
 	for _, query := range queries {
 		if _, err := db.Exec(query); err != nil {
 			return fmt.Errorf("failed to execute query %s: %w", query, err)
+		}
+	}
+
+	// Migration: Add organization_id and user_id columns if they don't exist
+	migrationQueries := []string{
+		`ALTER TABLE transactions ADD COLUMN organization_id INTEGER NOT NULL DEFAULT 1`,
+		`ALTER TABLE transactions ADD COLUMN user_id INTEGER DEFAULT 1`,
+	}
+
+	for _, query := range migrationQueries {
+		if _, err := db.Exec(query); err != nil {
+			// Ignore "duplicate column name" errors - this means the column already exists
+			if !strings.Contains(err.Error(), "duplicate column name") {
+				log.Printf("Migration warning: %s: %v", query, err)
+			}
 		}
 	}
 
