@@ -40,7 +40,7 @@ func HandleRegister(c *fiber.Ctx) error {
 	req.Name = fullName
 
 	// Register user
-	user, err := RegisterUser(&req)
+	user, organization, err := RegisterUser(&req)
 	if err != nil {
 		return c.Status(400).JSON(fiber.Map{
 			"error": err.Error(),
@@ -49,17 +49,20 @@ func HandleRegister(c *fiber.Ctx) error {
 
 	// Convert to profile (remove sensitive data)
 	profile := &UserProfile{
-		ID:        user.ID,
-		Email:     user.Email,
-		Name:      user.Name,
-		Role:      user.Role,
-		Active:    user.Active,
-		CreatedAt: user.CreatedAt,
+		ID:             user.ID,
+		Email:          user.Email,
+		Name:           user.Name,
+		Role:           user.Role,
+		OrganizationID: user.OrganizationID,
+		Active:         user.Active,
+		CreatedAt:      user.CreatedAt,
+		Organization:   organization,
 	}
 
 	return c.Status(201).JSON(fiber.Map{
-		"message": "User registered successfully",
-		"user":    profile,
+		"message":      "User registered successfully",
+		"user":         profile,
+		"organization": organization,
 	})
 }
 
@@ -93,20 +96,23 @@ func HandleLogin(c *fiber.Ctx) error {
 
 	// Convert user to profile
 	profile := &UserProfile{
-		ID:        response.User.ID,
-		Email:     response.User.Email,
-		Name:      response.User.Name,
-		Role:      response.User.Role,
-		Active:    response.User.Active,
-		CreatedAt: response.User.CreatedAt,
-		LastLogin: response.User.LastLogin,
+		ID:             response.User.ID,
+		Email:          response.User.Email,
+		Name:           response.User.Name,
+		Role:           response.User.Role,
+		OrganizationID: response.User.OrganizationID,
+		Active:         response.User.Active,
+		CreatedAt:      response.User.CreatedAt,
+		LastLogin:      response.User.LastLogin,
+		Organization:   response.Organization,
 	}
 
 	return c.JSON(fiber.Map{
-		"message":    "Login successful",
-		"token":      response.Token,
-		"expires_at": response.ExpiresAt,
-		"user":       profile,
+		"message":      "Login successful",
+		"token":        response.Token,
+		"expires_at":   response.ExpiresAt,
+		"user":         profile,
+		"organization": response.Organization,
 	})
 }
 
@@ -188,8 +194,9 @@ func AuthMiddleware(c *fiber.Ctx) error {
 		})
 	}
 
-	// Store user in context for use in handlers
+	// Store user and organization context for use in handlers
 	c.Locals("user", user)
+	c.Locals("organization_id", user.OrganizationID)
 
 	return c.Next()
 }

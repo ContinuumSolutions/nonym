@@ -25,6 +25,8 @@ type Transaction struct {
 	ClientIP         string                `json:"client_ip" db:"client_ip"`
 	UserAgent        string                `json:"user_agent" db:"user_agent"`
 	ErrorMessage     string                `json:"error_message,omitempty" db:"error_message"`
+	OrganizationID   int                   `json:"organization_id" db:"organization_id"`
+	UserID           int                   `json:"user_id,omitempty" db:"user_id"`
 }
 
 // Statistics represents aggregated statistics
@@ -105,11 +107,15 @@ func createTables() error {
 			redaction_details TEXT DEFAULT '[]',
 			client_ip TEXT DEFAULT '',
 			user_agent TEXT DEFAULT '',
-			error_message TEXT DEFAULT ''
+			error_message TEXT DEFAULT '',
+			organization_id INTEGER NOT NULL,
+			user_id INTEGER
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_transactions_timestamp ON transactions(timestamp)`,
 		`CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status)`,
 		`CREATE INDEX IF NOT EXISTS idx_transactions_provider ON transactions(provider)`,
+		`CREATE INDEX IF NOT EXISTS idx_transactions_organization ON transactions(organization_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_transactions_user ON transactions(user_id)`,
 		`CREATE TABLE IF NOT EXISTS settings (
 			key TEXT PRIMARY KEY,
 			value TEXT NOT NULL,
@@ -126,8 +132,8 @@ func createTables() error {
 	return nil
 }
 
-// LogTransaction records a transaction in the audit log
-func LogTransaction(id, status, provider string, statusCode int, redactionDetails []ner.RedactionDetail) {
+// LogTransaction records a transaction in the audit log with organization context
+func LogTransaction(id, status, provider string, statusCode int, redactionDetails []ner.RedactionDetail, organizationID, userID int) {
 	if db == nil {
 		log.Printf("Warning: Database not initialized, skipping transaction log")
 		return
@@ -136,10 +142,10 @@ func LogTransaction(id, status, provider string, statusCode int, redactionDetail
 	redactionJSON, _ := json.Marshal(redactionDetails)
 
 	query := `INSERT INTO transactions (
-		id, status, provider, status_code, redaction_count, redaction_details
-	) VALUES (?, ?, ?, ?, ?, ?)`
+		id, status, provider, status_code, redaction_count, redaction_details, organization_id, user_id
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 
-	_, err := db.Exec(query, id, status, provider, statusCode, len(redactionDetails), string(redactionJSON))
+	_, err := db.Exec(query, id, status, provider, statusCode, len(redactionDetails), string(redactionJSON), organizationID, userID)
 	if err != nil {
 		log.Printf("Failed to log transaction: %v", err)
 	}
@@ -153,20 +159,22 @@ func LogTransaction(id, status, provider string, statusCode int, redactionDetail
 		StatusCode:       statusCode,
 		RedactionCount:   len(redactionDetails),
 		RedactionDetails: redactionDetails,
+		OrganizationID:   organizationID,
+		UserID:           userID,
 	})
 }
 
-// GetTransactions retrieves transactions with pagination
-func GetTransactions(limit, offset int) ([]Transaction, error) {
+// GetTransactions retrieves transactions with pagination, scoped to organization
+func GetTransactions(limit, offset int, organizationID int) ([]Transaction, error) {
 	if db == nil {
 		return nil, fmt.Errorf("database not initialized")
 	}
 
 	query := `SELECT id, timestamp, status, provider, status_code, processing_time,
-			  redaction_count, redaction_details, client_ip, user_agent, error_message
-			  FROM transactions ORDER BY timestamp DESC LIMIT ? OFFSET ?`
+			  redaction_count, redaction_details, client_ip, user_agent, error_message, organization_id, user_id
+			  FROM transactions WHERE organization_id = ? ORDER BY timestamp DESC LIMIT ? OFFSET ?`
 
-	rows, err := db.Query(query, limit, offset)
+	rows, err := db.Query(query, organizationID, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query transactions: %w", err)
 	}
@@ -179,7 +187,7 @@ func GetTransactions(limit, offset int) ([]Transaction, error) {
 
 		err := rows.Scan(&t.ID, &t.Timestamp, &t.Status, &t.Provider, &t.StatusCode,
 			&t.ProcessingTime, &t.RedactionCount, &redactionDetailsJSON,
-			&t.ClientIP, &t.UserAgent, &t.ErrorMessage)
+			&t.ClientIP, &t.UserAgent, &t.ErrorMessage, &t.OrganizationID, &t.UserID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan transaction: %w", err)
 		}
@@ -192,8 +200,8 @@ func GetTransactions(limit, offset int) ([]Transaction, error) {
 	return transactions, nil
 }
 
-// GetStatistics calculates and returns system statistics
-func GetStatistics() (*Statistics, error) {
+// GetStatistics calculates and returns system statistics for an organization
+func GetStatistics(organizationID int) (*Statistics, error) {
 	if db == nil {
 		return nil, fmt.Errorf("database not initialized")
 	}
@@ -201,25 +209,25 @@ func GetStatistics() (*Statistics, error) {
 	stats := &Statistics{}
 
 	// Total requests
-	err := db.QueryRow("SELECT COUNT(*) FROM transactions").Scan(&stats.TotalRequests)
+	err := db.QueryRow("SELECT COUNT(*) FROM transactions WHERE organization_id = ?", organizationID).Scan(&stats.TotalRequests)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get total requests: %w", err)
 	}
 
 	// Successful requests
-	err = db.QueryRow("SELECT COUNT(*) FROM transactions WHERE status = 'success'").Scan(&stats.SuccessfulRequests)
+	err = db.QueryRow("SELECT COUNT(*) FROM transactions WHERE status = 'success' AND organization_id = ?", organizationID).Scan(&stats.SuccessfulRequests)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get successful requests: %w", err)
 	}
 
 	// Blocked requests
-	err = db.QueryRow("SELECT COUNT(*) FROM transactions WHERE status = 'blocked'").Scan(&stats.BlockedRequests)
+	err = db.QueryRow("SELECT COUNT(*) FROM transactions WHERE status = 'blocked' AND organization_id = ?", organizationID).Scan(&stats.BlockedRequests)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get blocked requests: %w", err)
 	}
 
 	// Redacted requests
-	err = db.QueryRow("SELECT COUNT(*) FROM transactions WHERE redaction_count > 0").Scan(&stats.RedactedRequests)
+	err = db.QueryRow("SELECT COUNT(*) FROM transactions WHERE redaction_count > 0 AND organization_id = ?", organizationID).Scan(&stats.RedactedRequests)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get redacted requests: %w", err)
 	}
@@ -230,16 +238,16 @@ func GetStatistics() (*Statistics, error) {
 	}
 
 	// Average processing time
-	err = db.QueryRow("SELECT AVG(processing_time) FROM transactions WHERE processing_time > 0").Scan(&stats.AvgProcessingTime)
+	err = db.QueryRow("SELECT AVG(processing_time) FROM transactions WHERE processing_time > 0 AND organization_id = ?", organizationID).Scan(&stats.AvgProcessingTime)
 	if err != nil {
 		stats.AvgProcessingTime = 0
 	}
 
 	// Top providers
 	providerRows, err := db.Query(`SELECT provider, COUNT(*) as requests
-									FROM transactions
+									FROM transactions WHERE organization_id = ?
 									GROUP BY provider
-									ORDER BY requests DESC LIMIT 5`)
+									ORDER BY requests DESC LIMIT 5`, organizationID)
 	if err == nil {
 		defer providerRows.Close()
 		for providerRows.Next() {
@@ -257,9 +265,9 @@ func GetStatistics() (*Statistics, error) {
 		datetime(timestamp, 'start of hour') as hour,
 		COUNT(*) as count
 		FROM transactions
-		WHERE timestamp >= datetime('now', '-24 hours')
+		WHERE timestamp >= datetime('now', '-24 hours') AND organization_id = ?
 		GROUP BY hour
-		ORDER BY hour DESC`)
+		ORDER BY hour DESC`, organizationID)
 	if err == nil {
 		defer activityRows.Close()
 		for activityRows.Next() {
@@ -276,8 +284,16 @@ func GetStatistics() (*Statistics, error) {
 
 // HTTP Handlers
 
-// HandleGetTransactions handles GET /api/transactions
+// HandleGetTransactions handles GET /api/transactions with organization context
 func HandleGetTransactions(c *fiber.Ctx) error {
+	// Extract organization ID from context (set by middleware)
+	organizationID, ok := c.Locals("organization_id").(int)
+	if !ok {
+		return c.Status(401).JSON(fiber.Map{
+			"error": "Authentication required",
+		})
+	}
+
 	limit := c.QueryInt("limit", 50)
 	offset := c.QueryInt("offset", 0)
 
@@ -285,7 +301,7 @@ func HandleGetTransactions(c *fiber.Ctx) error {
 		limit = 200
 	}
 
-	transactions, err := GetTransactions(limit, offset)
+	transactions, err := GetTransactions(limit, offset, organizationID)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"error": "Failed to fetch transactions",
@@ -299,9 +315,17 @@ func HandleGetTransactions(c *fiber.Ctx) error {
 	})
 }
 
-// HandleGetStatistics handles GET /api/statistics
+// HandleGetStatistics handles GET /api/statistics with organization context
 func HandleGetStatistics(c *fiber.Ctx) error {
-	stats, err := GetStatistics()
+	// Extract organization ID from context (set by middleware)
+	organizationID, ok := c.Locals("organization_id").(int)
+	if !ok {
+		return c.Status(401).JSON(fiber.Map{
+			"error": "Authentication required",
+		})
+	}
+
+	stats, err := GetStatistics(organizationID)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"error": "Failed to fetch statistics",
