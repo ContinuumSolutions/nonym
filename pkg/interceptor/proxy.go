@@ -51,6 +51,18 @@ var (
 func HandleProxy(c *fiber.Ctx) error {
 	startTime := time.Now()
 
+	// Extract organization and user context for audit logging
+	organizationID, _ := c.Locals("organization_id").(int)
+	userID, _ := c.Locals("user_id").(int)
+
+	// Default values if context not available (e.g., for anonymous access)
+	if organizationID == 0 {
+		organizationID = 1 // Default organization
+	}
+	if userID == 0 {
+		userID = 1 // Default user
+	}
+
 	// Generate unique request ID
 	requestID := uuid.New().String()
 
@@ -80,7 +92,7 @@ func HandleProxy(c *fiber.Ctx) error {
 	// Apply NER analysis and anonymization
 	processedBody, redactionDetails, err := ner.ProcessContent(request.Body)
 	if err != nil {
-		audit.LogTransaction(requestID, "error", fmt.Sprintf("NER processing failed: %v", err), 0, nil)
+		audit.LogTransaction(requestID, "error", fmt.Sprintf("NER processing failed: %v", err), 0, nil, organizationID, userID)
 		return c.Status(500).JSON(fiber.Map{
 			"error": "Content processing failed",
 		})
@@ -89,7 +101,7 @@ func HandleProxy(c *fiber.Ctx) error {
 	// Check if content should be blocked (strict mode)
 	if ner.ShouldBlock(redactionDetails) {
 		blockedRequests++
-		audit.LogTransaction(requestID, "blocked", "Content blocked due to sensitive data", 0, redactionDetails)
+		audit.LogTransaction(requestID, "blocked", "Content blocked due to sensitive data", 0, redactionDetails, organizationID, userID)
 		return c.Status(403).JSON(fiber.Map{
 			"error": "Request blocked due to sensitive content",
 			"policy": "strict_mode",
@@ -102,7 +114,7 @@ func HandleProxy(c *fiber.Ctx) error {
 	// Forward request to target provider
 	resp, err := forwardRequest(modifiedRequest)
 	if err != nil {
-		audit.LogTransaction(requestID, "error", fmt.Sprintf("Upstream request failed: %v", err), 0, redactionDetails)
+		audit.LogTransaction(requestID, "error", fmt.Sprintf("Upstream request failed: %v", err), 0, redactionDetails, organizationID, userID)
 		return c.Status(502).JSON(fiber.Map{
 			"error": "Upstream service unavailable",
 		})
@@ -142,7 +154,7 @@ func HandleProxy(c *fiber.Ctx) error {
 	}
 
 	// Log transaction
-	audit.LogTransaction(requestID, "success", provider, resp.StatusCode, redactionDetails)
+	audit.LogTransaction(requestID, "success", provider, resp.StatusCode, redactionDetails, organizationID, userID)
 
 	// Copy response headers
 	for key, value := range proxyResponse.Headers {

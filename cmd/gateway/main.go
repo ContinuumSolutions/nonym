@@ -217,8 +217,16 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 
 	// Critical missing endpoints - inline implementations
 	app.Get("/api/v1/statistics", authMiddleware, func(c *fiber.Ctx) error {
+		// Extract organization ID from context (set by middleware)
+		organizationID, ok := c.Locals("organization_id").(int)
+		if !ok {
+			return c.Status(401).JSON(fiber.Map{
+				"error": "Organization context required",
+			})
+		}
+
 		// Get real statistics from audit system
-		stats, err := audit.GetStatistics()
+		stats, err := audit.GetStatistics(organizationID)
 		if err != nil {
 			// Return zeros if no data available
 			return c.JSON(fiber.Map{
@@ -348,8 +356,16 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 	})
 
 	app.Get("/api/v1/protection-events", authMiddleware, func(c *fiber.Ctx) error {
+		// Extract organization ID from context (set by middleware)
+		organizationID, ok := c.Locals("organization_id").(int)
+		if !ok {
+			return c.Status(401).JSON(fiber.Map{
+				"error": "Organization context required",
+			})
+		}
+
 		// Convert transactions to protection events format
-		transactions, err := audit.GetTransactions(50, 0) // Get recent transactions
+		transactions, err := audit.GetTransactions(50, 0, organizationID) // Get recent transactions
 		if err != nil {
 				return c.JSON(fiber.Map{
 				"events": []fiber.Map{},
@@ -439,7 +455,7 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 		}
 
 		// Get total count
-		stats, _ := audit.GetStatistics()
+		stats, _ := audit.GetStatistics(organizationID)
 		totalCount := int64(len(events))
 		if stats != nil {
 			totalCount = stats.TotalRequests
@@ -452,8 +468,16 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 	})
 
 	app.Get("/api/v1/protection-stats", authMiddleware, func(c *fiber.Ctx) error {
+		// Extract organization ID from context (set by middleware)
+		organizationID, ok := c.Locals("organization_id").(int)
+		if !ok {
+			return c.Status(401).JSON(fiber.Map{
+				"error": "Organization context required",
+			})
+		}
+
 		// Calculate real protection statistics from transactions
-		transactions, err := audit.GetTransactions(100, 0) // Get more transactions for better stats
+		transactions, err := audit.GetTransactions(100, 0, organizationID) // Get more transactions for better stats
 		if err != nil {
 			return c.JSON(fiber.Map{
 				"protectedToday":  0,
@@ -522,8 +546,16 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 
 	// Transactions endpoint for dashboard
 	app.Get("/api/v1/transactions", authMiddleware, func(c *fiber.Ctx) error {
+		// Extract organization ID from context (set by middleware)
+		organizationID, ok := c.Locals("organization_id").(int)
+		if !ok {
+			return c.Status(401).JSON(fiber.Map{
+				"error": "Organization context required",
+			})
+		}
+
 		// Get real transactions from audit system
-		transactions, err := audit.GetTransactions(10, 0) // Get last 10 transactions
+		transactions, err := audit.GetTransactions(10, 0, organizationID) // Get last 10 transactions
 		if err != nil {
 			// Return empty list if no data available
 			return c.JSON(fiber.Map{
@@ -533,7 +565,7 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 		}
 
 		// Get total count
-		stats, _ := audit.GetStatistics()
+		stats, _ := audit.GetStatistics(organizationID)
 		totalCount := int64(0)
 		if stats != nil {
 			totalCount = stats.TotalRequests
