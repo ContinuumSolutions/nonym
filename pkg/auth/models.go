@@ -6,26 +6,26 @@ import (
 
 // Organization represents an organization in the system
 type Organization struct {
-	ID          int       `json:"id" db:"id"`
+	ID          string    `json:"id" db:"id"`
 	Name        string    `json:"name" db:"name"`
 	Slug        string    `json:"slug" db:"slug"`
 	Industry    string    `json:"industry" db:"industry"`
 	Size        string    `json:"size" db:"size"`
 	Country     string    `json:"country" db:"country"`
 	Description string    `json:"description" db:"description"`
-	OwnerID     int       `json:"owner_id" db:"owner_id"`
+	OwnerID     string    `json:"owner_id" db:"owner_id"`
 	CreatedAt   time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // User represents a user in the system
 type User struct {
-	ID             int        `json:"id" db:"id"`
+	ID             string     `json:"id" db:"id"`
 	Email          string     `json:"email" db:"email"`
 	Password       string     `json:"-" db:"password"` // Never include in JSON responses
 	Name           string     `json:"name" db:"name"`
 	Role           string     `json:"role" db:"role"`
-	OrganizationID int        `json:"organization_id" db:"organization_id"`
+	OrganizationID string     `json:"organization_id" db:"organization_id"`
 	Active         bool       `json:"active" db:"active"`
 	CreatedAt      time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at" db:"updated_at"`
@@ -37,8 +37,8 @@ type User struct {
 // UserSession represents an active user session
 type UserSession struct {
 	ID             string    `json:"id" db:"id"`
-	UserID         int       `json:"user_id" db:"user_id"`
-	OrganizationID int       `json:"organization_id" db:"organization_id"`
+	UserID         string    `json:"user_id" db:"user_id"`
+	OrganizationID string    `json:"organization_id" db:"organization_id"`
 	Token          string    `json:"-" db:"token"` // JWT token hash
 	ExpiresAt      time.Time `json:"expires_at" db:"expires_at"`
 	CreatedAt      time.Time `json:"created_at" db:"created_at"`
@@ -55,7 +55,7 @@ type RegisterRequest struct {
 	LastName     string `json:"lastName,omitempty"`
 	Organization string `json:"organization,omitempty"`
 	// For existing organization registration
-	OrganizationID *int    `json:"organization_id,omitempty"`
+	OrganizationID *string `json:"organization_id,omitempty"`
 	InviteCode     *string `json:"invite_code,omitempty"`
 }
 
@@ -63,7 +63,7 @@ type RegisterRequest struct {
 type LoginRequest struct {
 	Email          string `json:"email" validate:"required,email"`
 	Password       string `json:"password" validate:"required"`
-	OrganizationID *int   `json:"organization_id,omitempty"` // Optional organization selection
+	OrganizationID *string `json:"organization_id,omitempty"` // Optional organization selection
 }
 
 // LoginResponse represents a successful login response
@@ -76,11 +76,11 @@ type LoginResponse struct {
 
 // UserProfile represents a user profile (subset of User for responses)
 type UserProfile struct {
-	ID             int           `json:"id"`
+	ID             string        `json:"id"`
 	Email          string        `json:"email"`
 	Name           string        `json:"name"`
 	Role           string        `json:"role"`
-	OrganizationID int           `json:"organization_id"`
+	OrganizationID string        `json:"organization_id"`
 	Active         bool          `json:"active"`
 	CreatedAt      time.Time     `json:"created_at"`
 	LastLogin      *time.Time    `json:"last_login,omitempty"`
@@ -107,7 +107,7 @@ type OrganizationUpdateRequest struct {
 
 // TeamMember represents a team member with organization context
 type TeamMember struct {
-	ID         int        `json:"id"`
+	ID         string     `json:"id"`
 	Name       string     `json:"name"`
 	Email      string     `json:"email"`
 	Role       string     `json:"role"`

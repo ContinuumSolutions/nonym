@@ -4,13 +4,13 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"fmt"
-	"hash/fnv"
 	"log"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 	_ "github.com/lib/pq"
 	_ "modernc.org/sqlite"
@@ -248,7 +248,7 @@ func createDefaultUser() error {
 // Organization management functions
 
 // CreateOrganization creates a new organization
-func CreateOrganization(req *OrganizationCreateRequest, ownerID int) (*Organization, error) {
+func CreateOrganization(req *OrganizationCreateRequest, ownerID string) (*Organization, error) {
 	if db == nil {
 		return nil, fmt.Errorf("database not initialized")
 	}
@@ -283,24 +283,22 @@ func CreateOrganization(req *OrganizationCreateRequest, ownerID int) (*Organizat
 		// PostgreSQL uses UUID
 		query := formatQuery(`INSERT INTO organizations (name, slug, description)
 				  VALUES (?, ?, ?) RETURNING id, created_at, updated_at`)
-		var uuidStr string
-		err := db.QueryRow(query, req.Name, slug, req.Description).
-			Scan(&uuidStr, &org.CreatedAt, &org.UpdatedAt)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create organization: %w", err)
-		}
-
-		// Convert UUID to a consistent integer for API compatibility
-		org.ID = hashUUIDToInt(uuidStr)
-	} else {
-		// SQLite uses INTEGER AUTOINCREMENT
-		query := formatQuery(`INSERT INTO organizations (name, slug, description)
-				  VALUES (?, ?, ?) RETURNING id, created_at, updated_at`)
 		err := db.QueryRow(query, req.Name, slug, req.Description).
 			Scan(&org.ID, &org.CreatedAt, &org.UpdatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create organization: %w", err)
 		}
+	} else {
+		// SQLite uses INTEGER AUTOINCREMENT - generate UUID for consistency
+		newUUID := uuid.New().String()
+		query := formatQuery(`INSERT INTO organizations (id, name, slug, description)
+				  VALUES (?, ?, ?, ?) RETURNING created_at, updated_at`)
+		err := db.QueryRow(query, newUUID, req.Name, slug, req.Description).
+			Scan(&org.CreatedAt, &org.UpdatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create organization: %w", err)
+		}
+		org.ID = newUUID
 	}
 
 	org.Name = req.Name
@@ -316,49 +314,30 @@ func CreateOrganization(req *OrganizationCreateRequest, ownerID int) (*Organizat
 }
 
 // GetOrganization retrieves an organization by ID
-func GetOrganization(orgID int) (*Organization, error) {
+func GetOrganization(orgID string) (*Organization, error) {
 	if db == nil {
 		return nil, fmt.Errorf("database not initialized")
 	}
 
 	org := &Organization{}
 
-	if isPostgreSQL() {
-		// For PostgreSQL, we need to reverse the UUID hash to get the original UUID
-		// This is a limitation - we'll need to store a mapping or change approach
-		// For now, let's query by the organization table directly
-		query := `SELECT id, name, slug, '' as industry, '' as size, '' as country, description, 0 as owner_id, created_at, updated_at
-				  FROM organizations ORDER BY created_at LIMIT 1`
+	query := formatQuery(`SELECT id, name, slug, '' as industry, '' as size, '' as country, description, '' as owner_id, created_at, updated_at
+			  FROM organizations WHERE id = ?`)
 
-		var uuidStr string
-		err := db.QueryRow(query).Scan(
-			&uuidStr, &org.Name, &org.Slug, &org.Industry, &org.Size,
-			&org.Country, &org.Description, &org.OwnerID, &org.CreatedAt, &org.UpdatedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("organization not found: %w", err)
-		}
-		org.ID = hashUUIDToInt(uuidStr)
-	} else {
-		// SQLite
-		query := formatQuery(`SELECT id, name, slug, '' as industry, '' as size, '' as country, description, 0 as owner_id, created_at, updated_at
-				  FROM organizations WHERE id = ?`)
+	err := db.QueryRow(query, orgID).Scan(
+		&org.ID, &org.Name, &org.Slug, &org.Industry, &org.Size,
+		&org.Country, &org.Description, &org.OwnerID, &org.CreatedAt, &org.UpdatedAt,
+	)
 
-		err := db.QueryRow(query, orgID).Scan(
-			&org.ID, &org.Name, &org.Slug, &org.Industry, &org.Size,
-			&org.Country, &org.Description, &org.OwnerID, &org.CreatedAt, &org.UpdatedAt,
-		)
-
-		if err != nil {
-			return nil, fmt.Errorf("organization not found: %w", err)
-		}
+	if err != nil {
+		return nil, fmt.Errorf("organization not found: %w", err)
 	}
 
 	return org, nil
 }
 
 // UpdateOrganization updates an organization
-func UpdateOrganization(orgID int, req *OrganizationUpdateRequest) (*Organization, error) {
+func UpdateOrganization(orgID string, req *OrganizationUpdateRequest) (*Organization, error) {
 	if db == nil {
 		return nil, fmt.Errorf("database not initialized")
 	}
@@ -430,12 +409,6 @@ func generateSlug(name string) string {
 	return slug
 }
 
-// hashUUIDToInt converts a UUID string to a consistent integer for API compatibility
-func hashUUIDToInt(uuidStr string) int {
-	h := fnv.New32a()
-	h.Write([]byte(uuidStr))
-	return int(h.Sum32())
-}
 
 // formatQuery converts SQLite ? placeholders to PostgreSQL $1, $2, etc when needed
 func formatQuery(query string) string {
@@ -489,7 +462,7 @@ func RegisterUser(req *RegisterRequest) (*User, *Organization, error) {
 	}
 
 	var organization *Organization
-	var organizationID int
+	var organizationID string
 
 	// Handle organization logic
 	if req.OrganizationID != nil {
@@ -523,7 +496,7 @@ func RegisterUser(req *RegisterRequest) (*User, *Organization, error) {
 		}
 
 		// We need to create a temporary organization first, then update owner_id
-		tempOrg, err := CreateOrganization(orgReq, 0)
+		tempOrg, err := CreateOrganization(orgReq, "")
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create organization: %w", err)
 		}
@@ -660,18 +633,16 @@ func ValidateToken(tokenString string) (*User, error) {
 	}
 
 	// Get user ID
-	userIDFloat, ok := claims["user_id"].(float64)
+	userID, ok := claims["user_id"].(string)
 	if !ok {
 		return nil, fmt.Errorf("invalid user ID in token")
 	}
-	userID := int(userIDFloat)
 
 	// Get organization ID
-	orgIDFloat, ok := claims["organization_id"].(float64)
+	organizationID, ok := claims["organization_id"].(string)
 	if !ok {
 		return nil, fmt.Errorf("invalid organization ID in token")
 	}
-	organizationID := int(orgIDFloat)
 
 	// Get user with organization context
 	user, err := getUserByID(userID)
@@ -761,7 +732,7 @@ func getUserByEmail(email string) (*User, error) {
 	return user, nil
 }
 
-func getUserByID(id int) (*User, error) {
+func getUserByID(id string) (*User, error) {
 	user := &User{}
 	query := `SELECT id, email, password_hash, COALESCE(first_name || ' ' || last_name, first_name, last_name, '') as name, role, organization_id, is_active, created_at, updated_at, last_login
 			  FROM users WHERE id = $1 AND is_active = true`
@@ -784,7 +755,7 @@ func getUserByID(id int) (*User, error) {
 }
 
 // GetUserProfile returns a user profile without sensitive information
-func GetUserProfile(userID int) (*UserProfile, error) {
+func GetUserProfile(userID string) (*UserProfile, error) {
 	user, err := getUserByID(userID)
 	if err != nil {
 		return nil, err
