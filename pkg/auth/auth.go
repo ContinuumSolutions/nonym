@@ -223,10 +223,19 @@ func createDefaultUser() error {
 		return err
 	}
 
-	query := formatQuery(`INSERT INTO users (email, password, name, role, active)
-			  VALUES (?, ?, ?, ?, ?)`)
-
-	_, err = db.Exec(query, "admin@gateway.local", hashedPassword, "Administrator", "admin", true)
+	// Handle different column names for SQLite vs PostgreSQL
+	if isPostgreSQL() {
+		// PostgreSQL schema uses password_hash, is_active, and requires first_name/last_name
+		// Also need organization_id - use default org from schema
+		query := formatQuery(`INSERT INTO users (organization_id, email, password_hash, first_name, last_name, role, is_active)
+				  VALUES (?, ?, ?, ?, ?, ?, ?)`)
+		_, err = db.Exec(query, "00000000-0000-0000-0000-000000000001", "admin@gateway.local", hashedPassword, "Administrator", "", "admin", true)
+	} else {
+		// SQLite schema uses password, active
+		query := formatQuery(`INSERT INTO users (email, password, name, role, active)
+				  VALUES (?, ?, ?, ?, ?)`)
+		_, err = db.Exec(query, "admin@gateway.local", hashedPassword, "Administrator", "admin", true)
+	}
 	if err != nil {
 		return err
 	}
@@ -448,6 +457,7 @@ func formatQuery(query string) string {
 	return result
 }
 
+
 // RegisterUser creates a new user account with organization context
 func RegisterUser(req *RegisterRequest) (*User, *Organization, error) {
 	if db == nil {
@@ -527,10 +537,8 @@ func RegisterUser(req *RegisterRequest) (*User, *Organization, error) {
 		userRole = "admin"
 	}
 
-	// Insert user
-	insertQuery := formatQuery(`INSERT INTO users (email, password, name, role, organization_id, active)
-			  VALUES (?, ?, ?, ?, ?, ?) RETURNING id, created_at, updated_at`)
-
+	// Insert user - handle different column names for SQLite vs PostgreSQL
+	var insertQuery string
 	var user User
 	user.Email = req.Email
 	user.Name = req.Name
@@ -538,8 +546,21 @@ func RegisterUser(req *RegisterRequest) (*User, *Organization, error) {
 	user.OrganizationID = organizationID
 	user.Active = true
 
-	err = db.QueryRow(insertQuery, req.Email, hashedPassword, req.Name, userRole, organizationID, true).
-		Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
+	if isPostgreSQL() {
+		// PostgreSQL schema uses password_hash, is_active, and requires first_name/last_name
+		firstName, lastName := splitName(req.Name)
+		insertQuery = formatQuery(`INSERT INTO users (organization_id, email, password_hash, first_name, last_name, role, is_active)
+				  VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id, created_at, updated_at`)
+		err = db.QueryRow(insertQuery, organizationID, req.Email, hashedPassword, firstName, lastName, userRole, true).
+			Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
+	} else {
+		// SQLite schema uses password, active
+		insertQuery = formatQuery(`INSERT INTO users (email, password, name, role, organization_id, active)
+				  VALUES (?, ?, ?, ?, ?, ?) RETURNING id, created_at, updated_at`)
+		err = db.QueryRow(insertQuery, req.Email, hashedPassword, req.Name, userRole, organizationID, true).
+			Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
+	}
+
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create user: %w", err)
 	}
