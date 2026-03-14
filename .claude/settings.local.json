@@ -85,7 +85,8 @@
       "Bash(chmod +x /workspaces/EK-1/scripts/fix-auth-schema.sh && ./scripts/fix-auth-schema.sh)",
       "Bash(chmod +x /workspaces/EK-1/scripts/debug-login.sh && ./scripts/debug-login.sh)",
       "Bash(cd /workspaces/EK-1 && chmod +x scripts/debug-login.sh && ./scripts/debug-login.sh)",
-      "Bash(GATEWAY_TARGET=production docker compose up -d gateway --build)"
+      "Bash(GATEWAY_TARGET=production docker compose up -d gateway --build)",
+      "Bash(lsof -ti:8081 | xargs kill -9 2>/dev/null || true)"
     ]
   }
 }

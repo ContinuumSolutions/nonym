@@ -3,7 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import Dashboard from './views/Dashboard.vue'
-import Login from './views/Login.vue'
+import LoginNew from './views/LoginNew.vue'
 import ProtectedEvents from './views/ProtectedEvents.vue'
 import Integrations from './views/Integrations.vue'
 import Account from './views/Account.vue'
@@ -17,8 +17,8 @@ const routes = [
   { path: '/integrations', component: Integrations, meta: { requiresAuth: true } },
   { path: '/account', component: Account, meta: { requiresAuth: true } },
   { path: '/documentation', component: Documentation, meta: { requiresAuth: true } },
-  { path: '/login', component: Login },
-  { path: '/signup', component: Login, props: { mode: 'signup' } }
+  { path: '/login', component: LoginNew },
+  { path: '/signup', component: LoginNew, props: { mode: 'signup' } }
 ]
 
 const router = createRouter({
