@@ -1,10 +1,11 @@
--- Sovereign Privacy Gateway Authentication Schema (Fixed)
--- This script initializes the authentication and organization system
+#!/bin/bash
+set -e
 
--- Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+echo "🔧 Fixing Authentication Schema Compatibility..."
 
--- Drop existing tables if they exist (for clean setup)
+# Drop and recreate tables with integer IDs to match the auth system expectations
+docker compose exec postgres psql -U gateway -d gateway << 'EOF'
+-- Drop existing tables in correct order
 DROP TABLE IF EXISTS audit_logs CASCADE;
 DROP TABLE IF EXISTS transactions CASCADE;
 DROP TABLE IF EXISTS api_keys CASCADE;
@@ -12,9 +13,9 @@ DROP TABLE IF EXISTS user_sessions CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS organizations CASCADE;
 
--- Organizations table
+-- Create organizations table with integer ID
 CREATE TABLE organizations (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL UNIQUE,
     slug VARCHAR(100) NOT NULL UNIQUE,
     description TEXT,
@@ -23,10 +24,10 @@ CREATE TABLE organizations (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Users table
+-- Create users table with integer IDs
 CREATE TABLE users (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    id SERIAL PRIMARY KEY,
+    organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     email VARCHAR(255) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     first_name VARCHAR(100),
@@ -41,21 +42,21 @@ CREATE TABLE users (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Sessions table for managing user sessions
+-- Create user_sessions table
 CREATE TABLE user_sessions (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     session_token VARCHAR(255) NOT NULL UNIQUE,
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     last_accessed TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- API Keys table for programmatic access
+-- Create api_keys table
 CREATE TABLE api_keys (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    id SERIAL PRIMARY KEY,
+    organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     key_hash VARCHAR(255) NOT NULL UNIQUE,
     permissions JSONB DEFAULT '{}',
@@ -65,11 +66,11 @@ CREATE TABLE api_keys (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Transactions table (enhanced with organization isolation)
+-- Create transactions table
 CREATE TABLE transactions (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    id SERIAL PRIMARY KEY,
+    organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     request_id VARCHAR(255),
     method VARCHAR(10) NOT NULL,
     path TEXT NOT NULL,
@@ -86,11 +87,11 @@ CREATE TABLE transactions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Audit log table
+-- Create audit_logs table
 CREATE TABLE audit_logs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
-    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    id SERIAL PRIMARY KEY,
+    organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     action VARCHAR(100) NOT NULL,
     resource_type VARCHAR(100),
     resource_id VARCHAR(255),
@@ -100,7 +101,7 @@ CREATE TABLE audit_logs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Indexes for performance
+-- Create indexes for performance
 CREATE INDEX idx_users_organization_id ON users(organization_id);
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_role ON users(role);
@@ -120,41 +121,14 @@ CREATE INDEX idx_audit_logs_user_id ON audit_logs(user_id);
 CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at);
 CREATE INDEX idx_audit_logs_action ON audit_logs(action);
 
--- Function to update updated_at timestamp
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$$ language 'plpgsql';
-
--- Triggers for updated_at
-CREATE TRIGGER update_organizations_updated_at BEFORE UPDATE ON organizations
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
--- Create default organization (with explicit transaction)
-BEGIN;
-
--- Insert default organization
+-- Create default organization
 INSERT INTO organizations (id, name, slug, description)
 VALUES (
-    '00000000-0000-0000-0000-000000000001',
+    1,
     'Default Organization',
     'default',
     'Default organization for initial setup'
 );
-
--- Verify organization was created
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM organizations WHERE id = '00000000-0000-0000-0000-000000000001') THEN
-        RAISE EXCEPTION 'Failed to create default organization';
-    END IF;
-END $$;
 
 -- Create default admin user (password: admin123 - CHANGE IN PRODUCTION!)
 INSERT INTO users (
@@ -167,9 +141,9 @@ INSERT INTO users (
     is_active,
     email_verified
 ) VALUES (
-    '00000000-0000-0000-0000-000000000001',
+    1,
     'admin@localhost',
-    '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj8xwLdqRg3m', -- admin123
+    '$2a$10$N9qo8uLOickgx2ZMRZoMye3IjTjMt1p8l1l3EGnGGJ8h1Lh6LgJ6m', -- admin123
     'Admin',
     'User',
     'admin',
@@ -177,18 +151,11 @@ INSERT INTO users (
     TRUE
 );
 
--- Verify user was created
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM users WHERE email = 'admin@localhost') THEN
-        RAISE EXCEPTION 'Failed to create default admin user';
-    END IF;
-END $$;
-
-COMMIT;
-
--- Final verification
-SELECT 'Setup completed successfully!' as status;
-SELECT o.name as organization, u.email, u.role, u.is_active
+-- Verify the setup
+SELECT 'Schema fixed successfully!' as status;
+SELECT o.name as organization, u.email, u.role, u.is_active, u.id as user_id, u.organization_id as org_id
 FROM users u
 JOIN organizations o ON u.organization_id = o.id;
+EOF
+
+echo "✅ Auth schema fixed with integer IDs!"

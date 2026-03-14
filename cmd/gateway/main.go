@@ -201,6 +201,7 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 			return c.Status(401).JSON(fiber.Map{"error": "Invalid token"})
 		}
 		c.Locals("user", user)
+		c.Locals("organization_id", user.OrganizationID)
 		return c.Next()
 	}
 

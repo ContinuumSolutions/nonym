@@ -11,6 +11,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
+	_ "github.com/lib/pq"
 	_ "modernc.org/sqlite"
 )
 
@@ -18,6 +19,11 @@ var (
 	db        *sql.DB
 	jwtSecret []byte
 )
+
+// isPostgreSQL checks if we're using PostgreSQL by checking environment variables
+func isPostgreSQL() bool {
+	return os.Getenv("DB_HOST") != "" && os.Getenv("DB_NAME") != ""
+}
 
 // Initialize sets up the authentication system
 func Initialize(database *sql.DB) error {
@@ -37,19 +43,25 @@ func Initialize(database *sql.DB) error {
 		log.Println("WARNING: Using randomly generated JWT secret. Set JWT_SECRET environment variable for production.")
 	}
 
-	// Create auth tables
-	if err := createAuthTables(); err != nil {
-		return fmt.Errorf("failed to create auth tables: %w", err)
+	// Create auth tables (skip if PostgreSQL as they're already created by schema)
+	if !isPostgreSQL() {
+		if err := createAuthTables(); err != nil {
+			return fmt.Errorf("failed to create auth tables: %w", err)
+		}
 	}
 
-	// Run migrations for schema updates
-	if err := runAuthMigrations(); err != nil {
-		return fmt.Errorf("failed to run auth migrations: %w", err)
+	// Run migrations for schema updates (skip if PostgreSQL as schema is complete)
+	if !isPostgreSQL() {
+		if err := runAuthMigrations(); err != nil {
+			return fmt.Errorf("failed to run auth migrations: %w", err)
+		}
 	}
 
-	// Create indexes after migrations have run
-	if err := createAuthIndexes(); err != nil {
-		return fmt.Errorf("failed to create auth indexes: %w", err)
+	// Create indexes after migrations have run (skip if PostgreSQL as indexes are in schema)
+	if !isPostgreSQL() {
+		if err := createAuthIndexes(); err != nil {
+			return fmt.Errorf("failed to create auth indexes: %w", err)
+		}
 	}
 
 	// Create default admin user if none exists
@@ -280,8 +292,8 @@ func GetOrganization(orgID int) (*Organization, error) {
 	}
 
 	org := &Organization{}
-	query := `SELECT id, name, slug, industry, size, country, description, owner_id, created_at, updated_at
-			  FROM organizations WHERE id = ?`
+	query := `SELECT id, name, slug, '' as industry, '' as size, '' as country, description, 0 as owner_id, created_at, updated_at
+			  FROM organizations WHERE id = $1`
 
 	err := db.QueryRow(query, orgID).Scan(
 		&org.ID, &org.Name, &org.Slug, &org.Industry, &org.Size,
@@ -636,8 +648,8 @@ func generateJWTToken(user *User) (string, time.Time, error) {
 
 func getUserByEmail(email string) (*User, error) {
 	user := &User{}
-	query := `SELECT id, email, password, name, role, organization_id, active, created_at, updated_at, last_login
-			  FROM users WHERE email = ? AND active = true`
+	query := `SELECT id, email, password_hash, COALESCE(first_name || ' ' || last_name, first_name, last_name, '') as name, role, organization_id, is_active, created_at, updated_at, last_login
+			  FROM users WHERE email = $1 AND is_active = true`
 
 	var lastLogin sql.NullTime
 	err := db.QueryRow(query, email).Scan(
@@ -658,8 +670,8 @@ func getUserByEmail(email string) (*User, error) {
 
 func getUserByID(id int) (*User, error) {
 	user := &User{}
-	query := `SELECT id, email, password, name, role, organization_id, active, created_at, updated_at, last_login
-			  FROM users WHERE id = ? AND active = true`
+	query := `SELECT id, email, password_hash, COALESCE(first_name || ' ' || last_name, first_name, last_name, '') as name, role, organization_id, is_active, created_at, updated_at, last_login
+			  FROM users WHERE id = $1 AND is_active = true`
 
 	var lastLogin sql.NullTime
 	err := db.QueryRow(query, id).Scan(

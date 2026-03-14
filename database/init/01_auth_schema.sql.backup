@@ -1,16 +1,8 @@
--- Sovereign Privacy Gateway Authentication Schema (Fixed)
+-- Sovereign Privacy Gateway Authentication Schema
 -- This script initializes the authentication and organization system
 
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
--- Drop existing tables if they exist (for clean setup)
-DROP TABLE IF EXISTS audit_logs CASCADE;
-DROP TABLE IF EXISTS transactions CASCADE;
-DROP TABLE IF EXISTS api_keys CASCADE;
-DROP TABLE IF EXISTS user_sessions CASCADE;
-DROP TABLE IF EXISTS users CASCADE;
-DROP TABLE IF EXISTS organizations CASCADE;
 
 -- Organizations table
 CREATE TABLE organizations (
@@ -136,10 +128,7 @@ CREATE TRIGGER update_organizations_updated_at BEFORE UPDATE ON organizations
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- Create default organization (with explicit transaction)
-BEGIN;
-
--- Insert default organization
+-- Create default organization
 INSERT INTO organizations (id, name, slug, description)
 VALUES (
     '00000000-0000-0000-0000-000000000001',
@@ -147,14 +136,6 @@ VALUES (
     'default',
     'Default organization for initial setup'
 );
-
--- Verify organization was created
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM organizations WHERE id = '00000000-0000-0000-0000-000000000001') THEN
-        RAISE EXCEPTION 'Failed to create default organization';
-    END IF;
-END $$;
 
 -- Create default admin user (password: admin123 - CHANGE IN PRODUCTION!)
 INSERT INTO users (
@@ -176,19 +157,3 @@ INSERT INTO users (
     TRUE,
     TRUE
 );
-
--- Verify user was created
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM users WHERE email = 'admin@localhost') THEN
-        RAISE EXCEPTION 'Failed to create default admin user';
-    END IF;
-END $$;
-
-COMMIT;
-
--- Final verification
-SELECT 'Setup completed successfully!' as status;
-SELECT o.name as organization, u.email, u.role, u.is_active
-FROM users u
-JOIN organizations o ON u.organization_id = o.id;

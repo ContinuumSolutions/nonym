@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/sovereignprivacy/gateway/pkg/ner"
+	_ "github.com/lib/pq"
 	_ "modernc.org/sqlite"
 )
 
@@ -71,15 +73,39 @@ var (
 func Initialize(databasePath string) error {
 	var err error
 
-	// Open SQLite database
-	db, err = sql.Open("sqlite", databasePath+"?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)")
-	if err != nil {
-		return fmt.Errorf("failed to open database: %w", err)
+	// Check if PostgreSQL environment variables are set
+	dbHost := os.Getenv("DB_HOST")
+	dbPort := os.Getenv("DB_PORT")
+	dbName := os.Getenv("DB_NAME")
+	dbUser := os.Getenv("DB_USER")
+	dbPassword := os.Getenv("DB_PASSWORD")
+
+	if dbHost != "" && dbName != "" {
+		// Use PostgreSQL
+		dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+			dbHost, dbPort, dbUser, dbPassword, dbName, os.Getenv("DB_SSL_MODE"))
+
+		db, err = sql.Open("postgres", dsn)
+		if err != nil {
+			return fmt.Errorf("failed to open PostgreSQL database: %w", err)
+		}
+
+		log.Println("Using PostgreSQL database")
+	} else {
+		// Fallback to SQLite
+		db, err = sql.Open("sqlite", databasePath+"?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)")
+		if err != nil {
+			return fmt.Errorf("failed to open SQLite database: %w", err)
+		}
+
+		log.Println("Using SQLite database")
 	}
 
-	// Create tables
-	if err := createTables(); err != nil {
-		return fmt.Errorf("failed to create tables: %w", err)
+	// Create tables (skip if using PostgreSQL as they're created by schema)
+	if dbHost == "" {
+		if err := createTables(); err != nil {
+			return fmt.Errorf("failed to create tables: %w", err)
+		}
 	}
 
 	// Load settings

@@ -80,7 +80,12 @@
       "Bash(__NEW_LINE_6ce08049858786bd__ echo:*)",
       "Bash(python:*)",
       "Bash(export:*)",
-      "Bash(OPENAI_API_KEY=\"sk-test-key\" python:*)"
+      "Bash(OPENAI_API_KEY=\"sk-test-key\" python:*)",
+      "Bash(./scripts/test-auth-fix.sh)",
+      "Bash(chmod +x /workspaces/EK-1/scripts/fix-auth-schema.sh && ./scripts/fix-auth-schema.sh)",
+      "Bash(chmod +x /workspaces/EK-1/scripts/debug-login.sh && ./scripts/debug-login.sh)",
+      "Bash(cd /workspaces/EK-1 && chmod +x scripts/debug-login.sh && ./scripts/debug-login.sh)",
+      "Bash(GATEWAY_TARGET=production docker compose up -d gateway --build)"
     ]
   }
 }
