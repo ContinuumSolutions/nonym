@@ -4,7 +4,7 @@
 # ────────────────────────────────────────────────────────────────────────────
 # Stage 1: Build Environment
 # ────────────────────────────────────────────────────────────────────────────
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev sqlite-dev
@@ -91,7 +91,7 @@ CMD ["/app/gateway"]
 # ────────────────────────────────────────────────────────────────────────────
 # Stage 3: Development Environment
 # ────────────────────────────────────────────────────────────────────────────
-FROM golang:1.24-alpine AS development
+FROM golang:1.25-alpine AS development
 
 # Install development tools
 RUN apk add --no-cache \
