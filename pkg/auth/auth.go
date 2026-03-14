@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -248,7 +249,7 @@ func createDefaultUser() error {
 // Organization management functions
 
 // CreateOrganization creates a new organization
-func CreateOrganization(req *OrganizationCreateRequest, ownerID string) (*Organization, error) {
+func CreateOrganization(req *OrganizationCreateRequest, ownerID int) (*Organization, error) {
 	if db == nil {
 		return nil, fmt.Errorf("database not initialized")
 	}
@@ -289,16 +290,14 @@ func CreateOrganization(req *OrganizationCreateRequest, ownerID string) (*Organi
 			return nil, fmt.Errorf("failed to create organization: %w", err)
 		}
 	} else {
-		// SQLite uses INTEGER AUTOINCREMENT - generate UUID for consistency
-		newUUID := uuid.New().String()
-		query := formatQuery(`INSERT INTO organizations (id, name, slug, description)
-				  VALUES (?, ?, ?, ?) RETURNING created_at, updated_at`)
-		err := db.QueryRow(query, newUUID, req.Name, slug, req.Description).
-			Scan(&org.CreatedAt, &org.UpdatedAt)
+		// SQLite uses INTEGER AUTOINCREMENT
+		query := formatQuery(`INSERT INTO organizations (name, slug, description)
+				  VALUES (?, ?, ?) RETURNING id, created_at, updated_at`)
+		err := db.QueryRow(query, req.Name, slug, req.Description).
+			Scan(&org.ID, &org.CreatedAt, &org.UpdatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create organization: %w", err)
 		}
-		org.ID = newUUID
 	}
 
 	org.Name = req.Name
@@ -314,7 +313,7 @@ func CreateOrganization(req *OrganizationCreateRequest, ownerID string) (*Organi
 }
 
 // GetOrganization retrieves an organization by ID
-func GetOrganization(orgID string) (*Organization, error) {
+func GetOrganization(orgID int) (*Organization, error) {
 	if db == nil {
 		return nil, fmt.Errorf("database not initialized")
 	}
@@ -337,7 +336,7 @@ func GetOrganization(orgID string) (*Organization, error) {
 }
 
 // UpdateOrganization updates an organization
-func UpdateOrganization(orgID string, req *OrganizationUpdateRequest) (*Organization, error) {
+func UpdateOrganization(orgID int, req *OrganizationUpdateRequest) (*Organization, error) {
 	if db == nil {
 		return nil, fmt.Errorf("database not initialized")
 	}
@@ -462,7 +461,7 @@ func RegisterUser(req *RegisterRequest) (*User, *Organization, error) {
 	}
 
 	var organization *Organization
-	var organizationID string
+	var organizationID int
 
 	// Handle organization logic
 	if req.OrganizationID != nil {
@@ -496,7 +495,7 @@ func RegisterUser(req *RegisterRequest) (*User, *Organization, error) {
 		}
 
 		// We need to create a temporary organization first, then update owner_id
-		tempOrg, err := CreateOrganization(orgReq, "")
+		tempOrg, err := CreateOrganization(orgReq, 0)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create organization: %w", err)
 		}
@@ -633,15 +632,23 @@ func ValidateToken(tokenString string) (*User, error) {
 	}
 
 	// Get user ID
-	userID, ok := claims["user_id"].(string)
+	userIDStr, ok := claims["user_id"].(string)
 	if !ok {
 		return nil, fmt.Errorf("invalid user ID in token")
 	}
+	userID, err := strconv.Atoi(userIDStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid user ID format in token")
+	}
 
 	// Get organization ID
-	organizationID, ok := claims["organization_id"].(string)
+	organizationIDStr, ok := claims["organization_id"].(string)
 	if !ok {
 		return nil, fmt.Errorf("invalid organization ID in token")
+	}
+	organizationID, err := strconv.Atoi(organizationIDStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid organization ID format in token")
 	}
 
 	// Get user with organization context
@@ -732,7 +739,7 @@ func getUserByEmail(email string) (*User, error) {
 	return user, nil
 }
 
-func getUserByID(id string) (*User, error) {
+func getUserByID(id int) (*User, error) {
 	user := &User{}
 	query := `SELECT id, email, password_hash, COALESCE(first_name || ' ' || last_name, first_name, last_name, '') as name, role, organization_id, is_active, created_at, updated_at, last_login
 			  FROM users WHERE id = $1 AND is_active = true`
@@ -755,7 +762,7 @@ func getUserByID(id string) (*User, error) {
 }
 
 // GetUserProfile returns a user profile without sensitive information
-func GetUserProfile(userID string) (*UserProfile, error) {
+func GetUserProfile(userID int) (*UserProfile, error) {
 	user, err := getUserByID(userID)
 	if err != nil {
 		return nil, err
