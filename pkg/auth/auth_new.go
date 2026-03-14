@@ -216,7 +216,7 @@ func splitName(fullName string) (string, string) {
 	return firstName, lastName
 }
 
-func generateJWT(userID, orgID int, email, role string) (string, time.Time, error) {
+func generateJWT(userID, orgID string, email, role string) (string, time.Time, error) {
 	if jwtSecret == nil {
 		return "", time.Time{}, fmt.Errorf("JWT secret not initialized")
 	}
@@ -241,7 +241,7 @@ func generateJWT(userID, orgID int, email, role string) (string, time.Time, erro
 	return tokenString, expiresAt, nil
 }
 
-func createUserSession(userID, orgID int, token string, expiresAt time.Time, clientIP, userAgent string) error {
+func createUserSession(userID, orgID string, token string, expiresAt time.Time, clientIP, userAgent string) error {
 	query := `INSERT INTO user_sessions (user_id, session_token, expires_at, created_at, last_accessed)
 			  VALUES ($1, $2, $3, $4, $5)`
 
@@ -314,7 +314,7 @@ func getUserByIDWithOrg(userID int) (*User, error) {
 	return user, nil
 }
 
-func updateLastLogin(userID int) {
+func updateLastLogin(userID string) {
 	query := `UPDATE users SET last_login = $1 WHERE id = $2`
 	_, err := db.Exec(query, time.Now(), userID)
 	if err != nil {

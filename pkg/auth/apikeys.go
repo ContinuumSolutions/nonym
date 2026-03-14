@@ -9,7 +9,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"strconv"
 	"strings"
 	"time"
 
@@ -135,7 +134,7 @@ func decryptAPIKey(encryptedKey, userID string) (string, error) {
 }
 
 // CreateAPIKey creates a new API key with organization context
-func CreateAPIKey(req *APIKeyCreateRequest, userID string, organizationID int) (*APIKeyCreateResponse, error) {
+func CreateAPIKey(req *APIKeyCreateRequest, userID string, organizationID string) (*APIKeyCreateResponse, error) {
 	if db == nil {
 		return nil, fmt.Errorf("database not initialized")
 	}
@@ -200,7 +199,7 @@ func CreateAPIKey(req *APIKeyCreateRequest, userID string, organizationID int) (
 }
 
 // GetUserAPIKeys retrieves all API keys for a user within their organization
-func GetUserAPIKeys(userID string, organizationID int) ([]APIKey, error) {
+func GetUserAPIKeys(userID string, organizationID string) ([]APIKey, error) {
 	if db == nil {
 		return nil, fmt.Errorf("database not initialized")
 	}
@@ -251,7 +250,7 @@ func ValidateAPIKey(apiKey string) (*User, error) {
 	for rows.Next() {
 		var keyID, keyHash, permissions, userIDStr string
 		var expiresAt *time.Time
-		var keyOrgID int
+		var keyOrgID string
 		var user User
 
 		err := rows.Scan(&keyID, &keyHash, &permissions, &expiresAt, &userIDStr, &keyOrgID,
@@ -283,7 +282,7 @@ func ValidateAPIKey(apiKey string) (*User, error) {
 }
 
 // RevokeAPIKey revokes an API key within organization scope
-func RevokeAPIKey(keyID, userID string, organizationID int) error {
+func RevokeAPIKey(keyID, userID string, organizationID string) error {
 	if db == nil {
 		return fmt.Errorf("database not initialized")
 	}
@@ -303,7 +302,7 @@ func RevokeAPIKey(keyID, userID string, organizationID int) error {
 }
 
 // DeleteAPIKey permanently deletes an API key within organization scope
-func DeleteAPIKey(keyID, userID string, organizationID int) error {
+func DeleteAPIKey(keyID, userID string, organizationID string) error {
 	if db == nil {
 		return fmt.Errorf("database not initialized")
 	}
@@ -333,7 +332,7 @@ func HandleGetAPIKeys(c *fiber.Ctx) error {
 		})
 	}
 
-	apiKeys, err := GetUserAPIKeys(strconv.Itoa(user.ID), user.OrganizationID)
+	apiKeys, err := GetUserAPIKeys(user.ID, user.OrganizationID)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"error": "Failed to fetch API keys",
@@ -367,7 +366,7 @@ func HandleCreateAPIKey(c *fiber.Ctx) error {
 		})
 	}
 
-	response, err := CreateAPIKey(&req, strconv.Itoa(user.ID), user.OrganizationID)
+	response, err := CreateAPIKey(&req, user.ID, user.OrganizationID)
 	if err != nil {
 		return c.Status(400).JSON(fiber.Map{
 			"error": err.Error(),
@@ -393,7 +392,7 @@ func HandleRevokeAPIKey(c *fiber.Ctx) error {
 		})
 	}
 
-	err := RevokeAPIKey(keyID, strconv.Itoa(user.ID), user.OrganizationID)
+	err := RevokeAPIKey(keyID, user.ID, user.OrganizationID)
 	if err != nil {
 		return c.Status(400).JSON(fiber.Map{
 			"error": err.Error(),
@@ -421,7 +420,7 @@ func HandleDeleteAPIKey(c *fiber.Ctx) error {
 		})
 	}
 
-	err := DeleteAPIKey(keyID, strconv.Itoa(user.ID), user.OrganizationID)
+	err := DeleteAPIKey(keyID, user.ID, user.OrganizationID)
 	if err != nil {
 		return c.Status(400).JSON(fiber.Map{
 			"error": err.Error(),
@@ -450,7 +449,7 @@ func HandleGetFullAPIKey(c *fiber.Ctx) error {
 	}
 
 	// Get the encrypted API key from database
-	userIDStr := strconv.Itoa(user.ID)
+	userIDStr := user.ID
 	query := `SELECT encrypted_key, status FROM api_keys WHERE id = ? AND user_id = ? AND organization_id = ?`
 
 	var encryptedKey, status string

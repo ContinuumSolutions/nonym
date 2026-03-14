@@ -87,7 +87,8 @@
       "Bash(cd /workspaces/EK-1 && chmod +x scripts/debug-login.sh && ./scripts/debug-login.sh)",
       "Bash(GATEWAY_TARGET=production docker compose up -d gateway --build)",
       "Bash(lsof -ti:8081 | xargs kill -9 2>/dev/null || true)",
-      "Bash(DB_HOST=localhost DB_USER=postgres DB_PASSWORD=test DB_NAME=test_db go run test_simple_auth.go)"
+      "Bash(DB_HOST=localhost DB_USER=postgres DB_PASSWORD=test DB_NAME=test_db go run test_simple_auth.go)",
+      "Bash(DB_HOST=localhost go run test_uuid_fix.go)"
     ]
   }
 }
