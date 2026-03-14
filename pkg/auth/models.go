@@ -20,18 +20,18 @@ type Organization struct {
 
 // User represents a user in the system
 type User struct {
-	ID             int          `json:"id" db:"id"`
-	Email          string       `json:"email" db:"email"`
-	Password       string       `json:"-" db:"password"` // Never include in JSON responses
-	Name           string       `json:"name" db:"name"`
-	Role           string       `json:"role" db:"role"`
-	OrganizationID int          `json:"organization_id" db:"organization_id"`
-	Active         bool         `json:"active" db:"active"`
-	CreatedAt      time.Time    `json:"created_at" db:"created_at"`
-	UpdatedAt      time.Time    `json:"updated_at" db:"updated_at"`
-	LastLogin      *time.Time   `json:"last_login,omitempty" db:"last_login"`
+	ID             int        `json:"id" db:"id"`
+	Email          string     `json:"email" db:"email"`
+	Password       string     `json:"-" db:"password"` // Never include in JSON responses
+	Name           string     `json:"name" db:"name"`
+	Role           string     `json:"role" db:"role"`
+	OrganizationID int        `json:"organization_id" db:"organization_id"`
+	Active         bool       `json:"active" db:"active"`
+	CreatedAt      time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at" db:"updated_at"`
+	LastLogin      *time.Time `json:"last_login,omitempty" db:"last_login"`
 	// Organization relationship (populated when needed)
-	Organization   *Organization `json:"organization,omitempty" db:"-"`
+	Organization *Organization `json:"organization,omitempty" db:"-"`
 }
 
 // UserSession represents an active user session
@@ -76,14 +76,14 @@ type LoginResponse struct {
 
 // UserProfile represents a user profile (subset of User for responses)
 type UserProfile struct {
-	ID             int          `json:"id"`
-	Email          string       `json:"email"`
-	Name           string       `json:"name"`
-	Role           string       `json:"role"`
-	OrganizationID int          `json:"organization_id"`
-	Active         bool         `json:"active"`
-	CreatedAt      time.Time    `json:"created_at"`
-	LastLogin      *time.Time   `json:"last_login,omitempty"`
+	ID             int           `json:"id"`
+	Email          string        `json:"email"`
+	Name           string        `json:"name"`
+	Role           string        `json:"role"`
+	OrganizationID int           `json:"organization_id"`
+	Active         bool          `json:"active"`
+	CreatedAt      time.Time     `json:"created_at"`
+	LastLogin      *time.Time    `json:"last_login,omitempty"`
 	Organization   *Organization `json:"organization,omitempty"`
 }
 
