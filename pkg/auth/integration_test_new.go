@@ -183,7 +183,7 @@ func TestNewAuthSystemIntegration(t *testing.T) {
 		}
 
 		// Verify different organization IDs
-		if response2.User.OrganizationID == 1 { // First user's org ID
+		if response2.User.OrganizationID == "00000000-0000-0000-0000-000000000001" { // First user's org ID
 			t.Error("Users should have different organization IDs")
 		}
 

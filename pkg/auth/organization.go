@@ -10,14 +10,14 @@ import (
 
 // Organization represents an organization
 type OrganizationData struct {
-	ID          int                    `json:"id"`
+	ID          string                 `json:"id"`
 	Name        string                 `json:"name"`
 	Industry    string                 `json:"industry"`
 	Size        string                 `json:"size"`
 	Country     string                 `json:"country"`
 	Description string                 `json:"description"`
 	Compliance  map[string]bool        `json:"compliance"`
-	OwnerID     int                    `json:"owner_id"`
+	OwnerID     string                 `json:"owner_id"`
 	CreatedAt   time.Time              `json:"created_at"`
 	UpdatedAt   time.Time              `json:"updated_at"`
 }
@@ -81,7 +81,7 @@ func HandleGetOrganizationV1(c *fiber.Ctx) error {
 
 	// For demo purposes, return a sample organization
 	org := OrganizationData{
-		ID:          1,
+		ID:          "00000000-0000-0000-0000-000000000001",
 		Name:        "Acme Corporation",
 		Industry:    "technology",
 		Size:        "51-200",
@@ -124,7 +124,7 @@ func HandleUpdateOrganizationV1(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"message": "Organization updated successfully",
 		"organization": OrganizationData{
-			ID:          1,
+			ID:          "00000000-0000-0000-0000-000000000001",
 			Name:        req.Name,
 			Industry:    req.Industry,
 			Size:        req.Size,

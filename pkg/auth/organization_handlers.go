@@ -167,7 +167,7 @@ func HandleRemoveTeamMember(c *fiber.Ctx) error {
 	}
 
 	// Prevent removing yourself
-	if memberID == strconv.Itoa(user.ID) {
+	if memberID == user.ID {
 		return c.Status(400).JSON(fiber.Map{
 			"error": "Cannot remove yourself from the organization",
 		})
@@ -188,7 +188,7 @@ func HandleRemoveTeamMember(c *fiber.Ctx) error {
 // Organization member management functions
 
 // GetOrganizationMembers retrieves all members of an organization
-func GetOrganizationMembers(organizationID int) ([]TeamMember, error) {
+func GetOrganizationMembers(organizationID string) ([]TeamMember, error) {
 	if db == nil {
 		return nil, fmt.Errorf("database not initialized")
 	}
@@ -232,7 +232,7 @@ func GetOrganizationMembers(organizationID int) ([]TeamMember, error) {
 }
 
 // RemoveOrganizationMember removes a member from an organization
-func RemoveOrganizationMember(memberID string, organizationID int) error {
+func RemoveOrganizationMember(memberID string, organizationID string) error {
 	if db == nil {
 		return fmt.Errorf("database not initialized")
 	}

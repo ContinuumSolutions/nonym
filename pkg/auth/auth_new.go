@@ -45,7 +45,7 @@ func SignupUser(req *RegisterRequest, clientIP, userAgent string) (*LoginRespons
 	orgSlug := generateOrgSlug(orgName)
 
 	// Create organization
-	var orgID int
+	var orgID string
 	orgQuery := `INSERT INTO organizations (name, slug, description)
 				 VALUES ($1, $2, $3) RETURNING id`
 	err = tx.QueryRow(orgQuery, orgName, orgSlug, fmt.Sprintf("Organization for %s", req.Name)).
@@ -61,7 +61,7 @@ func SignupUser(req *RegisterRequest, clientIP, userAgent string) (*LoginRespons
 	}
 
 	// Create user as organization admin
-	var userID int
+	var userID string
 	userQuery := `INSERT INTO users (organization_id, email, password_hash, first_name, last_name, role, is_active, email_verified)
 				  VALUES ($1, $2, $3, $4, $5, 'admin', true, false) RETURNING id`
 
@@ -282,7 +282,7 @@ func getUserByEmailWithOrg(email string) (*User, error) {
 	return user, nil
 }
 
-func getUserByIDWithOrg(userID int) (*User, error) {
+func getUserByIDWithOrg(userID string) (*User, error) {
 	user := &User{}
 
 	query := `SELECT u.id, u.email, u.password_hash,

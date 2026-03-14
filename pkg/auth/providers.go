@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"strconv"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -465,7 +464,7 @@ func HandleGetProviderConfig(c *fiber.Ctx) error {
 		})
 	}
 
-	config, err := GetProviderConfig(strconv.Itoa(user.ID))
+	config, err := GetProviderConfig(user.ID)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"error": "Failed to fetch provider configuration",
@@ -502,7 +501,7 @@ func HandleSaveProviderConfig(c *fiber.Ctx) error {
 		})
 	}
 
-	err := SaveProviderConfig(strconv.Itoa(user.ID), req.Providers)
+	err := SaveProviderConfig(user.ID, req.Providers)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"error": "Failed to save provider configuration",
