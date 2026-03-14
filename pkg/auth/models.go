@@ -6,26 +6,26 @@ import (
 
 // Organization represents an organization in the system
 type Organization struct {
-	ID          string    `json:"id" db:"id"`
+	ID          int       `json:"id" db:"id"`
 	Name        string    `json:"name" db:"name"`
 	Slug        string    `json:"slug" db:"slug"`
 	Industry    string    `json:"industry" db:"industry"`
 	Size        string    `json:"size" db:"size"`
 	Country     string    `json:"country" db:"country"`
 	Description string    `json:"description" db:"description"`
-	OwnerID     string    `json:"owner_id" db:"owner_id"`
+	OwnerID     int       `json:"owner_id" db:"owner_id"`
 	CreatedAt   time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // User represents a user in the system
 type User struct {
-	ID             string     `json:"id" db:"id"`
+	ID             int        `json:"id" db:"id"`
 	Email          string     `json:"email" db:"email"`
 	Password       string     `json:"-" db:"password"` // Never include in JSON responses
 	Name           string     `json:"name" db:"name"`
 	Role           string     `json:"role" db:"role"`
-	OrganizationID string     `json:"organization_id" db:"organization_id"`
+	OrganizationID int        `json:"organization_id" db:"organization_id"`
 	Active         bool       `json:"active" db:"active"`
 	CreatedAt      time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at" db:"updated_at"`

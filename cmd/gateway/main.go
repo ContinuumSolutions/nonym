@@ -219,7 +219,7 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 	// Critical missing endpoints - inline implementations
 	app.Get("/api/v1/statistics", authMiddleware, func(c *fiber.Ctx) error {
 		// Extract organization ID from context (set by middleware)
-		organizationID, ok := c.Locals("organization_id").(int)
+		organizationID, ok := c.Locals("organization_id").(string)
 		if !ok {
 			return c.Status(401).JSON(fiber.Map{
 				"error": "Organization context required",
@@ -358,7 +358,7 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 
 	app.Get("/api/v1/protection-events", authMiddleware, func(c *fiber.Ctx) error {
 		// Extract organization ID from context (set by middleware)
-		organizationID, ok := c.Locals("organization_id").(int)
+		organizationID, ok := c.Locals("organization_id").(string)
 		if !ok {
 			return c.Status(401).JSON(fiber.Map{
 				"error": "Organization context required",
@@ -470,7 +470,7 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 
 	app.Get("/api/v1/protection-stats", authMiddleware, func(c *fiber.Ctx) error {
 		// Extract organization ID from context (set by middleware)
-		organizationID, ok := c.Locals("organization_id").(int)
+		organizationID, ok := c.Locals("organization_id").(string)
 		if !ok {
 			return c.Status(401).JSON(fiber.Map{
 				"error": "Organization context required",
@@ -548,7 +548,7 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 	// Transactions endpoint for dashboard
 	app.Get("/api/v1/transactions", authMiddleware, func(c *fiber.Ctx) error {
 		// Extract organization ID from context (set by middleware)
-		organizationID, ok := c.Locals("organization_id").(int)
+		organizationID, ok := c.Locals("organization_id").(string)
 		if !ok {
 			return c.Status(401).JSON(fiber.Map{
 				"error": "Organization context required",

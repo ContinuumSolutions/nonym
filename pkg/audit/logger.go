@@ -216,7 +216,7 @@ func LogTransaction(id, status, provider string, statusCode int, redactionDetail
 }
 
 // GetTransactions retrieves transactions with pagination, scoped to organization
-func GetTransactions(limit, offset int, organizationID int) ([]Transaction, error) {
+func GetTransactions(limit, offset int, organizationID string) ([]Transaction, error) {
 	if db == nil {
 		return nil, fmt.Errorf("database not initialized")
 	}
@@ -252,7 +252,7 @@ func GetTransactions(limit, offset int, organizationID int) ([]Transaction, erro
 }
 
 // GetStatistics calculates and returns system statistics for an organization
-func GetStatistics(organizationID int) (*Statistics, error) {
+func GetStatistics(organizationID string) (*Statistics, error) {
 	if db == nil {
 		return nil, fmt.Errorf("database not initialized")
 	}
@@ -338,7 +338,7 @@ func GetStatistics(organizationID int) (*Statistics, error) {
 // HandleGetTransactions handles GET /api/transactions with organization context
 func HandleGetTransactions(c *fiber.Ctx) error {
 	// Extract organization ID from context (set by middleware)
-	organizationID, ok := c.Locals("organization_id").(int)
+	organizationID, ok := c.Locals("organization_id").(string)
 	if !ok {
 		return c.Status(401).JSON(fiber.Map{
 			"error": "Authentication required",
@@ -369,7 +369,7 @@ func HandleGetTransactions(c *fiber.Ctx) error {
 // HandleGetStatistics handles GET /api/statistics with organization context
 func HandleGetStatistics(c *fiber.Ctx) error {
 	// Extract organization ID from context (set by middleware)
-	organizationID, ok := c.Locals("organization_id").(int)
+	organizationID, ok := c.Locals("organization_id").(string)
 	if !ok {
 		return c.Status(401).JSON(fiber.Map{
 			"error": "Authentication required",

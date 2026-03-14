@@ -110,7 +110,7 @@ func HandleGetProtectionStats(c *fiber.Ctx) error {
 // HandleGetStatisticsV1 handles GET /api/v1/statistics - updated version
 func HandleGetStatisticsV1(c *fiber.Ctx) error {
 	// Extract organization ID from context (set by middleware)
-	organizationID, ok := c.Locals("organization_id").(int)
+	organizationID, ok := c.Locals("organization_id").(string)
 	if !ok {
 		return c.Status(401).JSON(fiber.Map{
 			"error": "Organization context required",
@@ -142,7 +142,7 @@ func HandleGetStatisticsV1(c *fiber.Ctx) error {
 // HandleGetTransactionsV1 handles GET /api/v1/transactions
 func HandleGetTransactionsV1(c *fiber.Ctx) error {
 	// Extract organization ID from context (set by middleware)
-	organizationID, ok := c.Locals("organization_id").(int)
+	organizationID, ok := c.Locals("organization_id").(string)
 	if !ok {
 		return c.Status(401).JSON(fiber.Map{
 			"error": "Organization context required",

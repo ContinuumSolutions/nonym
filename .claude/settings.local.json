@@ -88,7 +88,10 @@
       "Bash(GATEWAY_TARGET=production docker compose up -d gateway --build)",
       "Bash(lsof -ti:8081 | xargs kill -9 2>/dev/null || true)",
       "Bash(DB_HOST=localhost DB_USER=postgres DB_PASSWORD=test DB_NAME=test_db go run test_simple_auth.go)",
-      "Bash(DB_HOST=localhost go run test_uuid_fix.go)"
+      "Bash(DB_HOST=localhost go run test_uuid_fix.go)",
+      "Bash(chmod:*)",
+      "Bash(node:*)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkbWluQGxvY2FsaG9zdCIsImV4cCI6MTc3MzU4OTUwMiwiaWF0IjoxNzczNTAzMTAyLCJvcmdhbml6YXRpb25faWQiOiIxIiwib3JnYW5pemF0aW9uX3NsdWciOiJkZWZhdWx0Iiwicm9sZSI6ImFkbWluIiwidXNlcl9pZCI6IjEifQ.BTosI7B77YiYkAet-_jQotctC7j1GyATQFUUocIaTSw\" __NEW_LINE_9ffebcb8c586271b__ echo \"🧪 Testing Multiple Authenticated Endpoints:\" echo \"\" __NEW_LINE_9ffebcb8c586271b__ echo \"1. ✅ /api/v1/statistics:\" curl -s -X GET \"http://localhost/api/v1/statistics\" -H \"Authorization: Bearer $TOKEN\")"
     ]
   }
 }
