@@ -223,8 +223,8 @@ func createDefaultUser() error {
 		return err
 	}
 
-	query := `INSERT INTO users (email, password, name, role, active)
-			  VALUES (?, ?, ?, ?, ?)`
+	query := formatQuery(`INSERT INTO users (email, password, name, role, active)
+			  VALUES (?, ?, ?, ?, ?)`)
 
 	_, err = db.Exec(query, "admin@gateway.local", hashedPassword, "Administrator", "admin", true)
 	if err != nil {
@@ -250,11 +250,7 @@ func CreateOrganization(req *OrganizationCreateRequest, ownerID int) (*Organizat
 	// Check if slug already exists - use interface{} to handle both UUID and int
 	var existingID interface{}
 	var checkQuery string
-	if isPostgreSQL() {
-		checkQuery = "SELECT id FROM organizations WHERE slug = $1"
-	} else {
-		checkQuery = "SELECT id FROM organizations WHERE slug = ?"
-	}
+	checkQuery = formatQuery("SELECT id FROM organizations WHERE slug = ?")
 
 	err := db.QueryRow(checkQuery, slug).Scan(&existingID)
 	if err == nil {
@@ -276,8 +272,8 @@ func CreateOrganization(req *OrganizationCreateRequest, ownerID int) (*Organizat
 	// Insert organization and handle different return types
 	if isPostgreSQL() {
 		// PostgreSQL uses UUID
-		query := `INSERT INTO organizations (name, slug, description)
-				  VALUES ($1, $2, $3) RETURNING id, created_at, updated_at`
+		query := formatQuery(`INSERT INTO organizations (name, slug, description)
+				  VALUES (?, ?, ?) RETURNING id, created_at, updated_at`)
 		var uuidStr string
 		err := db.QueryRow(query, req.Name, slug, req.Description).
 			Scan(&uuidStr, &org.CreatedAt, &org.UpdatedAt)
@@ -289,8 +285,8 @@ func CreateOrganization(req *OrganizationCreateRequest, ownerID int) (*Organizat
 		org.ID = hashUUIDToInt(uuidStr)
 	} else {
 		// SQLite uses INTEGER AUTOINCREMENT
-		query := `INSERT INTO organizations (name, slug, description)
-				  VALUES (?, ?, ?) RETURNING id, created_at, updated_at`
+		query := formatQuery(`INSERT INTO organizations (name, slug, description)
+				  VALUES (?, ?, ?) RETURNING id, created_at, updated_at`)
 		err := db.QueryRow(query, req.Name, slug, req.Description).
 			Scan(&org.ID, &org.CreatedAt, &org.UpdatedAt)
 		if err != nil {
@@ -336,8 +332,8 @@ func GetOrganization(orgID int) (*Organization, error) {
 		org.ID = hashUUIDToInt(uuidStr)
 	} else {
 		// SQLite
-		query := `SELECT id, name, slug, '' as industry, '' as size, '' as country, description, 0 as owner_id, created_at, updated_at
-				  FROM organizations WHERE id = ?`
+		query := formatQuery(`SELECT id, name, slug, '' as industry, '' as size, '' as country, description, 0 as owner_id, created_at, updated_at
+				  FROM organizations WHERE id = ?`)
 
 		err := db.QueryRow(query, orgID).Scan(
 			&org.ID, &org.Name, &org.Slug, &org.Industry, &org.Size,
@@ -391,7 +387,8 @@ func UpdateOrganization(orgID int, req *OrganizationUpdateRequest) (*Organizatio
 	args = append(args, orgID)
 
 	query := fmt.Sprintf("UPDATE organizations SET %s WHERE id = ?", strings.Join(updates, ", "))
-	_, err := db.Exec(query, args...)
+	formattedQuery := formatQuery(query)
+	_, err := db.Exec(formattedQuery, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update organization: %w", err)
 	}
@@ -431,6 +428,26 @@ func hashUUIDToInt(uuidStr string) int {
 	return int(h.Sum32())
 }
 
+// formatQuery converts SQLite ? placeholders to PostgreSQL $1, $2, etc when needed
+func formatQuery(query string) string {
+	if !isPostgreSQL() {
+		return query // Keep ? for SQLite
+	}
+
+	// Convert ? to $1, $2, $3, etc for PostgreSQL
+	count := 1
+	result := ""
+	for _, r := range query {
+		if r == '?' {
+			result += fmt.Sprintf("$%d", count)
+			count++
+		} else {
+			result += string(r)
+		}
+	}
+	return result
+}
+
 // RegisterUser creates a new user account with organization context
 func RegisterUser(req *RegisterRequest) (*User, *Organization, error) {
 	if db == nil {
@@ -449,7 +466,8 @@ func RegisterUser(req *RegisterRequest) (*User, *Organization, error) {
 
 	// Check if user already exists
 	var existingID int
-	err := db.QueryRow("SELECT id FROM users WHERE email = ?", req.Email).Scan(&existingID)
+	checkQuery := formatQuery("SELECT id FROM users WHERE email = ?")
+	err := db.QueryRow(checkQuery, req.Email).Scan(&existingID)
 	if err == nil {
 		return nil, nil, fmt.Errorf("user with this email already exists")
 	}
@@ -510,8 +528,8 @@ func RegisterUser(req *RegisterRequest) (*User, *Organization, error) {
 	}
 
 	// Insert user
-	query := `INSERT INTO users (email, password, name, role, organization_id, active)
-			  VALUES (?, ?, ?, ?, ?, ?) RETURNING id, created_at, updated_at`
+	insertQuery := formatQuery(`INSERT INTO users (email, password, name, role, organization_id, active)
+			  VALUES (?, ?, ?, ?, ?, ?) RETURNING id, created_at, updated_at`)
 
 	var user User
 	user.Email = req.Email
@@ -520,7 +538,7 @@ func RegisterUser(req *RegisterRequest) (*User, *Organization, error) {
 	user.OrganizationID = organizationID
 	user.Active = true
 
-	err = db.QueryRow(query, req.Email, hashedPassword, req.Name, userRole, organizationID, true).
+	err = db.QueryRow(insertQuery, req.Email, hashedPassword, req.Name, userRole, organizationID, true).
 		Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create user: %w", err)
@@ -528,7 +546,8 @@ func RegisterUser(req *RegisterRequest) (*User, *Organization, error) {
 
 	// If we created a new organization, update the owner_id
 	if req.OrganizationID == nil {
-		_, err = db.Exec("UPDATE organizations SET owner_id = ? WHERE id = ?", user.ID, organizationID)
+		updateQuery := formatQuery("UPDATE organizations SET owner_id = ? WHERE id = ?")
+		_, err = db.Exec(updateQuery, user.ID, organizationID)
 		if err != nil {
 			log.Printf("Warning: Failed to update organization owner: %v", err)
 		} else {
@@ -578,7 +597,8 @@ func LoginUser(req *LoginRequest, clientIP, userAgent string) (*LoginResponse, e
 	}
 
 	// Update last login
-	db.Exec("UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?", user.ID)
+	updateLoginQuery := formatQuery("UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?")
+	db.Exec(updateLoginQuery, user.ID)
 
 	log.Printf("User logged in: %s (ID: %d, Org: %d)", user.Email, user.ID, user.OrganizationID)
 
