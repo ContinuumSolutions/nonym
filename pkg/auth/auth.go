@@ -263,11 +263,11 @@ func CreateOrganization(req *OrganizationCreateRequest, ownerID int) (*Organizat
 		}
 	}
 
-	query := `INSERT INTO organizations (name, slug, industry, size, country, description, owner_id)
-			  VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id, created_at, updated_at`
+	query := `INSERT INTO organizations (name, slug, description)
+			  VALUES ($1, $2, $3) RETURNING id, created_at, updated_at`
 
 	var org Organization
-	err = db.QueryRow(query, req.Name, slug, req.Industry, req.Size, req.Country, req.Description, ownerID).
+	err = db.QueryRow(query, req.Name, slug, req.Description).
 		Scan(&org.ID, &org.CreatedAt, &org.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create organization: %w", err)
