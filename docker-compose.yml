@@ -90,6 +90,7 @@ services:
       - "80:80"
     volumes:
       - ./nginx/nginx.unified.conf:/etc/nginx/nginx.conf:ro
+      - ./api-docs:/usr/share/nginx/html/api-docs:ro
     depends_on:
       - gateway
     restart: unless-stopped

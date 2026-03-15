@@ -34,7 +34,7 @@ servers:
 
 tags:
   - name: Health
-    description: Health check and status endpoints
+    description: Health check, status, and documentation endpoints
   - name: Authentication
     description: User authentication and session management
   - name: Users
@@ -106,6 +106,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GatewayStats'
+
+  # Debug endpoint
+  /api/v1/debug:
+    get:
+      tags: [Health]
+      summary: Debug information
+      description: Returns debug information about the gateway
+      responses:
+        '200':
+          description: Debug information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version:
+                    type: string
+                  build_time:
+                    type: string
+                  git_commit:
+                    type: string
+                  uptime:
+                    type: string
 
   # Authentication endpoints
   /api/v1/auth/register:
@@ -715,6 +738,55 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProtectionStatsResponse'
 
+  # Documentation endpoints
+  /api/docs:
+    get:
+      tags: [Health]
+      summary: API documentation
+      description: Returns the Swagger UI for API documentation
+      responses:
+        '200':
+          description: Swagger UI HTML page
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /swagger.yaml:
+    get:
+      tags: [Health]
+      summary: OpenAPI specification
+      description: Returns the OpenAPI/Swagger specification file
+      responses:
+        '200':
+          description: OpenAPI specification
+          content:
+            text/yaml:
+              schema:
+                type: string
+
+  /docs:
+    get:
+      tags: [Health]
+      summary: Documentation redirect
+      description: Redirects to the API documentation
+      responses:
+        '302':
+          description: Redirect to /api/docs
+
+  /gateway/auth-test:
+    get:
+      tags: [Health]
+      summary: Authentication test endpoint
+      description: Test endpoint for authentication functionality
+      responses:
+        '200':
+          description: Authentication test result
+          content:
+            application/json:
+              schema:
+                type: object
+
   # AI Provider Proxy Endpoints
   /v1/chat/completions:
     post:
@@ -903,7 +975,7 @@ components:
           type: string
         organization_id:
           type: integer
-        active:
+        is_active:
           type: boolean
         created_at:
           type: string
@@ -930,7 +1002,7 @@ components:
           type: string
         organization_id:
           type: integer
-        active:
+        is_active:
           type: boolean
         created_at:
           type: string

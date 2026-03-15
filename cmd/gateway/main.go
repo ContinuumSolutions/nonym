@@ -244,16 +244,16 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 	app.All("/api/models/*", auth.APIKeyMiddleware, interceptor.HandleProxy)
 	app.All("/api/embeddings/*", auth.APIKeyMiddleware, interceptor.HandleProxy)
 
-	// API Documentation routes
-	app.Get("/api/docs", func(c *fiber.Ctx) error {
-		return c.SendFile("./api-docs.html")
-	})
-	app.Get("/swagger.yaml", func(c *fiber.Ctx) error {
-		return c.SendFile("./swagger.yaml")
-	})
-	app.Get("/docs", func(c *fiber.Ctx) error {
-		return c.Redirect("/api/docs")
-	})
+	// API Documentation routes (now served directly by nginx)
+	// app.Get("/api/docs", func(c *fiber.Ctx) error {
+	// 	return c.SendFile("./api-docs/index.html")
+	// })
+	// app.Get("/swagger.yaml", func(c *fiber.Ctx) error {
+	// 	return c.SendFile("./api-docs/swagger.yaml")
+	// })
+	// app.Get("/docs", func(c *fiber.Ctx) error {
+	// 	return c.Redirect("/api/docs")
+	// })
 
 	// Privacy gateway specific routes
 	app.Get("/gateway/status", interceptor.HandleStatus)
