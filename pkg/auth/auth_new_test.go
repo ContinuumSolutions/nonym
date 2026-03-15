@@ -2,6 +2,7 @@ package auth
 
 import (
 	"database/sql"
+	"fmt"
 	"testing"
 	"time"
 
@@ -289,7 +290,7 @@ func (suite *AuthNewTestSuite) TestGenerateJWT() {
 	email := "test@example.com"
 	role := "admin"
 
-	token, expiresAt, err := generateJWT(userID, orgID, email, role)
+	token, expiresAt, err := generateJWT(fmt.Sprint(userID), fmt.Sprint(orgID), email, role)
 
 	suite.NoError(err)
 	suite.NotEmpty(token)

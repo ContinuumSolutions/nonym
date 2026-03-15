@@ -169,6 +169,19 @@ func TestNewAuthSystemIntegration(t *testing.T) {
 	})
 
 	t.Run("Organization isolation works", func(t *testing.T) {
+		// Create first user in first organization
+		req1 := &RegisterRequest{
+			Email:        "user1@company1.com",
+			Password:     "password123",
+			Name:         "User One",
+			Organization: "Company One",
+		}
+
+		response1, err := SignupUser(req1, "127.0.0.1", "test-agent")
+		if err != nil {
+			t.Fatalf("First signup failed: %v", err)
+		}
+
 		// Create second user in different organization
 		req2 := &RegisterRequest{
 			Email:        "user2@company2.com",
@@ -183,7 +196,7 @@ func TestNewAuthSystemIntegration(t *testing.T) {
 		}
 
 		// Verify different organization IDs
-		if response2.User.OrganizationID == "00000000-0000-0000-0000-000000000001" { // First user's org ID
+		if response2.User.OrganizationID == response1.User.OrganizationID { // Should have different org IDs
 			t.Error("Users should have different organization IDs")
 		}
 

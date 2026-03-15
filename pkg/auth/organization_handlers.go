@@ -76,7 +76,7 @@ func HandleGetTeamMembers(c *fiber.Ctx) error {
 		})
 	}
 
-	members, err := GetOrganizationMembers(user.OrganizationID)
+	members, err := GetOrganizationMembers(strconv.Itoa(user.OrganizationID))
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"error": "Failed to fetch team members",
@@ -167,13 +167,13 @@ func HandleRemoveTeamMember(c *fiber.Ctx) error {
 	}
 
 	// Prevent removing yourself
-	if memberID == user.ID {
+	if memberID == strconv.Itoa(user.ID) {
 		return c.Status(400).JSON(fiber.Map{
 			"error": "Cannot remove yourself from the organization",
 		})
 	}
 
-	err := RemoveOrganizationMember(memberID, user.OrganizationID)
+	err := RemoveOrganizationMember(memberID, strconv.Itoa(user.OrganizationID))
 	if err != nil {
 		return c.Status(400).JSON(fiber.Map{
 			"error": err.Error(),

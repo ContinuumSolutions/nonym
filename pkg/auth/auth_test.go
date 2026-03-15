@@ -124,7 +124,7 @@ func (suite *AuthTestSuite) TestRegisterUser() {
 
 	for _, tt := range tests {
 		suite.Run(tt.name, func() {
-			user, err := RegisterUser(tt.request)
+			user, _, err := RegisterUser(tt.request)
 
 			if tt.shouldErr {
 				suite.Error(err)
@@ -151,7 +151,7 @@ func (suite *AuthTestSuite) TestLoginUser() {
 		Name:     "Login Test User",
 	}
 
-	user, err := RegisterUser(registerReq)
+	user, _, err := RegisterUser(registerReq)
 	suite.Require().NoError(err)
 	suite.Require().NotNil(user)
 
@@ -225,7 +225,7 @@ func (suite *AuthTestSuite) TestLoginUserInactive() {
 		Name:     "Inactive User",
 	}
 
-	user, err := RegisterUser(registerReq)
+	user, _, err := RegisterUser(registerReq)
 	suite.Require().NoError(err)
 
 	// Deactivate user
@@ -251,7 +251,7 @@ func (suite *AuthTestSuite) TestValidateToken() {
 		Name:     "Token Test User",
 	}
 
-	user, err := RegisterUser(registerReq)
+	user, _, err := RegisterUser(registerReq)
 	suite.Require().NoError(err)
 
 	loginReq := &LoginRequest{
@@ -320,7 +320,7 @@ func (suite *AuthTestSuite) TestValidateTokenInactiveUser() {
 		Name:     "Deactivate Test User",
 	}
 
-	user, err := RegisterUser(registerReq)
+	user, _, err := RegisterUser(registerReq)
 	suite.Require().NoError(err)
 
 	loginReq := &LoginRequest{
@@ -350,7 +350,7 @@ func (suite *AuthTestSuite) TestGetUserProfile() {
 		Name:     "Profile Test User",
 	}
 
-	user, err := RegisterUser(registerReq)
+	user, _, err := RegisterUser(registerReq)
 	suite.Require().NoError(err)
 
 	// Test getting profile
@@ -409,7 +409,7 @@ func (suite *AuthTestSuite) TestGetUserByEmail() {
 		Name:     "Get Email Test User",
 	}
 
-	registeredUser, err := RegisterUser(registerReq)
+	registeredUser, _, err := RegisterUser(registerReq)
 	suite.Require().NoError(err)
 
 	// Test getting user by email
@@ -433,7 +433,7 @@ func (suite *AuthTestSuite) TestGetUserByID() {
 		Name:     "Get ID Test User",
 	}
 
-	registeredUser, err := RegisterUser(registerReq)
+	registeredUser, _, err := RegisterUser(registerReq)
 	suite.Require().NoError(err)
 
 	// Test getting user by ID

@@ -13,6 +13,11 @@ import (
 	"github.com/sovereignprivacy/gateway/pkg/ner"
 )
 
+const (
+	testOrgID  = "1"
+	testUserID = 1
+)
+
 func TestInitializeAuditSystem(t *testing.T) {
 	err := Initialize(":memory:")
 	if err != nil {
@@ -20,7 +25,7 @@ func TestInitializeAuditSystem(t *testing.T) {
 	}
 
 	// Verify database is accessible by running a simple query
-	_, err = GetStatistics()
+	_, err = GetStatistics("1")
 	if err != nil {
 		t.Errorf("Failed to get statistics after initialization: %v", err)
 	}
@@ -41,10 +46,10 @@ func TestLogTransaction(t *testing.T) {
 		},
 	}
 
-	LogTransaction("test-123", "success", "openai", 200, redactionDetails)
+	LogTransaction("test-123", "success", "openai", 200, redactionDetails, 1, 1)
 
 	// Verify transaction was stored
-	transactions, err := GetTransactions(1, 0)
+	transactions, err := GetTransactions(1, 0, "1")
 	if err != nil {
 		t.Fatalf("Failed to get transactions: %v", err)
 	}
@@ -75,9 +80,9 @@ func TestLogTransactionWithoutRedactions(t *testing.T) {
 	Initialize(":memory:")
 
 	// Test logging without redactions
-	LogTransaction("test-456", "success", "anthropic", 200, nil)
+	LogTransaction("test-456", "success", "anthropic", 200, nil, 1, 1)
 
-	transactions, err := GetTransactions(1, 0)
+	transactions, err := GetTransactions(1, 0, "1")
 	if err != nil {
 		t.Fatalf("Failed to get transactions: %v", err)
 	}
@@ -101,10 +106,10 @@ func TestLogBlockedTransaction(t *testing.T) {
 	// Log a blocked transaction
 	LogTransaction("blocked-123", "blocked", "local", 403, []ner.RedactionDetail{
 		{EntityType: "ssn", OriginalText: "123-45-6789", RedactedText: "{{SSN_ABC}}"},
-	})
+	}, 1, 1)
 
 	// Verify in statistics
-	stats, err := GetStatistics()
+	stats, err := GetStatistics("1")
 	if err != nil {
 		t.Fatalf("Failed to get statistics: %v", err)
 	}
@@ -123,16 +128,16 @@ func TestGetStatistics(t *testing.T) {
 	// Log some test transactions
 	LogTransaction("tx1", "success", "openai", 200, []ner.RedactionDetail{
 		{EntityType: "email", OriginalText: "test@example.com", RedactedText: "{{EMAIL_A}}"},
-	})
-	LogTransaction("tx2", "success", "local", 200, nil)
+	}, 1, 1)
+	LogTransaction("tx2", "success", "local", 200, nil, 1, 1)
 	LogTransaction("tx3", "error", "openai", 500, []ner.RedactionDetail{
 		{EntityType: "ssn", OriginalText: "123-45-6789", RedactedText: "{{SSN_B}}"},
-	})
+	}, 1, 1)
 	LogTransaction("blocked1", "blocked", "anthropic", 403, []ner.RedactionDetail{
 		{EntityType: "credit_card", OriginalText: "4111111111111111", RedactedText: "{{CARD_C}}"},
-	})
+	}, 1, 1)
 
-	stats, err := GetStatistics()
+	stats, err := GetStatistics("1")
 	if err != nil {
 		t.Fatalf("Failed to get statistics: %v", err)
 	}
@@ -179,10 +184,15 @@ func TestHandleGetTransactions(t *testing.T) {
 
 	// Log some test transactions
 	for i := 0; i < 5; i++ {
-		LogTransaction(fmt.Sprintf("tx%d", i), "success", "openai", 200, nil)
+		LogTransaction(fmt.Sprintf("tx%d", i), "success", "openai", 200, nil, 1, 1)
 	}
 
 	app := fiber.New()
+	// Add middleware to simulate authentication context
+	app.Use(func(c *fiber.Ctx) error {
+		c.Locals("organization_id", "1")
+		return c.Next()
+	})
 	app.Get("/api/transactions", HandleGetTransactions)
 
 	// Test default limit
@@ -244,10 +254,15 @@ func TestHandleGetStatistics(t *testing.T) {
 	LogTransaction("tx1", "success", "openai", 200, []ner.RedactionDetail{
 		{EntityType: "email", OriginalText: "test@example.com", RedactedText: "{{EMAIL_A}}"},
 		{EntityType: "phone", OriginalText: "555-123-4567", RedactedText: "{{PHONE_B}}"},
-	})
-	LogTransaction("blocked1", "blocked", "anthropic", 403, nil)
+	}, 1, 1)
+	LogTransaction("blocked1", "blocked", "anthropic", 403, nil, 1, 1)
 
 	app := fiber.New()
+	// Add middleware to simulate authentication context
+	app.Use(func(c *fiber.Ctx) error {
+		c.Locals("organization_id", "1")
+		return c.Next()
+	})
 	app.Get("/api/statistics", HandleGetStatistics)
 
 	req := httptest.NewRequest("GET", "/api/statistics", nil)
@@ -377,12 +392,12 @@ func TestTransactionPagination(t *testing.T) {
 
 	// Log 10 transactions
 	for i := 0; i < 10; i++ {
-		LogTransaction(fmt.Sprintf("page-tx-%d", i), "success", "openai", 200, nil)
+		LogTransaction(fmt.Sprintf("page-tx-%d", i), "success", "openai", 200, nil, 1, 1)
 		time.Sleep(1 * time.Millisecond) // Ensure different timestamps
 	}
 
 	// Test pagination
-	page1, err := GetTransactions(5, 0)
+	page1, err := GetTransactions(5, 0, "1")
 	if err != nil {
 		t.Fatalf("Failed to get page 1: %v", err)
 	}
@@ -390,7 +405,7 @@ func TestTransactionPagination(t *testing.T) {
 		t.Errorf("Expected 5 transactions in page 1, got %d", len(page1))
 	}
 
-	page2, err := GetTransactions(5, 5)
+	page2, err := GetTransactions(5, 5, "1")
 	if err != nil {
 		t.Fatalf("Failed to get page 2: %v", err)
 	}
@@ -429,9 +444,9 @@ func TestRedactionDetailsStorage(t *testing.T) {
 		},
 	}
 
-	LogTransaction("redaction-test", "success", "openai", 200, redactionDetails)
+	LogTransaction("redaction-test", "success", "openai", 200, redactionDetails, 1, 1)
 
-	transactions, err := GetTransactions(1, 0)
+	transactions, err := GetTransactions(1, 0, "1")
 	if err != nil {
 		t.Fatalf("Failed to get transactions: %v", err)
 	}

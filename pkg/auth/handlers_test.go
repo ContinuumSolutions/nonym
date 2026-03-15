@@ -56,7 +56,7 @@ func (suite *HandlersTestSuite) mockRegisterHandler(c *fiber.Ctx) error {
 		})
 	}
 
-	user, err := RegisterUser(&req)
+	user, _, err := RegisterUser(&req)
 	if err != nil {
 		return c.Status(400).JSON(fiber.Map{
 			"error": err.Error(),
@@ -328,7 +328,7 @@ func (suite *HandlersTestSuite) TestLoginHandler() {
 		Name:     "Login Test User",
 	}
 
-	_, err := RegisterUser(registerReq)
+	_, _, err := RegisterUser(registerReq)
 	suite.Require().NoError(err)
 
 	tests := []struct {
@@ -448,7 +448,7 @@ func (suite *HandlersTestSuite) TestLogoutHandler() {
 		Name:     "Logout Test User",
 	}
 
-	user, err := RegisterUser(registerReq)
+	user, _, err := RegisterUser(registerReq)
 	suite.Require().NoError(err)
 
 	token, _, err := generateJWTToken(user)
@@ -520,7 +520,7 @@ func (suite *HandlersTestSuite) TestProfileHandler() {
 		Name:     "Profile Test User",
 	}
 
-	user, err := RegisterUser(registerReq)
+	user, _, err := RegisterUser(registerReq)
 	suite.Require().NoError(err)
 
 	token, _, err := generateJWTToken(user)
@@ -607,7 +607,7 @@ func (suite *HandlersTestSuite) TestAuthMiddleware() {
 		Name:     "Middleware Test User",
 	}
 
-	user, err := RegisterUser(registerReq)
+	user, _, err := RegisterUser(registerReq)
 	suite.Require().NoError(err)
 
 	token, _, err := generateJWTToken(user)

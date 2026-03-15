@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -97,7 +98,7 @@ func SignupUser(req *RegisterRequest, clientIP, userAgent string) (*LoginRespons
 	// Update last login
 	updateLastLogin(userID)
 
-	log.Printf("New user registered: %s (ID: %d, Org: %d)", req.Email, userID, orgID)
+	log.Printf("New user registered: %s (ID: %s, Org: %s)", req.Email, userID, orgID)
 
 	return &LoginResponse{
 		Token:        token,
@@ -140,18 +141,18 @@ func AuthenticateUser(req *LoginRequest, clientIP, userAgent string) (*LoginResp
 	}
 
 	// Generate JWT token
-	token, expiresAt, err := generateJWT(user.ID, user.OrganizationID, user.Email, user.Role)
+	token, expiresAt, err := generateJWT(strconv.Itoa(user.ID), strconv.Itoa(user.OrganizationID), user.Email, user.Role)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate token: %w", err)
 	}
 
 	// Create session record
-	if err := createUserSession(user.ID, user.OrganizationID, token, expiresAt, clientIP, userAgent); err != nil {
+	if err := createUserSession(strconv.Itoa(user.ID), strconv.Itoa(user.OrganizationID), token, expiresAt, clientIP, userAgent); err != nil {
 		log.Printf("Warning: failed to create session record: %v", err)
 	}
 
 	// Update last login
-	updateLastLogin(user.ID)
+	updateLastLogin(strconv.Itoa(user.ID))
 
 	log.Printf("User logged in: %s (ID: %d, Org: %d)", user.Email, user.ID, user.OrganizationID)
 
@@ -318,7 +319,7 @@ func updateLastLogin(userID string) {
 	query := `UPDATE users SET last_login = $1 WHERE id = $2`
 	_, err := db.Exec(query, time.Now(), userID)
 	if err != nil {
-		log.Printf("Warning: failed to update last login for user %d: %v", userID, err)
+		log.Printf("Warning: failed to update last login for user %s: %v", userID, err)
 	}
 }
 

@@ -1,0 +1,1333 @@
+openapi: 3.0.3
+info:
+  title: Sovereign Privacy Gateway API
+  description: |
+    A high-performance Privacy Air-Gap middleware that intercepts data between internal systems and external AI models.
+    Acts as a transparent reverse proxy that detects and anonymizes PII in real-time, ensuring sensitive data never leaves your infrastructure.
+
+    ## Authentication
+
+    This API uses two authentication methods:
+    - **Bearer Token Authentication** for dashboard/management endpoints (obtained via login)
+    - **API Key Authentication** for proxy endpoints (using X-API-Key header)
+
+    ## Features
+
+    - **Real-time PII Detection**: Email, SSN, credit cards, API keys, phone numbers, IP addresses
+    - **Smart Anonymization**: Context-preserving tokenization with secure de-anonymization
+    - **Intelligent Routing**: Content-based routing (sensitive → local LLM, general → cloud AI)
+    - **Strict Mode**: Block requests with high-sensitivity data entirely
+    - **Real-time Dashboard**: Comprehensive monitoring via web interface
+  version: 1.0.0
+  contact:
+    name: Sovereign Privacy
+    email: licensing@sovereignprivacy.com
+  license:
+    name: OpenVPN-style Commercial License
+    url: https://sovereignprivacy.com/license
+
+servers:
+  - url: http://localhost:8080
+    description: Development server
+  - url: https://gateway.your-domain.com
+    description: Production server
+
+tags:
+  - name: Health
+    description: Health check and status endpoints
+  - name: Authentication
+    description: User authentication and session management
+  - name: Users
+    description: User profile and management
+  - name: API Keys
+    description: API key management for proxy authentication
+  - name: Organizations
+    description: Organization management
+  - name: Team
+    description: Team member management
+  - name: Providers
+    description: AI provider configuration and testing
+  - name: Security
+    description: Security settings and session management
+  - name: Analytics
+    description: Statistics and analytics
+  - name: Protection
+    description: Protection events and monitoring
+  - name: Proxy
+    description: AI provider proxy endpoints
+
+paths:
+  # Health endpoints
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      description: Returns the health status of the gateway
+      responses:
+        '200':
+          description: Gateway is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  timestamp:
+                    type: integer
+                    example: 1647123456
+                  version:
+                    type: string
+                    example: "1.0.0"
+
+  /gateway/status:
+    get:
+      tags: [Health]
+      summary: Detailed gateway status
+      description: Returns detailed component status information
+      responses:
+        '200':
+          description: Detailed status information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayStatus'
+
+  /gateway/stats:
+    get:
+      tags: [Health]
+      summary: Performance statistics
+      description: Returns performance statistics and metrics
+      responses:
+        '200':
+          description: Performance statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayStats'
+
+  # Authentication endpoints
+  /api/v1/auth/register:
+    post:
+      tags: [Authentication]
+      summary: Register a new user
+      description: Creates a new user account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: Invalid registration data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/login:
+    post:
+      tags: [Authentication]
+      summary: User login
+      description: Authenticates a user and returns a JWT token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/logout:
+    post:
+      tags: [Authentication]
+      summary: User logout
+      description: Invalidates the user's session
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Logged out successfully
+
+  /api/v1/auth/me:
+    get:
+      tags: [Users]
+      summary: Get user profile
+      description: Returns the current user's profile information
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # API Key management
+  /api/v1/api-keys:
+    get:
+      tags: [API Keys]
+      summary: List API keys
+      description: Returns all API keys for the authenticated user
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of API keys
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  api_keys:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/APIKey'
+    post:
+      tags: [API Keys]
+      summary: Create API key
+      description: Creates a new API key for the authenticated user
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/APIKeyCreateRequest'
+      responses:
+        '201':
+          description: API key created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIKeyCreateResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/api-keys/{id}/full:
+    get:
+      tags: [API Keys]
+      summary: Get full API key
+      description: Returns the complete API key for copying (security sensitive)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: API key ID
+      responses:
+        '200':
+          description: Full API key
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  api_key:
+                    type: string
+                  warning:
+                    type: string
+        '404':
+          description: API key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/api-keys/{id}/revoke:
+    patch:
+      tags: [API Keys]
+      summary: Revoke API key
+      description: Revokes an API key, making it unusable
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: API key ID
+      responses:
+        '200':
+          description: API key revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/api-keys/{id}:
+    delete:
+      tags: [API Keys]
+      summary: Delete API key
+      description: Permanently deletes an API key
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: API key ID
+      responses:
+        '200':
+          description: API key deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Organization management
+  /api/v1/organization:
+    get:
+      tags: [Organizations]
+      summary: Get organization info
+      description: Returns organization information for the authenticated user
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Organization information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+    put:
+      tags: [Organizations]
+      summary: Update organization info
+      description: Updates organization information
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrganizationUpdateRequest'
+      responses:
+        '200':
+          description: Organization updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+
+  # Team management
+  /api/v1/team/members:
+    get:
+      tags: [Team]
+      summary: List team members
+      description: Returns all team members in the organization
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of team members
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  members:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TeamMember'
+    post:
+      tags: [Team]
+      summary: Invite team member
+      description: Sends an invitation to join the team
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeamInviteRequest'
+      responses:
+        '201':
+          description: Invitation sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+
+  /api/v1/team/members/{id}:
+    delete:
+      tags: [Team]
+      summary: Remove team member
+      description: Removes a team member from the organization
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Team member ID
+      responses:
+        '200':
+          description: Team member removed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+
+  # Provider configuration
+  /api/v1/provider-config:
+    get:
+      tags: [Providers]
+      summary: Get provider configuration
+      description: Returns AI provider configuration for the user
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Provider configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  providers:
+                    $ref: '#/components/schemas/ProvidersConfig'
+    put:
+      tags: [Providers]
+      summary: Update provider configuration
+      description: Updates AI provider configuration
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                providers:
+                  $ref: '#/components/schemas/ProvidersConfig'
+      responses:
+        '200':
+          description: Configuration updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+
+  /api/v1/providers/{provider}/test:
+    post:
+      tags: [Providers]
+      summary: Test provider connection
+      description: Tests the connection to a specific AI provider
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [spg, openai, anthropic, google, local]
+          description: Provider name
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProviderTestRequest'
+      responses:
+        '200':
+          description: Test result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderTestResponse'
+
+  # Security settings
+  /api/v1/security/2fa:
+    put:
+      tags: [Security]
+      summary: Update two-factor authentication
+      description: Enables or disables two-factor authentication
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                secret:
+                  type: string
+      responses:
+        '200':
+          description: 2FA updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+
+  /api/v1/security/sessions/{id}:
+    delete:
+      tags: [Security]
+      summary: Terminate session
+      description: Terminates a specific user session
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Session ID
+      responses:
+        '200':
+          description: Session terminated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+
+  /api/v1/security/settings:
+    put:
+      tags: [Security]
+      summary: Update security settings
+      description: Updates various security settings
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password_policy:
+                  type: object
+                session_timeout:
+                  type: integer
+                login_attempts:
+                  type: integer
+      responses:
+        '200':
+          description: Security settings updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+
+  # Analytics and statistics
+  /api/v1/statistics:
+    get:
+      tags: [Analytics]
+      summary: Get system statistics
+      description: Returns comprehensive system statistics and analytics
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: System statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatisticsResponse'
+
+  /api/v1/transactions:
+    get:
+      tags: [Analytics]
+      summary: Get transaction history
+      description: Returns paginated transaction history
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+          description: Number of transactions to return
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+          description: Number of transactions to skip
+      responses:
+        '200':
+          description: Transaction history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transactions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Transaction'
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+
+  # Protection events
+  /api/v1/protection-events:
+    get:
+      tags: [Protection]
+      summary: Get protection events
+      description: Returns protection events with filtering options
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: eventType
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: provider
+          in: query
+          schema:
+            type: string
+        - name: timeRange
+          in: query
+          schema:
+            type: string
+            default: 24h
+      responses:
+        '200':
+          description: Protection events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProtectionEventsResponse'
+
+  /api/v1/protection-stats:
+    get:
+      tags: [Protection]
+      summary: Get protection statistics
+      description: Returns protection statistics and metrics
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Protection statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProtectionStatsResponse'
+
+  # AI Provider Proxy Endpoints
+  /v1/chat/completions:
+    post:
+      tags: [Proxy]
+      summary: Chat completions proxy
+      description: Proxy endpoint for OpenAI-compatible chat completions with PII protection
+      security:
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: OpenAI-compatible chat completion request
+              example:
+                model: "gpt-3.5-turbo"
+                messages:
+                  - role: "user"
+                    content: "Hello, my email is john@example.com"
+      responses:
+        '200':
+          description: Chat completion response (PII anonymized)
+          content:
+            application/json:
+              schema:
+                type: object
+                description: OpenAI-compatible response with anonymized content
+        '401':
+          description: API key required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/completions:
+    post:
+      tags: [Proxy]
+      summary: Completions proxy
+      description: Proxy endpoint for text completions with PII protection
+      security:
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Completion response
+        '401':
+          description: API key required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/embeddings:
+    post:
+      tags: [Proxy]
+      summary: Embeddings proxy
+      description: Proxy endpoint for embeddings with PII protection
+      security:
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Embeddings response
+        '401':
+          description: API key required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/models:
+    get:
+      tags: [Proxy]
+      summary: List models proxy
+      description: Proxy endpoint to list available models
+      security:
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: List of available models
+        '401':
+          description: API key required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token obtained from login endpoint
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for accessing proxy endpoints
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+      required:
+        - error
+
+    # Authentication schemas
+    RegisterRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        name:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        organization:
+          type: string
+        organization_id:
+          type: integer
+        invite_code:
+          type: string
+      required:
+        - email
+        - password
+
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+        organization_id:
+          type: integer
+      required:
+        - email
+        - password
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        user:
+          $ref: '#/components/schemas/User'
+        organization:
+          $ref: '#/components/schemas/Organization'
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+        organization_id:
+          type: integer
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        last_login:
+          type: string
+          format: date-time
+        organization:
+          $ref: '#/components/schemas/Organization'
+
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+        organization_id:
+          type: integer
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        last_login:
+          type: string
+          format: date-time
+        organization:
+          $ref: '#/components/schemas/Organization'
+
+    Organization:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        industry:
+          type: string
+        size:
+          type: string
+        country:
+          type: string
+        description:
+          type: string
+        owner_id:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    OrganizationUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        industry:
+          type: string
+        size:
+          type: string
+        country:
+          type: string
+        description:
+          type: string
+
+    # API Key schemas
+    APIKey:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        masked_key:
+          type: string
+        permissions:
+          type: string
+        user_id:
+          type: string
+        organization_id:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+        last_used:
+          type: string
+          format: date-time
+
+    APIKeyCreateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        permissions:
+          type: string
+          enum: [read, write, admin]
+        expiryDate:
+          type: string
+          format: date
+      required:
+        - name
+        - permissions
+
+    APIKeyCreateResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        api_key:
+          type: string
+          description: Only returned once upon creation
+        masked_key:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+
+    # Team management schemas
+    TeamMember:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+        status:
+          type: string
+        joined_at:
+          type: string
+          format: date-time
+        last_active:
+          type: string
+          format: date-time
+
+    TeamInviteRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+      required:
+        - email
+        - role
+
+    # Provider configuration schemas
+    ProviderModel:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        enabled:
+          type: boolean
+
+    ProviderConfig:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        api_key:
+          type: string
+        endpoint:
+          type: string
+        models:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderModel'
+
+    ProvidersConfig:
+      type: object
+      properties:
+        spg:
+          $ref: '#/components/schemas/ProviderConfig'
+        openai:
+          $ref: '#/components/schemas/ProviderConfig'
+        anthropic:
+          $ref: '#/components/schemas/ProviderConfig'
+        google:
+          $ref: '#/components/schemas/ProviderConfig'
+        local:
+          $ref: '#/components/schemas/ProviderConfig'
+
+    ProviderTestRequest:
+      type: object
+      properties:
+        api_key:
+          type: string
+        endpoint:
+          type: string
+        models:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderModel'
+
+    ProviderTestResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        error:
+          type: string
+        models:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderModel'
+
+    # Analytics schemas
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        status:
+          type: string
+        provider:
+          type: string
+        status_code:
+          type: integer
+        processing_time:
+          type: number
+        redaction_count:
+          type: integer
+        redaction_details:
+          type: array
+          items:
+            $ref: '#/components/schemas/RedactionDetail'
+        client_ip:
+          type: string
+        user_agent:
+          type: string
+        error_message:
+          type: string
+        organization_id:
+          type: integer
+        user_id:
+          type: integer
+
+    RedactionDetail:
+      type: object
+      properties:
+        type:
+          type: string
+        original_value:
+          type: string
+        token:
+          type: string
+        position:
+          type: integer
+
+    ProviderStats:
+      type: object
+      properties:
+        provider:
+          type: string
+        requests:
+          type: integer
+        percent:
+          type: number
+
+    ActivityPoint:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        count:
+          type: integer
+
+    StatisticsResponse:
+      type: object
+      properties:
+        pii_protected:
+          type: integer
+        total_requests:
+          type: integer
+        blocked_requests:
+          type: integer
+        redacted_requests:
+          type: integer
+        success_rate:
+          type: number
+        avg_processing_time:
+          type: number
+        top_providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderStats'
+        recent_activity:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActivityPoint'
+
+    # Protection schemas
+    ProtectionEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        type:
+          type: string
+        action:
+          type: string
+        provider:
+          type: string
+        model:
+          type: string
+        status:
+          type: string
+        protection:
+          type: string
+        redaction_count:
+          type: integer
+        redaction_details:
+          type: array
+          items:
+            $ref: '#/components/schemas/RedactionDetail'
+        processing_time:
+          type: number
+        severity:
+          type: string
+        client_ip:
+          type: string
+        user_agent:
+          type: string
+        metadata:
+          type: object
+
+    ProtectionEventsResponse:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProtectionEvent'
+        total:
+          type: integer
+        has_more:
+          type: boolean
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    ProtectionStatsResponse:
+      type: object
+      properties:
+        protectedToday:
+          type: integer
+        blockedToday:
+          type: integer
+        detectionRate:
+          type: number
+        highRisk:
+          type: integer
+        totalEvents:
+          type: integer
+        lastUpdate:
+          type: string
+          format: date-time
+
+    # Health schemas
+    GatewayStatus:
+      type: object
+      properties:
+        status:
+          type: string
+        components:
+          type: object
+          properties:
+            database:
+              type: string
+            ner_engine:
+              type: string
+            router:
+              type: string
+            providers:
+              type: object
+        uptime:
+          type: number
+        memory_usage:
+          type: object
+
+    GatewayStats:
+      type: object
+      properties:
+        requests_per_second:
+          type: number
+        avg_response_time:
+          type: number
+        active_connections:
+          type: integer
+        cache_hit_rate:
+          type: number
+        error_rate:
+          type: number

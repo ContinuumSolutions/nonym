@@ -18,9 +18,10 @@ import (
 // APIKeyTestSuite is the test suite for API key functionality
 type APIKeyTestSuite struct {
 	suite.Suite
-	db     *sql.DB
-	userID string
-	app    *fiber.App
+	db             *sql.DB
+	userID         string
+	organizationID int
+	app            *fiber.App
 }
 
 func (suite *APIKeyTestSuite) SetupTest() {
@@ -41,9 +42,10 @@ func (suite *APIKeyTestSuite) SetupTest() {
 		Name:     "API Key Test User",
 	}
 
-	user, err := RegisterUser(registerReq)
+	user, org, err := RegisterUser(registerReq)
 	suite.Require().NoError(err)
 	suite.userID = fmt.Sprintf("%d", user.ID)
+	suite.organizationID = org.ID
 
 	// Setup fiber app for HTTP tests
 	suite.app = fiber.New()
@@ -187,7 +189,7 @@ func (suite *APIKeyTestSuite) TestCreateAPIKey() {
 
 	for _, tt := range tests {
 		suite.Run(tt.name, func() {
-			response, err := CreateAPIKey(tt.request, suite.userID)
+			response, err := CreateAPIKey(tt.request, suite.userID, suite.organizationID)
 
 			if tt.shouldErr {
 				suite.Error(err)
@@ -221,12 +223,12 @@ func (suite *APIKeyTestSuite) TestGetUserAPIKeys() {
 	}
 
 	for _, keyReq := range keys {
-		_, err := CreateAPIKey(&keyReq, suite.userID)
+		_, err := CreateAPIKey(&keyReq, suite.userID, suite.organizationID)
 		suite.Require().NoError(err)
 	}
 
 	// Test getting API keys
-	apiKeys, err := GetUserAPIKeys(suite.userID)
+	apiKeys, err := GetUserAPIKeys(suite.userID, suite.organizationID)
 	suite.NoError(err)
 	suite.Len(apiKeys, 3)
 
@@ -234,7 +236,7 @@ func (suite *APIKeyTestSuite) TestGetUserAPIKeys() {
 	suite.Equal("Key 3", apiKeys[0].Name) // Last created should be first
 
 	// Test with non-existent user
-	apiKeys, err = GetUserAPIKeys("999")
+	apiKeys, err = GetUserAPIKeys("999", 999)
 	suite.NoError(err)
 	suite.Empty(apiKeys)
 }
@@ -246,7 +248,7 @@ func (suite *APIKeyTestSuite) TestValidateAPIKey() {
 		Permissions: "read",
 	}
 
-	response, err := CreateAPIKey(createReq, suite.userID)
+	response, err := CreateAPIKey(createReq, suite.userID, suite.organizationID)
 	suite.Require().NoError(err)
 
 	tests := []struct {
@@ -299,7 +301,7 @@ func (suite *APIKeyTestSuite) TestValidateExpiredAPIKey() {
 		ExpiryDate:  "2020-01-01", // Past date
 	}
 
-	response, err := CreateAPIKey(createReq, suite.userID)
+	response, err := CreateAPIKey(createReq, suite.userID, suite.organizationID)
 	suite.Require().NoError(err)
 
 	// Try to validate expired key
@@ -316,11 +318,11 @@ func (suite *APIKeyTestSuite) TestRevokeAPIKey() {
 		Permissions: "read",
 	}
 
-	response, err := CreateAPIKey(createReq, suite.userID)
+	response, err := CreateAPIKey(createReq, suite.userID, suite.organizationID)
 	suite.Require().NoError(err)
 
 	// Test revoking the key
-	err = RevokeAPIKey(response.ID, suite.userID)
+	err = RevokeAPIKey(response.ID, suite.userID, suite.organizationID)
 	suite.NoError(err)
 
 	// Try to validate revoked key
@@ -330,12 +332,12 @@ func (suite *APIKeyTestSuite) TestRevokeAPIKey() {
 	suite.Nil(user)
 
 	// Test revoking non-existent key
-	err = RevokeAPIKey("non-existent-key", suite.userID)
+	err = RevokeAPIKey("non-existent-key", suite.userID, suite.organizationID)
 	suite.Error(err)
 	suite.Contains(err.Error(), "API key not found or access denied")
 
 	// Test revoking with wrong user
-	err = RevokeAPIKey(response.ID, "999")
+	err = RevokeAPIKey(response.ID, "999", 999)
 	suite.Error(err)
 	suite.Contains(err.Error(), "API key not found or access denied")
 }
@@ -347,22 +349,22 @@ func (suite *APIKeyTestSuite) TestDeleteAPIKey() {
 		Permissions: "read",
 	}
 
-	response, err := CreateAPIKey(createReq, suite.userID)
+	response, err := CreateAPIKey(createReq, suite.userID, suite.organizationID)
 	suite.Require().NoError(err)
 
 	// Test deleting the key
-	err = DeleteAPIKey(response.ID, suite.userID)
+	err = DeleteAPIKey(response.ID, suite.userID, suite.organizationID)
 	suite.NoError(err)
 
 	// Verify key is deleted
-	apiKeys, err := GetUserAPIKeys(suite.userID)
+	apiKeys, err := GetUserAPIKeys(suite.userID, suite.organizationID)
 	suite.NoError(err)
 	for _, key := range apiKeys {
 		suite.NotEqual(response.ID, key.ID, "Deleted key should not appear in user's keys")
 	}
 
 	// Test deleting non-existent key
-	err = DeleteAPIKey("non-existent-key", suite.userID)
+	err = DeleteAPIKey("non-existent-key", suite.userID, suite.organizationID)
 	suite.Error(err)
 	suite.Contains(err.Error(), "API key not found or access denied")
 }
@@ -376,7 +378,7 @@ func (suite *APIKeyTestSuite) TestHandleGetAPIKeys() {
 			Name:        fmt.Sprintf("HTTP Test Key %d", i+1),
 			Permissions: "read",
 		}
-		_, err := CreateAPIKey(createReq, suite.userID)
+		_, err := CreateAPIKey(createReq, suite.userID, suite.organizationID)
 		suite.Require().NoError(err)
 	}
 
@@ -478,7 +480,7 @@ func (suite *APIKeyTestSuite) TestHandleRevokeAPIKey() {
 		Permissions: "read",
 	}
 
-	response, err := CreateAPIKey(createReq, suite.userID)
+	response, err := CreateAPIKey(createReq, suite.userID, suite.organizationID)
 	suite.Require().NoError(err)
 
 	tests := []struct {
@@ -534,7 +536,7 @@ func (suite *APIKeyTestSuite) TestHandleDeleteAPIKey() {
 		Permissions: "read",
 	}
 
-	response, err := CreateAPIKey(createReq, suite.userID)
+	response, err := CreateAPIKey(createReq, suite.userID, suite.organizationID)
 	suite.Require().NoError(err)
 
 	tests := []struct {
@@ -585,7 +587,7 @@ func (suite *APIKeyTestSuite) TestAPIKeyMiddleware() {
 		Permissions: "read",
 	}
 
-	response, err := CreateAPIKey(createReq, suite.userID)
+	response, err := CreateAPIKey(createReq, suite.userID, suite.organizationID)
 	suite.Require().NoError(err)
 
 	// Create test app with middleware

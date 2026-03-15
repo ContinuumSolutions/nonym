@@ -435,7 +435,7 @@ func TestAuthService_Register(t *testing.T) {
 		// Setup mocks
 		mocks.rateLimiter.On("AllowRegistration", ctx, req.Email).Return(true, nil)
 		mocks.audit.On("LogAuthEvent", ctx, mock.AnythingOfType("*interfaces.AuthEvent")).Return(nil)
-		mocks.email.On("SendWelcomeEmail", mock.AnythingOfType("context.Context"), mock.AnythingOfType("*models.User"), mock.AnythingOfType("*models.Organization")).Return(nil)
+		mocks.email.On("SendWelcomeEmail", mock.Anything, mock.AnythingOfType("*models.User"), mock.AnythingOfType("*models.Organization")).Return(nil)
 		mocks.hasher.On("Hash", req.Password).Return("hashed-password", nil)
 		mocks.repo.On("GetUserByEmail", ctx, req.Email).Return((*models.User)(nil), errors.ErrUserNotFound)
 

@@ -350,7 +350,7 @@ func (suite *ProxyIntegrationTestSuite) TestTimeoutHandling() {
 	suite.proxy.config.Timeout = 1 * time.Second
 
 	start := time.Now()
-	err := suite.proxy.HandleRequest(w, req)
+	_ = suite.proxy.HandleRequest(w, req)
 	duration := time.Since(start)
 
 	// Restore original timeout
@@ -514,7 +514,7 @@ func (suite *ProxyIntegrationTestSuite) TestCircuitBreakerBehavior() {
 	req.Header.Set("Content-Type", "application/json")
 
 	w := httptest.NewRecorder()
-	err := suite.proxy.HandleRequest(w, req)
+	_ = suite.proxy.HandleRequest(w, req)
 
 	// Circuit breaker might reject the request or let it through
 	// Exact behavior depends on implementation

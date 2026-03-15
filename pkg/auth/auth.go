@@ -11,9 +11,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
-	"golang.org/x/crypto/bcrypt"
 	_ "github.com/lib/pq"
+	"golang.org/x/crypto/bcrypt"
 	_ "modernc.org/sqlite"
 )
 
@@ -408,7 +407,6 @@ func generateSlug(name string) string {
 	return slug
 }
 
-
 // formatQuery converts SQLite ? placeholders to PostgreSQL $1, $2, etc when needed
 func formatQuery(query string) string {
 	if !isPostgreSQL() {
@@ -428,7 +426,6 @@ func formatQuery(query string) string {
 	}
 	return result
 }
-
 
 // RegisterUser creates a new user account with organization context
 func RegisterUser(req *RegisterRequest) (*User, *Organization, error) {

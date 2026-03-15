@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -17,7 +16,6 @@ import (
 	"github.com/sovereignprivacy/gateway/pkg/audit"
 	"github.com/sovereignprivacy/gateway/pkg/auth"
 	"github.com/sovereignprivacy/gateway/pkg/ner"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	_ "modernc.org/sqlite"
 )
@@ -29,6 +27,7 @@ type GatewayIntegrationTestSuite struct {
 	db               *sql.DB
 	mockAIServer     *httptest.Server
 	testUser         *auth.User
+	testOrg          *auth.Organization
 	testUserToken    string
 	testAPIKey       string
 }
@@ -65,7 +64,7 @@ func (suite *GatewayIntegrationTestSuite) SetupSuite() {
 		Name:     "Integration Test User",
 	}
 
-	suite.testUser, err = auth.RegisterUser(registerReq)
+	suite.testUser, suite.testOrg, err = auth.RegisterUser(registerReq)
 	suite.Require().NoError(err)
 
 	loginReq := &auth.LoginRequest{
@@ -83,12 +82,12 @@ func (suite *GatewayIntegrationTestSuite) SetupSuite() {
 		Permissions: "read",
 	}
 
-	apiKeyResp, err := auth.CreateAPIKey(apiKeyReq, fmt.Sprintf("%d", suite.testUser.ID))
+	apiKeyResp, err := auth.CreateAPIKey(apiKeyReq, fmt.Sprintf("%d", suite.testUser.ID), suite.testOrg.ID)
 	suite.Require().NoError(err)
 	suite.testAPIKey = apiKeyResp.APIKey
 
 	// Setup the actual application
-	suite.app = setupTestApp()
+	suite.app = setupIntegrationTestApp()
 }
 
 func (suite *GatewayIntegrationTestSuite) TearDownSuite() {
@@ -165,7 +164,7 @@ func (suite *GatewayIntegrationTestSuite) mockAIHandler(w http.ResponseWriter, r
 	}
 }
 
-func setupTestApp() *fiber.App {
+func setupIntegrationTestApp() *fiber.App {
 	app := fiber.New(fiber.Config{
 		DisableStartupMessage: true,
 	})
@@ -201,7 +200,7 @@ func setupTestApp() *fiber.App {
 			return c.Status(400).JSON(fiber.Map{"error": "Invalid request"})
 		}
 
-		user, err := auth.RegisterUser(&req)
+		user, _, err := auth.RegisterUser(&req)
 		if err != nil {
 			return c.Status(400).JSON(fiber.Map{"error": err.Error()})
 		}
@@ -279,6 +278,8 @@ func setupTestApp() *fiber.App {
 				"openai",
 				200,
 				details,
+				1, // test organizationID
+				1, // test userID
 			)
 
 			// Simulate de-anonymization of response
@@ -718,7 +719,7 @@ func (suite *GatewayIntegrationTestSuite) TestErrorHandling() {
 
 	for _, tt := range tests {
 		suite.Run(tt.name, func() {
-			var req *httptest.Request
+			var req *http.Request
 			if tt.body != "" {
 				req = httptest.NewRequest(tt.method, tt.path, bytes.NewReader([]byte(tt.body)))
 			} else {

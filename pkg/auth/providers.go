@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -464,7 +465,7 @@ func HandleGetProviderConfig(c *fiber.Ctx) error {
 		})
 	}
 
-	config, err := GetProviderConfig(user.ID)
+	config, err := GetProviderConfig(strconv.Itoa(user.ID))
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"error": "Failed to fetch provider configuration",
@@ -501,7 +502,7 @@ func HandleSaveProviderConfig(c *fiber.Ctx) error {
 		})
 	}
 
-	err := SaveProviderConfig(user.ID, req.Providers)
+	err := SaveProviderConfig(strconv.Itoa(user.ID), req.Providers)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"error": "Failed to save provider configuration",

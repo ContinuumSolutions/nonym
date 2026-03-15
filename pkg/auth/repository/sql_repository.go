@@ -19,6 +19,7 @@ import (
 // sqlRepository implements the AuthRepository interface using standard database/sql
 type sqlRepository struct {
 	db         *sql.DB
+	tx         *sql.Tx // For transaction mode
 	config     *config.Config
 	isPostgres bool
 }
@@ -407,7 +408,8 @@ func (r *sqlRepository) WithTx(ctx context.Context, fn func(interfaces.AuthRepos
 
 	// Create a new repository instance with the transaction
 	txRepo := &sqlRepository{
-		db:         tx,
+		db:         r.db,
+		tx:         tx,
 		config:     r.config,
 		isPostgres: r.isPostgres,
 	}
