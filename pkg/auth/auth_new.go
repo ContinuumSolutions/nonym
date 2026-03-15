@@ -73,6 +73,12 @@ func SignupUser(req *RegisterRequest, clientIP, userAgent string) (*LoginRespons
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
+	// Update organization with owner_id
+	_, err = tx.Exec(`UPDATE organizations SET owner_id = $1 WHERE id = $2`, userID, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to set organization owner: %w", err)
+	}
+
 	// Commit transaction
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)

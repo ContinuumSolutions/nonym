@@ -487,7 +487,7 @@ func (suite *GatewayIntegrationTestSuite) TestPIIDetectionInGateway() {
 
 	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer test-key")
+	req.Header.Set("Authorization", "Bearer test-openai-key")
 
 	resp, err := suite.app.Test(req, -1)
 	suite.NoError(err)
@@ -532,7 +532,7 @@ func (suite *GatewayIntegrationTestSuite) TestRequestWithoutPII() {
 
 	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer test-key")
+	req.Header.Set("Authorization", "Bearer test-openai-key")
 
 	resp, err := suite.app.Test(req, -1)
 	suite.NoError(err)

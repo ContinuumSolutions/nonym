@@ -22,11 +22,11 @@ type Organization struct {
 type User struct {
 	ID             int        `json:"id" db:"id"`
 	Email          string     `json:"email" db:"email"`
-	Password       string     `json:"-" db:"password"` // Never include in JSON responses
+	Password       string     `json:"-" db:"password_hash"` // Never include in JSON responses
 	Name           string     `json:"name" db:"name"`
 	Role           string     `json:"role" db:"role"`
 	OrganizationID int        `json:"organization_id" db:"organization_id"`
-	Active         bool       `json:"active" db:"active"`
+	Active         bool       `json:"active" db:"is_active"`
 	CreatedAt      time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at" db:"updated_at"`
 	LastLogin      *time.Time `json:"last_login,omitempty" db:"last_login"`

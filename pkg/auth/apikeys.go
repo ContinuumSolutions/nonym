@@ -237,7 +237,7 @@ func ValidateAPIKey(apiKey string) (*User, error) {
 
 	// Query all active API keys with organization context
 	query := `SELECT ak.id, ak.key_hash, ak.permissions, ak.expires_at, ak.user_id, ak.organization_id,
-			  u.id, u.email, u.name, u.role, u.organization_id, u.active
+			  u.id, u.email, u.name, u.role, u.organization_id, u.is_active
 			  FROM api_keys ak
 			  JOIN users u ON ak.user_id = CAST(u.id AS TEXT)
 			  WHERE ak.status = 'active' AND ak.organization_id = u.organization_id`

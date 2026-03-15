@@ -84,21 +84,24 @@ func createAuthTables() error {
 			size TEXT,
 			country TEXT,
 			description TEXT,
-			owner_id INTEGER NOT NULL,
+			owner_id INTEGER,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		)`,
 		`CREATE TABLE IF NOT EXISTS users (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			email TEXT UNIQUE NOT NULL,
-			password TEXT NOT NULL,
-			name TEXT NOT NULL,
+			password_hash TEXT NOT NULL,
+			name TEXT,
+			first_name TEXT,
+			last_name TEXT,
 			role TEXT DEFAULT 'user',
 			organization_id INTEGER NOT NULL,
-			active BOOLEAN DEFAULT true,
+			is_active BOOLEAN DEFAULT true,
+			email_verified BOOLEAN DEFAULT false,
+			last_login DATETIME,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			last_login DATETIME,
 			FOREIGN KEY (organization_id) REFERENCES organizations (id) ON DELETE CASCADE
 		)`,
 		`CREATE TABLE IF NOT EXISTS api_keys (
@@ -139,7 +142,7 @@ func createAuthIndexes() error {
 		`CREATE INDEX IF NOT EXISTS idx_organizations_slug ON organizations(slug)`,
 		`CREATE INDEX IF NOT EXISTS idx_organizations_owner ON organizations(owner_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`,
-		`CREATE INDEX IF NOT EXISTS idx_users_active ON users(active)`,
+		`CREATE INDEX IF NOT EXISTS idx_users_active ON users(is_active)`,
 		`CREATE INDEX IF NOT EXISTS idx_users_organization ON users(organization_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_api_keys_organization ON api_keys(organization_id)`,
@@ -231,10 +234,38 @@ func createDefaultUser() error {
 				  VALUES (?, ?, ?, ?, ?, ?, ?)`)
 		_, err = db.Exec(query, "00000000-0000-0000-0000-000000000001", "admin@gateway.local", hashedPassword, "Administrator", "", "admin", true)
 	} else {
-		// SQLite schema uses password, active
-		query := formatQuery(`INSERT INTO users (email, password, name, role, active)
-				  VALUES (?, ?, ?, ?, ?)`)
-		_, err = db.Exec(query, "admin@gateway.local", hashedPassword, "Administrator", "admin", true)
+		// SQLite schema uses password_hash, is_active and requires organization_id
+		// First create a default organization for the admin
+		orgQuery := formatQuery(`INSERT INTO organizations (name, description) VALUES (?, ?)`)
+		orgResult, err := db.Exec(orgQuery, "Default Organization", "Default organization for admin user")
+		if err != nil {
+			return fmt.Errorf("failed to create default organization: %w", err)
+		}
+
+		orgID, err := orgResult.LastInsertId()
+		if err != nil {
+			return fmt.Errorf("failed to get organization ID: %w", err)
+		}
+
+		// Now create the admin user with organization_id
+		query := formatQuery(`INSERT INTO users (email, password_hash, name, role, organization_id, is_active)
+				  VALUES (?, ?, ?, ?, ?, ?)`)
+		userResult, err := db.Exec(query, "admin@gateway.local", hashedPassword, "Administrator", "admin", orgID, true)
+		if err != nil {
+			return fmt.Errorf("failed to create admin user: %w", err)
+		}
+
+		// Get the user ID and update the organization to set owner_id
+		userID, err := userResult.LastInsertId()
+		if err != nil {
+			return fmt.Errorf("failed to get user ID: %w", err)
+		}
+
+		updateOrgQuery := formatQuery(`UPDATE organizations SET owner_id = ? WHERE id = ?`)
+		_, err = db.Exec(updateOrgQuery, userID, orgID)
+		if err != nil {
+			return fmt.Errorf("failed to set organization owner: %w", err)
+		}
 	}
 	if err != nil {
 		return err
@@ -523,8 +554,8 @@ func RegisterUser(req *RegisterRequest) (*User, *Organization, error) {
 		err = db.QueryRow(insertQuery, organizationID, req.Email, hashedPassword, firstName, lastName, userRole, true).
 			Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
 	} else {
-		// SQLite schema uses password, active
-		insertQuery = formatQuery(`INSERT INTO users (email, password, name, role, organization_id, active)
+		// SQLite schema uses password_hash, is_active
+		insertQuery = formatQuery(`INSERT INTO users (email, password_hash, name, role, organization_id, is_active)
 				  VALUES (?, ?, ?, ?, ?, ?) RETURNING id, created_at, updated_at`)
 		err = db.QueryRow(insertQuery, req.Email, hashedPassword, req.Name, userRole, organizationID, true).
 			Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)

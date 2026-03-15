@@ -372,9 +372,8 @@ func TestHandleSettingsEndpoints(t *testing.T) {
 	}
 
 	settingsJSON, _ := json.Marshal(newSettings)
-	req = httptest.NewRequest("PUT", "/api/settings", nil)
+	req = httptest.NewRequest("PUT", "/api/settings", strings.NewReader(string(settingsJSON)))
 	req.Header.Set("Content-Type", "application/json")
-	req.Body = io.NopCloser(strings.NewReader(string(settingsJSON)))
 
 	resp, err = app.Test(req, -1)
 	if err != nil {

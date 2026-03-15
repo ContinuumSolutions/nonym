@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -56,6 +57,10 @@ type ProxyIntegrationTestSuite struct {
 }
 
 func (suite *ProxyIntegrationTestSuite) SetupTest() {
+	// Set up test environment variables
+	os.Setenv("OPENAI_API_KEY", "test-openai-key")
+	os.Setenv("ANTHROPIC_API_KEY", "test-anthropic-key")
+
 	// Create mock AI provider server
 	suite.mockAIServer = httptest.NewServer(http.HandlerFunc(suite.mockAIHandler))
 
@@ -222,7 +227,7 @@ func (suite *ProxyIntegrationTestSuite) TestBasicProxyFunctionality() {
 
 	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer test-key")
+	req.Header.Set("Authorization", "Bearer test-openai-key")
 
 	w := httptest.NewRecorder()
 
@@ -259,7 +264,7 @@ func (suite *ProxyIntegrationTestSuite) TestPIIDetectionAndAnonymization() {
 
 	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer test-key")
+	req.Header.Set("Authorization", "Bearer test-openai-key")
 
 	w := httptest.NewRecorder()
 
@@ -307,7 +312,7 @@ func (suite *ProxyIntegrationTestSuite) TestStrictModeBlocking() {
 
 	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer test-key")
+	req.Header.Set("Authorization", "Bearer test-openai-key")
 
 	w := httptest.NewRecorder()
 
