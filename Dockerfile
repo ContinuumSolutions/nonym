@@ -58,14 +58,10 @@ WORKDIR /app
 # Copy binary from builder
 COPY --from=builder --chown=spguser:spguser /build/gateway /app/gateway
 
-# Copy dashboard files
-COPY --chown=spguser:spguser dashboard/ /app/dashboard/
-
 # Create directories with proper permissions
 RUN mkdir -p /data /app/logs /tmp && \
     chown -R spguser:spguser /app /data && \
     chmod 755 /app/gateway && \
-    chmod -R 755 /app/dashboard && \
     chmod 755 /data
 
 # Switch to non-root user
@@ -80,7 +76,6 @@ EXPOSE 8080 8081
 
 # Environment defaults
 ENV PORT=8080 \
-    DASHBOARD_PORT=8081 \
     DATABASE_PATH=/data/gateway.db \
     LOG_LEVEL=info \
     STRICT_MODE=false
@@ -126,7 +121,6 @@ USER devuser
 
 # Development environment variables
 ENV PORT=8080 \
-    DASHBOARD_PORT=8081 \
     LOG_LEVEL=debug \
     DATABASE_PATH=/data/gateway.db
 
