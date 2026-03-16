@@ -221,34 +221,51 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 	// Transactions endpoint
 	app.Get("/api/v1/transactions", authMiddleware, audit.HandleGetTransactionsV1)
 
-	// Dashboard API endpoints - using temporary API key authentication
-	dashboardApiKeyMiddleware := func(c *fiber.Ctx) error {
-		// Check for API key in X-API-Key header
+	// Dashboard API endpoints - support both JWT and API key authentication
+	dashboardAuthMiddleware := func(c *fiber.Ctx) error {
+		// Try JWT token first
+		authHeader := c.Get("Authorization")
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			token := authHeader[len("Bearer "):]
+			user, err := auth.ValidateToken(token)
+			if err == nil {
+				// JWT validation successful
+				c.Locals("user", user)
+				c.Locals("organization_id", user.OrganizationID)
+				c.Locals("auth_method", "jwt")
+				return c.Next()
+			}
+		}
+
+		// Try API key authentication as fallback
 		apiKey := c.Get("X-API-Key")
-		if apiKey == "" {
-			return c.Status(401).JSON(fiber.Map{"error": "API key required"})
+		if apiKey == "" && strings.HasPrefix(authHeader, "Bearer ") {
+			// Also check if Bearer token is actually an API key
+			apiKey = strings.TrimPrefix(authHeader, "Bearer ")
 		}
 
-		// Accept test API keys for dashboard testing
-		validTestKeys := map[string]int{
-			"test-api-key": 1, // organization_id = 1
-			"demo-key":     1,
-			"dev-key":      1,
+		if apiKey != "" {
+			// Check test keys for development
+			validTestKeys := map[string]int{
+				"test-api-key": 1,
+				"demo-key":     1,
+				"dev-key":      1,
+			}
+
+			if orgID, isValid := validTestKeys[apiKey]; isValid {
+				c.Locals("organization_id", orgID)
+				c.Locals("auth_method", "api_key")
+				return c.Next()
+			}
 		}
 
-		orgID, isValid := validTestKeys[apiKey]
-		if !isValid {
-			return c.Status(401).JSON(fiber.Map{"error": "Invalid API key"})
-		}
-
-		// Set organization context for downstream handlers
-		c.Locals("organization_id", orgID)
-		c.Locals("auth_method", "api_key")
-		return c.Next()
+		return c.Status(401).JSON(fiber.Map{
+			"error": "Authentication required. Please provide a valid JWT token or API key.",
+		})
 	}
 
-	app.Get("/api/v1/dashboard/layout", dashboardApiKeyMiddleware, audit.HandleGetDashboardLayout)
-	app.Get("/api/v1/dashboard/widgets/:widget_id", dashboardApiKeyMiddleware, audit.HandleGetWidgetData)
+	app.Get("/api/v1/dashboard/layout", dashboardAuthMiddleware, audit.HandleGetDashboardLayout)
+	app.Get("/api/v1/dashboard/widgets/:widget_id", dashboardAuthMiddleware, audit.HandleGetWidgetData)
 
 	// Main proxy endpoints (for AI providers) - NOW REQUIRING API KEY AUTHENTICATION
 	// Apply API key middleware to all proxy routes for security
