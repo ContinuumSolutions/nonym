@@ -28,7 +28,10 @@ echo "📊 Verifying tables:"
 docker compose exec postgres psql -U gateway -d gateway -c "\dt"
 
 echo "👤 Default admin user:"
-docker compose exec postgres psql -U gateway -d gateway -c "SELECT email, role, is_active FROM users WHERE role='admin';"
+docker compose exec postgres psql -U gateway -d gateway -c "SELECT id, email, role, is_active FROM users WHERE role='owner';"
+
+echo "🏢 Default organization:"
+docker compose exec postgres psql -U gateway -d gateway -c "SELECT id, name, slug, owner_id, is_active FROM organizations WHERE slug='default';"
 
 echo ""
 echo "🎉 Done! Auth schema is ready."
