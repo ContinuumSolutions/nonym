@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/cors"
+	// "github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/joho/godotenv"
@@ -138,11 +138,11 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 		Format: "${time} ${status} - ${method} ${path} (${latency})\n",
 	}))
 	app.Use(recover.New())
-	app.Use(cors.New(cors.Config{
-		AllowOrigins: "*",
-		AllowMethods: "GET,POST,PUT,DELETE,PATCH,OPTIONS",
-		AllowHeaders: "Origin,Content-Type,Accept,Authorization,X-API-Key",
-	}))
+	// app.Use(cors.New(cors.Config{
+	// 	AllowOrigins: "*",
+	// 	AllowMethods: "GET,POST,PUT,DELETE,PATCH,OPTIONS",
+	// 	AllowHeaders: "Origin,Content-Type,Accept,Authorization,X-API-Key",
+	// }))
 
 	// Health check
 	app.Get("/health", func(c *fiber.Ctx) error {
