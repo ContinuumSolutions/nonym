@@ -220,6 +220,37 @@ func getPostgreSQLMigrations() []*Migration {
 				ALTER TABLE organizations DROP COLUMN IF EXISTS owner_id;
 			`,
 		},
+		{
+			Version:     5,
+			Name:        "create_api_keys_table",
+			Description: "Create API keys table for authentication",
+			UpSQL: `
+				-- API keys table
+				CREATE TABLE api_keys (
+					id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+					name VARCHAR(255) NOT NULL,
+					key_hash VARCHAR(255) NOT NULL,
+					masked_key VARCHAR(50) NOT NULL,
+					permissions VARCHAR(500) NOT NULL,
+					user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+					organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+					created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+					expires_at TIMESTAMP WITH TIME ZONE,
+					status VARCHAR(50) DEFAULT 'active' CHECK (status IN ('active', 'revoked', 'expired', 'deleted')),
+					last_used TIMESTAMP WITH TIME ZONE
+				);
+
+				-- Create indexes for API keys
+				CREATE INDEX idx_api_keys_user_id ON api_keys(user_id);
+				CREATE INDEX idx_api_keys_organization_id ON api_keys(organization_id);
+				CREATE INDEX idx_api_keys_status ON api_keys(status);
+				CREATE INDEX idx_api_keys_key_hash ON api_keys(key_hash);
+				CREATE INDEX idx_api_keys_expires_at ON api_keys(expires_at);
+			`,
+			DownSQL: `
+				DROP TABLE IF EXISTS api_keys CASCADE;
+			`,
+		},
 	}
 }
 
@@ -421,6 +452,37 @@ func getSQLiteMigrations() []*Migration {
 				-- Remove owner_id column (SQLite doesn't support DROP COLUMN directly)
 				-- This would require table recreation in a real scenario
 				-- For now, we'll just note this limitation
+			`,
+		},
+		{
+			Version:     5,
+			Name:        "create_api_keys_table",
+			Description: "Create API keys table for authentication",
+			UpSQL: `
+				-- API keys table
+				CREATE TABLE api_keys (
+					id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))),2) || '-' || lower(hex(randomblob(6)))),
+					name TEXT NOT NULL,
+					key_hash TEXT NOT NULL,
+					masked_key TEXT NOT NULL,
+					permissions TEXT NOT NULL,
+					user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+					organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+					created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+					expires_at DATETIME,
+					status TEXT DEFAULT 'active' CHECK (status IN ('active', 'revoked', 'expired', 'deleted')),
+					last_used DATETIME
+				);
+
+				-- Create indexes for API keys
+				CREATE INDEX idx_api_keys_user_id ON api_keys(user_id);
+				CREATE INDEX idx_api_keys_organization_id ON api_keys(organization_id);
+				CREATE INDEX idx_api_keys_status ON api_keys(status);
+				CREATE INDEX idx_api_keys_key_hash ON api_keys(key_hash);
+				CREATE INDEX idx_api_keys_expires_at ON api_keys(expires_at);
+			`,
+			DownSQL: `
+				DROP TABLE IF EXISTS api_keys;
 			`,
 		},
 	}

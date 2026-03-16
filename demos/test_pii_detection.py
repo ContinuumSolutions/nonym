@@ -7,7 +7,7 @@ import requests
 import json
 
 # Gateway URL
-gateway_url = "https://genesis.egokernel.com/v1/chat/completions"
+gateway_url = "https://gateway.egokernel.com/v1/chat/completions"
 
 # Test messages with different types of PII
 test_cases = [
@@ -45,7 +45,7 @@ for test in test_cases:
                 "Authorization": "Bearer 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",
                 # "Authorization": "Bearer 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",
                 "Content-Type": "application/json",
-                "X-API-Key": "spg_62e9c603fed726a5087db12a1ee703f54850f04e4455db589640005a42c22787"
+                "X-API-Key": "spg_bzjlu2zhm8"
             },
             json=payload,
             timeout=10
