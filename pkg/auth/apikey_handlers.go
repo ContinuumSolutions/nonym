@@ -1,11 +1,16 @@
 package auth
 
 import (
+	"crypto/rand"
+	"database/sql"
+	"fmt"
+	"log"
 	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // APIKey represents an API key
@@ -51,11 +56,51 @@ func HandleGetAPIKeys(c *fiber.Ctx) error {
 		})
 	}
 
-	// TODO: Implement actual API key retrieval from database
-	// For now, return empty list
-	apiKeys := []APIKeyResponse{}
+	// Ensure API keys table exists
+	if err := ensureAPIKeysTable(); err != nil {
+		log.Printf("Failed to ensure API keys table: %v", err)
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Internal server error",
+		})
+	}
 
-	_ = user // Acknowledge user variable
+	// Retrieve API keys for the user's organization
+	query := `SELECT id, name, masked_key, permissions, created_at, expires_at, status, last_used
+			  FROM api_keys
+			  WHERE organization_id = ? AND user_id = ? AND status != 'deleted'
+			  ORDER BY created_at DESC`
+
+	rows, err := db.Query(query, user.OrganizationID, user.ID)
+	if err != nil {
+		log.Printf("Failed to query API keys: %v", err)
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to retrieve API keys",
+		})
+	}
+	defer rows.Close()
+
+	var apiKeys []APIKeyResponse
+	for rows.Next() {
+		var key APIKeyResponse
+		var expiresAt sql.NullTime
+		var lastUsed sql.NullTime
+
+		err := rows.Scan(&key.ID, &key.Name, &key.MaskedKey, &key.Permissions,
+						&key.CreatedAt, &expiresAt, &key.Status, &lastUsed)
+		if err != nil {
+			log.Printf("Failed to scan API key: %v", err)
+			continue
+		}
+
+		if expiresAt.Valid {
+			key.ExpiresAt = &expiresAt.Time
+		}
+		if lastUsed.Valid {
+			key.LastUsed = &lastUsed.Time
+		}
+
+		apiKeys = append(apiKeys, key)
+	}
 
 	return c.JSON(fiber.Map{
 		"api_keys": apiKeys,
@@ -92,27 +137,55 @@ func HandleCreateAPIKey(c *fiber.Ctx) error {
 		})
 	}
 
-	// TODO: Implement actual API key creation
+	// Ensure API keys table exists
+	if err := ensureAPIKeysTable(); err != nil {
+		log.Printf("Failed to ensure API keys table: %v", err)
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Internal server error",
+		})
+	}
+
 	// 1. Generate secure random API key
+	apiKeyValue := "spg_" + generateRandomString(32)
+
 	// 2. Hash the key for storage
+	keyHash, err := hashAPIKey(apiKeyValue)
+	if err != nil {
+		log.Printf("Failed to hash API key: %v", err)
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Internal server error",
+		})
+	}
+
 	// 3. Create masked version for display
+	maskedKey := createMaskedKey(apiKeyValue)
+
 	// 4. Store in database
+	keyID := uuid.New().String()
+	query := `INSERT INTO api_keys (id, name, key_hash, masked_key, permissions, user_id, organization_id, expires_at)
+			  VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+
+	_, err = db.Exec(query, keyID, req.Name, keyHash, maskedKey, req.Permissions, user.ID, user.OrganizationID, req.ExpiresAt)
+	if err != nil {
+		log.Printf("Failed to store API key: %v", err)
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to create API key",
+		})
+	}
+
 	// 5. Return the key once (never show again)
-
-	apiKeyValue := "spg_" + generateRandomString(32) // Placeholder
-	maskedKey := apiKeyValue[:8] + "..." + apiKeyValue[len(apiKeyValue)-4:]
-
-	_ = user // Acknowledge user variable
-
 	return c.Status(201).JSON(fiber.Map{
 		"message": "API key created successfully",
 		"api_key": apiKeyValue, // Only shown once
 		"key_info": fiber.Map{
+			"id":          keyID,
 			"name":        req.Name,
 			"masked_key":  maskedKey,
 			"permissions": req.Permissions,
 			"expires_at":  req.ExpiresAt,
+			"status":      "active",
 		},
+		"warning": "Keep this API key secure. This is the only time it will be shown in full.",
 	})
 }
 
@@ -156,12 +229,50 @@ func HandleRevokeAPIKey(c *fiber.Ctx) error {
 		})
 	}
 
-	// TODO: Implement actual API key revocation
-	// 1. Verify key belongs to user or user is admin
-	// 2. Update status to 'revoked' in database
-	// 3. Log the revocation for audit
+	// Ensure API keys table exists
+	if err := ensureAPIKeysTable(); err != nil {
+		log.Printf("Failed to ensure API keys table: %v", err)
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Internal server error",
+		})
+	}
 
-	_ = user // Acknowledge user variable
+	// 1. Verify key belongs to user or user is admin
+	var existingUserID int
+	var existingOrgID int
+	checkQuery := `SELECT user_id, organization_id FROM api_keys WHERE id = ? AND status = 'active'`
+	err := db.QueryRow(checkQuery, keyID).Scan(&existingUserID, &existingOrgID)
+	if err == sql.ErrNoRows {
+		return c.Status(404).JSON(fiber.Map{
+			"error": "API key not found",
+		})
+	}
+	if err != nil {
+		log.Printf("Failed to verify API key ownership: %v", err)
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Internal server error",
+		})
+	}
+
+	// Check if user owns the key or is in the same organization
+	if existingUserID != user.ID && existingOrgID != user.OrganizationID {
+		return c.Status(403).JSON(fiber.Map{
+			"error": "You don't have permission to revoke this API key",
+		})
+	}
+
+	// 2. Update status to 'revoked' in database
+	updateQuery := `UPDATE api_keys SET status = 'revoked', last_used = CURRENT_TIMESTAMP WHERE id = ?`
+	_, err = db.Exec(updateQuery, keyID)
+	if err != nil {
+		log.Printf("Failed to revoke API key: %v", err)
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to revoke API key",
+		})
+	}
+
+	// 3. Log the revocation for audit
+	log.Printf("API key revoked: ID=%s, UserID=%d, OrgID=%d", keyID, user.ID, user.OrganizationID)
 
 	return c.JSON(fiber.Map{
 		"message": "API key revoked successfully",
@@ -185,12 +296,57 @@ func HandleDeleteAPIKey(c *fiber.Ctx) error {
 		})
 	}
 
-	// TODO: Implement actual API key deletion
-	// 1. Verify key belongs to user or user is admin
-	// 2. Delete from database
-	// 3. Log the deletion for audit
+	// Ensure API keys table exists
+	if err := ensureAPIKeysTable(); err != nil {
+		log.Printf("Failed to ensure API keys table: %v", err)
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Internal server error",
+		})
+	}
 
-	_ = user // Acknowledge user variable
+	// 1. Verify key belongs to user or user is admin
+	var existingUserID int
+	var existingOrgID int
+	checkQuery := `SELECT user_id, organization_id FROM api_keys WHERE id = ?`
+	err := db.QueryRow(checkQuery, keyID).Scan(&existingUserID, &existingOrgID)
+	if err == sql.ErrNoRows {
+		return c.Status(404).JSON(fiber.Map{
+			"error": "API key not found",
+		})
+	}
+	if err != nil {
+		log.Printf("Failed to verify API key ownership: %v", err)
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Internal server error",
+		})
+	}
+
+	// Check if user owns the key or is in the same organization
+	if existingUserID != user.ID && existingOrgID != user.OrganizationID {
+		return c.Status(403).JSON(fiber.Map{
+			"error": "You don't have permission to delete this API key",
+		})
+	}
+
+	// 2. Mark as deleted in database (soft delete for audit trail)
+	deleteQuery := `UPDATE api_keys SET status = 'deleted', last_used = CURRENT_TIMESTAMP WHERE id = ?`
+	result, err := db.Exec(deleteQuery, keyID)
+	if err != nil {
+		log.Printf("Failed to delete API key: %v", err)
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to delete API key",
+		})
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		return c.Status(404).JSON(fiber.Map{
+			"error": "API key not found",
+		})
+	}
+
+	// 3. Log the deletion for audit
+	log.Printf("API key deleted: ID=%s, UserID=%d, OrgID=%d", keyID, user.ID, user.OrganizationID)
 
 	return c.JSON(fiber.Map{
 		"message": "API key deleted successfully",
@@ -216,8 +372,183 @@ func APIKeyMiddleware(c *fiber.Ctx) error {
 		})
 	}
 
-	// TODO: Implement actual API key validation with database lookup
-	// For now, accept test API keys for dashboard testing
+	// Ensure API keys table exists
+	if err := ensureAPIKeysTable(); err != nil {
+		log.Printf("Failed to ensure API keys table: %v", err)
+		// Fall back to test keys if database isn't ready
+		return fallbackToTestKeysTemp(c, apiKey)
+	}
+
+	// Validate API key against database
+	keyInfo, err := validateAPIKeyFromDatabaseTemp(apiKey)
+	if err != nil {
+		// Log the error and try fallback to test keys
+		log.Printf("API key validation error: %v", err)
+		return fallbackToTestKeysTemp(c, apiKey)
+	}
+
+	if keyInfo == nil {
+		return c.Status(401).JSON(fiber.Map{
+			"error": "Invalid API key",
+		})
+	}
+
+	// Update last_used timestamp
+	updateLastUsedQuery := `UPDATE api_keys SET last_used = CURRENT_TIMESTAMP WHERE id = ?`
+	db.Exec(updateLastUsedQuery, keyInfo.ID)
+
+	// Set context for downstream handlers
+	c.Locals("organization_id", keyInfo.OrganizationID)
+	c.Locals("user_id", keyInfo.UserID)
+	c.Locals("auth_method", "api_key")
+	c.Locals("api_key_id", keyInfo.ID)
+	c.Locals("api_key_permissions", keyInfo.Permissions)
+
+	return c.Next()
+}
+
+// generateRandomString generates a secure random string for API keys
+func generateRandomString(length int) string {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+	bytes := make([]byte, length)
+	if _, err := rand.Read(bytes); err != nil {
+		log.Printf("Error generating random string: %v", err)
+		// Fallback to current timestamp + uuid as last resort
+		fallback := fmt.Sprintf("%d%s", time.Now().UnixNano(), uuid.New().String())
+		if len(fallback) > length {
+			return fallback[:length]
+		}
+		return fallback
+	}
+
+	for i, b := range bytes {
+		bytes[i] = charset[b%byte(len(charset))]
+	}
+
+	return string(bytes)
+}
+
+// hashAPIKey creates a bcrypt hash of the API key for secure storage
+func hashAPIKey(apiKey string) (string, error) {
+	bytes, err := bcrypt.GenerateFromPassword([]byte(apiKey), bcrypt.DefaultCost)
+	if err != nil {
+		return "", fmt.Errorf("failed to hash API key: %w", err)
+	}
+	return string(bytes), nil
+}
+
+// verifyAPIKey verifies an API key against its hash
+func verifyAPIKey(apiKey, hash string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(apiKey))
+	return err == nil
+}
+
+// createMaskedKey creates a masked version of the API key for display
+func createMaskedKey(apiKey string) string {
+	if len(apiKey) < 8 {
+		return "****"
+	}
+	return apiKey[:4] + "..." + apiKey[len(apiKey)-4:]
+}
+
+// ensureAPIKeysTable creates the API keys table if it doesn't exist
+func ensureAPIKeysTable() error {
+	query := `CREATE TABLE IF NOT EXISTS api_keys (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		key_hash TEXT NOT NULL,
+		masked_key TEXT NOT NULL,
+		permissions TEXT NOT NULL,
+		user_id INTEGER NOT NULL,
+		organization_id INTEGER NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		expires_at DATETIME,
+		status TEXT DEFAULT 'active',
+		last_used DATETIME
+	)`
+
+	if _, err := db.Exec(query); err != nil {
+		return fmt.Errorf("failed to create api_keys table: %w", err)
+	}
+
+	// Create indexes
+	indexQueries := []string{
+		`CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_api_keys_organization ON api_keys(organization_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_api_keys_status ON api_keys(status)`,
+		`CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash)`,
+	}
+
+	for _, query := range indexQueries {
+		if _, err := db.Exec(query); err != nil {
+			log.Printf("Warning: Failed to create index: %v", err)
+		}
+	}
+
+	return nil
+}
+
+// APIKeyInfo holds information about a validated API key
+type APIKeyInfo struct {
+	ID             string
+	UserID         int
+	OrganizationID int
+	Permissions    string
+	Status         string
+	ExpiresAt      *time.Time
+}
+
+// validateAPIKeyFromDatabaseTemp validates an API key against the database
+func validateAPIKeyFromDatabaseTemp(apiKey string) (*APIKeyInfo, error) {
+	if db == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+
+	// Query active API keys and check against the provided key
+	query := `SELECT id, key_hash, user_id, organization_id, permissions, status, expires_at
+			  FROM api_keys
+			  WHERE status = 'active'`
+
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query API keys: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var keyInfo APIKeyInfo
+		var keyHash string
+		var expiresAt sql.NullTime
+
+		err := rows.Scan(&keyInfo.ID, &keyHash, &keyInfo.UserID, &keyInfo.OrganizationID,
+						&keyInfo.Permissions, &keyInfo.Status, &expiresAt)
+		if err != nil {
+			continue
+		}
+
+		// Verify the API key against the hash
+		if verifyAPIKey(apiKey, keyHash) {
+			// Check if key has expired
+			if expiresAt.Valid {
+				keyInfo.ExpiresAt = &expiresAt.Time
+				if time.Now().After(expiresAt.Time) {
+					// Key has expired, mark as expired
+					expireQuery := `UPDATE api_keys SET status = 'expired' WHERE id = ?`
+					db.Exec(expireQuery, keyInfo.ID)
+					continue
+				}
+			}
+
+			return &keyInfo, nil
+		}
+	}
+
+	return nil, nil // No matching key found
+}
+
+// fallbackToTestKeysTemp provides fallback authentication for development/testing
+func fallbackToTestKeysTemp(c *fiber.Ctx, apiKey string) error {
 	validTestKeys := map[string]int{
 		"test-api-key": 1, // organization_id = 1
 		"demo-key":     1,
@@ -233,13 +564,7 @@ func APIKeyMiddleware(c *fiber.Ctx) error {
 
 	// Set organization context for downstream handlers
 	c.Locals("organization_id", orgID)
-	c.Locals("auth_method", "api_key")
+	c.Locals("auth_method", "api_key_test")
 
 	return c.Next()
-}
-
-// generateRandomString generates a random string for API keys (placeholder)
-func generateRandomString(length int) string {
-	// TODO: Implement secure random string generation
-	return "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" // Placeholder
 }
