@@ -135,13 +135,47 @@ paths:
     post:
       tags: [Authentication]
       summary: Register a new user
-      description: Creates a new user account
+      description: |
+        Creates a new user account with flexible name input support.
+
+        **Name Input Options:**
+        - Single field: `name: "John Doe"` (automatically split into first/last)
+        - Separate fields: `first_name: "John", last_name: "Doe"`
+
+        **Organization Options:**
+        - Create new: Provide `organization` name
+        - Join existing: Provide `organization_id` (UUID)
+
+        Uses atomic database transactions to ensure data consistency.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/RegisterRequest'
+            examples:
+              single_name_format:
+                summary: Using single name field
+                value:
+                  email: "user@egokernel.com"
+                  password: "my-password"
+                  name: "John Doe"
+                  organization: "Demo"
+              separate_name_fields:
+                summary: Using separate name fields
+                value:
+                  email: "john.doe@example.com"
+                  password: "password123"
+                  first_name: "John"
+                  last_name: "Doe"
+                  organization: "Example Corp"
+              join_existing_org:
+                summary: Joining existing organization
+                value:
+                  email: "user@company.com"
+                  password: "password123"
+                  name: "New User"
+                  organization_id: "123e4567-e89b-12d3-a456-426614174000"
       responses:
         '201':
           description: User registered successfully
@@ -149,6 +183,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LoginResponse'
+              example:
+                message: "User registered successfully"
+                token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                expires_at: "2024-03-17T10:30:00Z"
+                user:
+                  id: "123e4567-e89b-12d3-a456-426614174000"
+                  email: "user@egokernel.io"
+                  first_name: "John"
+                  last_name: "Doe"
+                  full_name: "John Doe"
+                  role: "owner"
+                  organization_id: "987fcdeb-51a2-43d7-8f9e-123456789abc"
+                  is_active: true
+                  email_verified: false
+                  created_at: "2024-03-16T10:30:00Z"
+                organization:
+                  id: "987fcdeb-51a2-43d7-8f9e-123456789abc"
+                  name: "Demo"
+                  slug: "demo"
+                  description: "Organization for John Doe"
+                  owner_id: "123e4567-e89b-12d3-a456-426614174000"
+                  is_active: true
+                  created_at: "2024-03-16T10:30:00Z"
         '400':
           description: Invalid registration data
           content:
@@ -452,8 +509,9 @@ paths:
           in: path
           required: true
           schema:
-            type: integer
-          description: Team member ID
+            type: string
+            format: uuid
+          description: Team member UUID
       responses:
         '200':
           description: Team member removed successfully
@@ -912,28 +970,45 @@ components:
     # Authentication schemas
     RegisterRequest:
       type: object
+      description: |
+        User registration request. Supports two name formats:
+        1. Single name field: `name: "John Doe"` (will be split into first/last)
+        2. Separate fields: `first_name: "John", last_name: "Doe"`
+        At least one name format must be provided.
       properties:
         email:
           type: string
           format: email
+          description: User's email address
         password:
           type: string
           minLength: 8
+          description: User's password (minimum 8 characters)
         name:
           type: string
-        firstName:
+          description: Full name (e.g., "John Doe") - alternative to first_name/last_name
+        first_name:
           type: string
-        lastName:
+          description: First name (when using separate name fields)
+        last_name:
           type: string
+          description: Last name (when using separate name fields)
         organization:
           type: string
+          description: Organization name (creates new org if not joining existing)
         organization_id:
-          type: integer
+          type: string
+          format: uuid
+          description: UUID of existing organization to join
         invite_code:
           type: string
+          description: Invitation code for joining organization
       required:
         - email
         - password
+      oneOf:
+        - required: [name]
+        - required: [first_name, last_name]
 
     LoginRequest:
       type: object
@@ -941,10 +1016,14 @@ components:
         email:
           type: string
           format: email
+          description: User's email address
         password:
           type: string
+          description: User's password
         organization_id:
-          type: integer
+          type: string
+          format: uuid
+          description: Optional organization UUID for multi-org users
       required:
         - email
         - password
@@ -966,26 +1045,49 @@ components:
       type: object
       properties:
         id:
-          type: integer
+          type: string
+          format: uuid
+          description: User's unique identifier (UUID)
         email:
           type: string
-        name:
+          format: email
+          description: User's email address
+        first_name:
           type: string
+          description: User's first name
+        last_name:
+          type: string
+          description: User's last name
+        full_name:
+          type: string
+          description: User's full name (computed from first_name + last_name)
         role:
           type: string
+          enum: [owner, admin, user, viewer]
+          description: User's role in the organization
         organization_id:
-          type: integer
+          type: string
+          format: uuid
+          description: Organization UUID this user belongs to
         is_active:
           type: boolean
+          description: Whether the user account is active
+        email_verified:
+          type: boolean
+          description: Whether the user's email is verified
         created_at:
           type: string
           format: date-time
+          description: When the user account was created
         updated_at:
           type: string
           format: date-time
+          description: When the user account was last updated
         last_login:
           type: string
           format: date-time
+          nullable: true
+          description: When the user last logged in
         organization:
           $ref: '#/components/schemas/Organization'
 
@@ -993,23 +1095,45 @@ components:
       type: object
       properties:
         id:
-          type: integer
+          type: string
+          format: uuid
+          description: User's unique identifier (UUID)
         email:
           type: string
-        name:
+          format: email
+          description: User's email address
+        first_name:
           type: string
+          description: User's first name
+        last_name:
+          type: string
+          description: User's last name
+        full_name:
+          type: string
+          description: User's full name (computed from first_name + last_name)
         role:
           type: string
+          enum: [owner, admin, user, viewer]
+          description: User's role in the organization
         organization_id:
-          type: integer
+          type: string
+          format: uuid
+          description: Organization UUID this user belongs to
         is_active:
           type: boolean
+          description: Whether the user account is active
+        email_verified:
+          type: boolean
+          description: Whether the user's email is verified
         created_at:
           type: string
           format: date-time
+          description: When the user account was created
         last_login:
           type: string
           format: date-time
+          nullable: true
+          description: When the user last logged in
         organization:
           $ref: '#/components/schemas/Organization'
 
@@ -1017,27 +1141,33 @@ components:
       type: object
       properties:
         id:
-          type: integer
+          type: string
+          format: uuid
+          description: Organization's unique identifier (UUID)
         name:
           type: string
+          description: Organization name
         slug:
           type: string
-        industry:
-          type: string
-        size:
-          type: string
-        country:
-          type: string
+          description: URL-friendly organization identifier
         description:
           type: string
+          description: Organization description
         owner_id:
-          type: integer
+          type: string
+          format: uuid
+          description: UUID of the organization owner
+        is_active:
+          type: boolean
+          description: Whether the organization is active
         created_at:
           type: string
           format: date-time
+          description: When the organization was created
         updated_at:
           type: string
           format: date-time
+          description: When the organization was last updated
 
     OrganizationUpdateRequest:
       type: object
@@ -1067,8 +1197,12 @@ components:
           type: string
         user_id:
           type: string
+          format: uuid
+          description: User UUID who owns this API key
         organization_id:
-          type: integer
+          type: string
+          format: uuid
+          description: Organization UUID this API key belongs to
         created_at:
           type: string
           format: date-time
@@ -1117,21 +1251,38 @@ components:
       type: object
       properties:
         id:
-          type: integer
-        name:
           type: string
+          format: uuid
+          description: Team member's unique identifier (UUID)
+        first_name:
+          type: string
+          description: Team member's first name
+        last_name:
+          type: string
+          description: Team member's last name
+        full_name:
+          type: string
+          description: Team member's full name
         email:
           type: string
+          format: email
+          description: Team member's email address
         role:
           type: string
-        status:
-          type: string
+          enum: [owner, admin, user, viewer]
+          description: Team member's role in the organization
+        is_active:
+          type: boolean
+          description: Whether the team member is active
         joined_at:
           type: string
           format: date-time
+          description: When the team member joined
         last_active:
           type: string
           format: date-time
+          nullable: true
+          description: When the team member was last active
 
     TeamInviteRequest:
       type: object
@@ -1238,9 +1389,13 @@ components:
         error_message:
           type: string
         organization_id:
-          type: integer
+          type: string
+          format: uuid
+          description: Organization UUID
         user_id:
-          type: integer
+          type: string
+          format: uuid
+          description: User UUID
 
     RedactionDetail:
       type: object
