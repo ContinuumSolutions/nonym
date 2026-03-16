@@ -165,18 +165,23 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 
 	// API Keys management endpoints - protected routes
 	authMiddleware := func(c *fiber.Ctx) error {
+		fmt.Printf("*** AUTH MIDDLEWARE CALLED for %s %s ***\n", c.Method(), c.Path())
 		authHeader := c.Get("Authorization")
 		if authHeader == "" {
+			fmt.Printf("*** AUTH MIDDLEWARE: No auth header ***\n")
 			return c.Status(401).JSON(fiber.Map{"error": "Authorization header required"})
 		}
 		if !strings.HasPrefix(authHeader, "Bearer ") {
+			fmt.Printf("*** AUTH MIDDLEWARE: Invalid auth header format ***\n")
 			return c.Status(401).JSON(fiber.Map{"error": "Invalid authorization header format"})
 		}
 		token := authHeader[len("Bearer "):]
 		user, err := auth.ValidateToken(token)
 		if err != nil {
+			fmt.Printf("*** AUTH MIDDLEWARE: Invalid token: %v ***\n", err)
 			return c.Status(401).JSON(fiber.Map{"error": "Invalid token"})
 		}
+		fmt.Printf("*** AUTH MIDDLEWARE: User validated, calling next ***\n")
 		c.Locals("user", user)
 		c.Locals("organization_id", user.OrganizationID)
 		return c.Next()

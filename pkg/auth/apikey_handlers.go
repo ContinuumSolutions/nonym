@@ -101,19 +101,28 @@ func HandleGetAPIKeys(c *fiber.Ctx) error {
 
 // HandleCreateAPIKey handles POST /api/v1/api-keys
 func HandleCreateAPIKey(c *fiber.Ctx) error {
+	fmt.Printf("*** HANDLER CALLED: HandleCreateAPIKey ***\n")
+	log.Printf("*** HANDLER CALLED: HandleCreateAPIKey ***")
+
 	user, ok := c.Locals("user").(*User)
 	if !ok {
+		log.Printf("Authentication failed - no user in context")
 		return c.Status(401).JSON(fiber.Map{
 			"error": "Authentication required",
 		})
 	}
 
+	log.Printf("User authenticated: ID=%d, Email=%s, OrgID=%d", user.ID, user.Email, user.OrganizationID)
+
 	var req APIKeyCreateRequest
 	if err := c.BodyParser(&req); err != nil {
+		log.Printf("Failed to parse request body: %v", err)
 		return c.Status(400).JSON(fiber.Map{
 			"error": "Invalid request body",
 		})
 	}
+
+	log.Printf("Request parsed: Name=%s, Permissions=%s", req.Name, req.Permissions)
 
 	// Basic validation
 	if req.Name == "" {
@@ -143,18 +152,21 @@ func HandleCreateAPIKey(c *fiber.Ctx) error {
 	// 3. Create masked version for display
 	maskedKey := createMaskedKey(apiKeyValue)
 
-	// 4. Store in database
+	// 4. Store in database with proper error handling
 	query := formatQuery(`INSERT INTO api_keys (name, key_hash, masked_key, permissions, user_id, organization_id, expires_at)
 			  VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`)
 
 	var keyID int
 	err = db.QueryRow(query, req.Name, keyHash, maskedKey, req.Permissions, user.ID, user.OrganizationID, req.ExpiresAt).Scan(&keyID)
 	if err != nil {
-		log.Printf("Failed to store API key: %v", err)
+		log.Printf("Failed to store API key - Query: %s", query)
+		log.Printf("Failed to store API key - Params: name=%s, user_id=%d, org_id=%d", req.Name, user.ID, user.OrganizationID)
+		log.Printf("Failed to store API key - Error: %v", err)
 		return c.Status(500).JSON(fiber.Map{
 			"error": "Failed to create API key",
 		})
 	}
+	log.Printf("Successfully created API key with ID: %d", keyID)
 
 	// 5. Return the key once (never show again)
 	return c.Status(201).JSON(fiber.Map{
