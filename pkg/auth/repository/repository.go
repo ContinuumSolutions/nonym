@@ -88,6 +88,7 @@ func (r *authRepository) CreateUser(ctx context.Context, req *models.CreateUserR
 	`)
 
 	var user models.User
+	var returnedUserID uuid.UUID
 	var createdAt, updatedAt time.Time
 	var err error
 
@@ -103,7 +104,7 @@ func (r *authRepository) CreateUser(ctx context.Context, req *models.CreateUserR
 			string(req.Role),
 			req.IsActive,
 			req.EmailVerified,
-		).Scan(&createdAt, &updatedAt)
+		).Scan(&returnedUserID, &createdAt, &updatedAt)
 	} else {
 		// Not in transaction, use the DB's QueryRowxContext
 		err = r.db.QueryRowxContext(ctx, query,
@@ -116,7 +117,7 @@ func (r *authRepository) CreateUser(ctx context.Context, req *models.CreateUserR
 			string(req.Role),
 			req.IsActive,
 			req.EmailVerified,
-		).Scan(&createdAt, &updatedAt)
+		).Scan(&returnedUserID, &createdAt, &updatedAt)
 	}
 
 	if err != nil {
@@ -345,9 +346,10 @@ func (r *authRepository) CreateOrganization(ctx context.Context, req *models.Cre
 	query := r.formatQuery(`
 		INSERT INTO organizations (id, name, slug, description, settings, is_active)
 		VALUES (?, ?, ?, ?, ?, ?)
-		RETURNING created_at, updated_at
+		RETURNING id, created_at, updated_at
 	`)
 
+	var returnedID uuid.UUID
 	err := r.db.QueryRowxContext(ctx, query,
 		org.ID,
 		org.Name,
@@ -355,7 +357,7 @@ func (r *authRepository) CreateOrganization(ctx context.Context, req *models.Cre
 		org.Description,
 		settingsJSON,
 		org.IsActive,
-	).Scan(&org.CreatedAt, &org.UpdatedAt)
+	).Scan(&returnedID, &org.CreatedAt, &org.UpdatedAt)
 
 	if err != nil {
 		if isDuplicateKeyError(err) {
