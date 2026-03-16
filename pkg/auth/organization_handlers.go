@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -55,7 +56,7 @@ func HandleGetOrganizationInfo(c *fiber.Ctx) error {
 	memberCount := 1 // Placeholder
 
 	orgInfo := &OrganizationInfo{
-		ID:          org.ID.String(),
+		ID:          strconv.Itoa(org.ID),
 		Name:        org.Name,
 		Slug:        org.Slug,
 		Description: org.Description,
@@ -117,7 +118,7 @@ func HandleGetTeamMembers(c *fiber.Ctx) error {
 	// For now, return current user as the only member
 	members := []TeamMember{
 		{
-			ID:        user.ID.String(),
+			ID:        strconv.Itoa(user.ID),
 			Email:     user.Email,
 			FirstName: user.FirstName,
 			LastName:  user.LastName,
@@ -216,7 +217,7 @@ func HandleRemoveTeamMember(c *fiber.Ctx) error {
 	}
 
 	// Prevent self-removal
-	if userID == user.ID.String() {
+	if userID == strconv.Itoa(user.ID) {
 		return c.Status(400).JSON(fiber.Map{
 			"error": "Cannot remove yourself from the organization",
 		})

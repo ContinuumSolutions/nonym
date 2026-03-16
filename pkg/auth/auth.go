@@ -8,11 +8,11 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 	"github.com/sovereignprivacy/gateway/pkg/auth/migrations"
 	"golang.org/x/crypto/bcrypt"
@@ -145,10 +145,10 @@ func generateJWTToken(user *User) (string, time.Time, error) {
 	expiresAt := time.Now().Add(24 * time.Hour) // 24 hour expiry
 
 	claims := jwt.MapClaims{
-		"user_id":         user.ID.String(),
+		"user_id":         strconv.Itoa(user.ID),
 		"email":           user.Email,
 		"role":            string(user.Role),
-		"organization_id": user.OrganizationID.String(),
+		"organization_id": strconv.Itoa(user.OrganizationID),
 		"exp":             expiresAt.Unix(),
 		"iat":             time.Now().Unix(),
 	}
@@ -163,7 +163,7 @@ func generateJWTToken(user *User) (string, time.Time, error) {
 }
 
 // getUserByID gets a user by ID
-func getUserByID(userID uuid.UUID) (*User, error) {
+func getUserByID(userID int) (*User, error) {
 	user := &User{}
 	query := formatQuery(`
 		SELECT id, email, password_hash, first_name, last_name, role,
@@ -227,7 +227,7 @@ func getUserByEmail(email string) (*User, error) {
 }
 
 // getOrganizationByID gets an organization by ID
-func getOrganizationByID(orgID uuid.UUID) (*Organization, error) {
+func getOrganizationByID(orgID int) (*Organization, error) {
 	org := &Organization{}
 	query := formatQuery(`
 		SELECT id, name, slug, description, owner_id, is_active, created_at, updated_at
@@ -306,7 +306,7 @@ func RegisterUser(req *SignupRequest) (*User, *Organization, error) {
 	}()
 
 	// Step a: Check if user exists with email, if yes, ask them to login
-	var existingUserID uuid.UUID
+	var existingUserID int
 	checkQuery := formatQuery("SELECT id FROM users WHERE email = ?")
 	checkErr := tx.QueryRow(checkQuery, req.Email).Scan(&existingUserID)
 	if checkErr == nil {
@@ -338,7 +338,6 @@ func RegisterUser(req *SignupRequest) (*User, *Organization, error) {
 
 		// Create user with regular role
 		user = &User{
-			ID:             uuid.New(),
 			Email:          req.Email,
 			PasswordHash:   hashedPassword,
 			FirstName:      firstName,
@@ -369,72 +368,66 @@ func RegisterUser(req *SignupRequest) (*User, *Organization, error) {
 			return nil, nil, fmt.Errorf("failed to generate unique slug: %w", err)
 		}
 
-		// Create organization
+		// Create organization (ID will be auto-generated)
 		organization = &Organization{
-			ID:          uuid.New(),
 			Name:        orgName,
 			Slug:        uniqueSlug,
 			Description: fmt.Sprintf("Organization for %s %s", firstName, lastName),
 			IsActive:    true,
 		}
 
-		// Create user as organization owner
+		// Create user as organization owner (ID will be auto-generated)
 		user = &User{
-			ID:             uuid.New(),
-			Email:          req.Email,
-			PasswordHash:   hashedPassword,
-			FirstName:      firstName,
-			LastName:       lastName,
-			Role:           RoleOwner,
-			OrganizationID: organization.ID,
-			IsActive:       true,
-			EmailVerified:  false,
+			Email:         req.Email,
+			PasswordHash:  hashedPassword,
+			FirstName:     firstName,
+			LastName:      lastName,
+			Role:          RoleOwner,
+			IsActive:      true,
+			EmailVerified: false,
 		}
 
-		// Set owner_id to user ID
-		organization.OwnerID = user.ID
-
-		// Insert organization
+		// Insert organization (without owner_id for now)
 		orgInsertQuery := formatQuery(`
-			INSERT INTO organizations (id, name, slug, description, owner_id, is_active, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+			INSERT INTO organizations (name, slug, description, is_active, created_at, updated_at)
+			VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+			RETURNING id, created_at, updated_at
 		`)
-		_, err = tx.Exec(orgInsertQuery,
-			organization.ID, organization.Name, organization.Slug,
-			organization.Description, organization.OwnerID, organization.IsActive,
+		err = tx.QueryRow(orgInsertQuery, organization.Name, organization.Slug, organization.Description, organization.IsActive).Scan(
+			&organization.ID, &organization.CreatedAt, &organization.UpdatedAt,
 		)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create organization: %w", err)
 		}
 
-		// Get the created_at and updated_at timestamps
-		timeQuery := formatQuery("SELECT created_at, updated_at FROM organizations WHERE id = ?")
-		err = tx.QueryRow(timeQuery, organization.ID).Scan(&organization.CreatedAt, &organization.UpdatedAt)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get organization timestamps: %w", err)
-		}
+		// Set organization ID for user
+		user.OrganizationID = organization.ID
 	}
 
-	// Step c: Insert user (Update the team account)
+	// Step c: Insert user
 	userInsertQuery := formatQuery(`
-		INSERT INTO users (id, email, password_hash, first_name, last_name, role,
+		INSERT INTO users (email, password_hash, first_name, last_name, role,
 		                   organization_id, is_active, email_verified, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		RETURNING id, created_at, updated_at
 	`)
-	_, err = tx.Exec(userInsertQuery,
-		user.ID, user.Email, user.PasswordHash, user.FirstName,
+	err = tx.QueryRow(userInsertQuery,
+		user.Email, user.PasswordHash, user.FirstName,
 		user.LastName, string(user.Role), user.OrganizationID,
 		user.IsActive, user.EmailVerified,
-	)
+	).Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
-	// Get the created_at and updated_at timestamps for user
-	userTimeQuery := formatQuery("SELECT created_at, updated_at FROM users WHERE id = ?")
-	err = tx.QueryRow(userTimeQuery, user.ID).Scan(&user.CreatedAt, &user.UpdatedAt)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get user timestamps: %w", err)
+	// Update organization with owner_id (only for new organizations)
+	if req.OrganizationID == nil {
+		updateOrgQuery := formatQuery("UPDATE organizations SET owner_id = ? WHERE id = ?")
+		_, err = tx.Exec(updateOrgQuery, user.ID, organization.ID)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to set organization owner: %w", err)
+		}
+		organization.OwnerID = user.ID
 	}
 
 	// Step d: TODO later - Send email to user (create a function for future use)
@@ -531,7 +524,7 @@ func ValidateToken(tokenString string) (*User, error) {
 		return nil, fmt.Errorf("invalid user ID in token")
 	}
 
-	userID, err := uuid.Parse(userIDStr)
+	userID, err := strconv.Atoi(userIDStr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid user ID format in token")
 	}
@@ -557,7 +550,7 @@ func LogoutUser(tokenString string) error {
 }
 
 // GetUserProfile returns a user profile
-func GetUserProfile(userID uuid.UUID) (*UserProfile, error) {
+func GetUserProfile(userID int) (*UserProfile, error) {
 	user, err := getUserByID(userID)
 	if err != nil {
 		return nil, err

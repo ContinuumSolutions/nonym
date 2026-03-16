@@ -2,19 +2,17 @@ package auth
 
 import (
 	"time"
-
-	"github.com/google/uuid"
 )
 
 // User represents a user in the system
 type User struct {
-	ID             uuid.UUID  `json:"id" db:"id"`
+	ID             int        `json:"id" db:"id"`
 	Email          string     `json:"email" db:"email"`
 	PasswordHash   string     `json:"-" db:"password_hash"`
 	FirstName      string     `json:"first_name" db:"first_name"`
 	LastName       string     `json:"last_name" db:"last_name"`
 	Role           Role       `json:"role" db:"role"`
-	OrganizationID uuid.UUID  `json:"organization_id" db:"organization_id"`
+	OrganizationID int        `json:"organization_id" db:"organization_id"`
 	IsActive       bool       `json:"is_active" db:"is_active"`
 	EmailVerified  bool       `json:"email_verified" db:"email_verified"`
 	LastLogin      *time.Time `json:"last_login,omitempty" db:"last_login"`
@@ -27,21 +25,21 @@ type User struct {
 
 // Organization represents an organization in the system
 type Organization struct {
-	ID          uuid.UUID `json:"id" db:"id"`
-	Name        string    `json:"name" db:"name"`
-	Slug        string    `json:"slug" db:"slug"`
-	Description string    `json:"description" db:"description"`
-	OwnerID     uuid.UUID `json:"owner_id" db:"owner_id"`
-	IsActive    bool      `json:"is_active" db:"is_active"`
+	ID          int    `json:"id" db:"id"`
+	Name        string `json:"name" db:"name"`
+	Slug        string `json:"slug" db:"slug"`
+	Description string `json:"description" db:"description"`
+	OwnerID     int    `json:"owner_id" db:"owner_id"`
+	IsActive    bool   `json:"is_active" db:"is_active"`
 	CreatedAt   time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // UserSession represents an active user session
 type UserSession struct {
-	ID             uuid.UUID `json:"id" db:"id"`
-	UserID         uuid.UUID `json:"user_id" db:"user_id"`
-	OrganizationID uuid.UUID `json:"organization_id" db:"organization_id"`
+	ID             int       `json:"id" db:"id"`
+	UserID         int       `json:"user_id" db:"user_id"`
+	OrganizationID int       `json:"organization_id" db:"organization_id"`
 	Token          string    `json:"-" db:"token"`
 	ExpiresAt      time.Time `json:"expires_at" db:"expires_at"`
 	CreatedAt      time.Time `json:"created_at" db:"created_at"`
@@ -80,15 +78,15 @@ type SignupRequest struct {
 	Name         string `json:"name,omitempty"` // Alternative to FirstName + LastName
 	Organization string `json:"organization,omitempty"`
 	// For joining existing organization
-	OrganizationID *uuid.UUID `json:"organization_id,omitempty"`
-	InviteCode     *string    `json:"invite_code,omitempty"`
+	OrganizationID *int    `json:"organization_id,omitempty"`
+	InviteCode     *string `json:"invite_code,omitempty"`
 }
 
 // LoginRequest represents a login request
 type LoginRequest struct {
-	Email          string     `json:"email" validate:"required,email"`
-	Password       string     `json:"password" validate:"required"`
-	OrganizationID *uuid.UUID `json:"organization_id,omitempty"`
+	Email          string `json:"email" validate:"required,email"`
+	Password       string `json:"password" validate:"required"`
+	OrganizationID *int   `json:"organization_id,omitempty"`
 }
 
 // LoginResponse represents a successful login response
@@ -101,13 +99,13 @@ type LoginResponse struct {
 
 // UserProfile represents a user profile (subset of User for responses)
 type UserProfile struct {
-	ID             uuid.UUID     `json:"id"`
+	ID             int           `json:"id"`
 	Email          string        `json:"email"`
 	FirstName      string        `json:"first_name"`
 	LastName       string        `json:"last_name"`
 	FullName       string        `json:"full_name"`
 	Role           Role          `json:"role"`
-	OrganizationID uuid.UUID     `json:"organization_id"`
+	OrganizationID int           `json:"organization_id"`
 	IsActive       bool          `json:"is_active"`
 	EmailVerified  bool          `json:"email_verified"`
 	CreatedAt      time.Time     `json:"created_at"`

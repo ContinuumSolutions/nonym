@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
 )
 
@@ -447,7 +446,7 @@ func TestGetUserProfile(t *testing.T) {
 	}
 
 	// Test non-existent user
-	_, err = GetUserProfile(uuid.New())
+	_, err = GetUserProfile(999999) // Non-existent ID
 	if err == nil {
 		t.Fatal("Expected error for non-existent user")
 	}

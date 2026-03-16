@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"strconv"
+
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -44,7 +46,7 @@ func HandleUpdateTwoFactor(c *fiber.Ctx) error {
 		"message":    "Two-factor authentication updated successfully",
 		"enabled":    req.Enabled,
 		"method":     req.Method,
-		"updated_by": user.ID.String(),
+		"updated_by": strconv.Itoa(user.ID),
 	})
 }
 
@@ -79,7 +81,7 @@ func HandleTerminateSession(c *fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"message": "Session terminated successfully",
-		"user_id": user.ID.String(),
+		"user_id": strconv.Itoa(user.ID),
 	})
 }
 
@@ -121,6 +123,6 @@ func HandleUpdateSecuritySettings(c *fiber.Ctx) error {
 			"rate_limit":        req.RateLimit,
 			"session_timeout":   req.SessionTimeout,
 		},
-		"updated_by": user.ID.String(),
+		"updated_by": strconv.Itoa(user.ID),
 	})
 }
