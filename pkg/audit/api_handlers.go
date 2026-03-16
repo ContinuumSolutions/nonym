@@ -207,7 +207,7 @@ func calculateProtectionStats() *ProtectionStatsResponse {
 func getUserIDFromContextAudit(c *fiber.Ctx) string {
 	if user := c.Locals("user"); user != nil {
 		if u, ok := user.(*auth.User); ok {
-			return strconv.Itoa(u.ID)
+			return u.ID.String()
 		}
 		// Handle different user context formats
 		if userMap, ok := user.(map[string]interface{}); ok {

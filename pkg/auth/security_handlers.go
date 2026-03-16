@@ -34,7 +34,7 @@ func HandleUpdateTwoFactor(c *fiber.Ctx) error {
 		})
 	}
 
-	// TODO: In a real implementation, you'd:
+	// TODO: Implement actual 2FA functionality
 	// 1. Validate the user has permission to update 2FA settings
 	// 2. Generate/revoke TOTP secrets if enabling/disabling app-based 2FA
 	// 3. Update user preferences in database
@@ -44,7 +44,7 @@ func HandleUpdateTwoFactor(c *fiber.Ctx) error {
 		"message":    "Two-factor authentication updated successfully",
 		"enabled":    req.Enabled,
 		"method":     req.Method,
-		"updated_by": user.ID,
+		"updated_by": user.ID.String(),
 	})
 }
 
@@ -64,14 +64,13 @@ func HandleTerminateSession(c *fiber.Ctx) error {
 		})
 	}
 
-	// TODO: In a real implementation, you'd:
+	// TODO: Implement actual session termination
 	// 1. Validate the session belongs to the current user or user has admin rights
 	// 2. Remove the session from the database
 	// 3. Invalidate any associated JWT tokens
 	// 4. Log the session termination for audit purposes
 
 	// Prevent users from terminating their own current session
-	// (This is a simple check - in reality you'd compare actual session IDs)
 	if sessionID == "current" {
 		return c.Status(400).JSON(fiber.Map{
 			"error": "Cannot terminate your current session",
@@ -80,7 +79,7 @@ func HandleTerminateSession(c *fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"message": "Session terminated successfully",
-		"user_id": user.ID,
+		"user_id": user.ID.String(),
 	})
 }
 
@@ -107,7 +106,7 @@ func HandleUpdateSecuritySettings(c *fiber.Ctx) error {
 		})
 	}
 
-	// TODO: In a real implementation, you'd:
+	// TODO: Implement actual security settings update
 	// 1. Validate user has permission to update security settings
 	// 2. Update organization security settings in database
 	// 3. Apply IP whitelist rules if enabled
@@ -122,6 +121,6 @@ func HandleUpdateSecuritySettings(c *fiber.Ctx) error {
 			"rate_limit":        req.RateLimit,
 			"session_timeout":   req.SessionTimeout,
 		},
-		"updated_by": user.ID,
+		"updated_by": user.ID.String(),
 	})
 }
