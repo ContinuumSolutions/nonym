@@ -221,6 +221,35 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 	// Transactions endpoint
 	app.Get("/api/v1/transactions", authMiddleware, audit.HandleGetTransactionsV1)
 
+	// Dashboard API endpoints - using temporary API key authentication
+	dashboardApiKeyMiddleware := func(c *fiber.Ctx) error {
+		// Check for API key in X-API-Key header
+		apiKey := c.Get("X-API-Key")
+		if apiKey == "" {
+			return c.Status(401).JSON(fiber.Map{"error": "API key required"})
+		}
+
+		// Accept test API keys for dashboard testing
+		validTestKeys := map[string]int{
+			"test-api-key": 1, // organization_id = 1
+			"demo-key":     1,
+			"dev-key":      1,
+		}
+
+		orgID, isValid := validTestKeys[apiKey]
+		if !isValid {
+			return c.Status(401).JSON(fiber.Map{"error": "Invalid API key"})
+		}
+
+		// Set organization context for downstream handlers
+		c.Locals("organization_id", orgID)
+		c.Locals("auth_method", "api_key")
+		return c.Next()
+	}
+
+	app.Get("/api/v1/dashboard/layout", dashboardApiKeyMiddleware, audit.HandleGetDashboardLayout)
+	app.Get("/api/v1/dashboard/widgets/:widget_id", dashboardApiKeyMiddleware, audit.HandleGetWidgetData)
+
 	// Main proxy endpoints (for AI providers) - NOW REQUIRING API KEY AUTHENTICATION
 	// Apply API key middleware to all proxy routes for security
 	app.All("/v1/chat/*", auth.APIKeyMiddleware, interceptor.HandleProxy)

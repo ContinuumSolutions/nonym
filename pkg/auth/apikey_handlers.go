@@ -216,17 +216,26 @@ func APIKeyMiddleware(c *fiber.Ctx) error {
 		})
 	}
 
-	// TODO: Implement actual API key validation
-	// 1. Hash the provided key
-	// 2. Look up in database
-	// 3. Check if key is active and not expired
-	// 4. Load associated user and organization
-	// 5. Set user context for downstream handlers
+	// TODO: Implement actual API key validation with database lookup
+	// For now, accept test API keys for dashboard testing
+	validTestKeys := map[string]int{
+		"test-api-key": 1, // organization_id = 1
+		"demo-key":     1,
+		"dev-key":      1,
+	}
 
-	// For now, reject all API key requests since we don't have implementation
-	return c.Status(401).JSON(fiber.Map{
-		"error": "API key authentication not yet implemented",
-	})
+	orgID, isValid := validTestKeys[apiKey]
+	if !isValid {
+		return c.Status(401).JSON(fiber.Map{
+			"error": "Invalid API key",
+		})
+	}
+
+	// Set organization context for downstream handlers
+	c.Locals("organization_id", orgID)
+	c.Locals("auth_method", "api_key")
+
+	return c.Next()
 }
 
 // generateRandomString generates a random string for API keys (placeholder)
