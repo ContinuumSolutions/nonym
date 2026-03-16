@@ -9,19 +9,18 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
 // APIKey represents an API key
 type APIKey struct {
-	ID             uuid.UUID  `json:"id" db:"id"`
+	ID             int        `json:"id" db:"id"`
 	Name           string     `json:"name" db:"name"`
 	KeyHash        string     `json:"-" db:"key_hash"`
 	MaskedKey      string     `json:"masked_key" db:"masked_key"`
 	Permissions    string     `json:"permissions" db:"permissions"`
-	UserID         uuid.UUID  `json:"user_id" db:"user_id"`
-	OrganizationID uuid.UUID  `json:"organization_id" db:"organization_id"`
+	UserID         int        `json:"user_id" db:"user_id"`
+	OrganizationID int        `json:"organization_id" db:"organization_id"`
 	CreatedAt      time.Time  `json:"created_at" db:"created_at"`
 	ExpiresAt      *time.Time `json:"expires_at,omitempty" db:"expires_at"`
 	Status         string     `json:"status" db:"status"`
@@ -37,7 +36,7 @@ type APIKeyCreateRequest struct {
 
 // APIKeyResponse represents an API key in responses
 type APIKeyResponse struct {
-	ID          string     `json:"id"`
+	ID          int        `json:"id"`
 	Name        string     `json:"name"`
 	MaskedKey   string     `json:"masked_key"`
 	Permissions string     `json:"permissions"`
@@ -145,11 +144,11 @@ func HandleCreateAPIKey(c *fiber.Ctx) error {
 	maskedKey := createMaskedKey(apiKeyValue)
 
 	// 4. Store in database
-	keyID := uuid.New()
-	query := formatQuery(`INSERT INTO api_keys (id, name, key_hash, masked_key, permissions, user_id, organization_id, expires_at)
-			  VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+	query := formatQuery(`INSERT INTO api_keys (name, key_hash, masked_key, permissions, user_id, organization_id, expires_at)
+			  VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`)
 
-	_, err = db.Exec(query, keyID, req.Name, keyHash, maskedKey, req.Permissions, user.ID, user.OrganizationID, req.ExpiresAt)
+	var keyID int
+	err = db.QueryRow(query, req.Name, keyHash, maskedKey, req.Permissions, user.ID, user.OrganizationID, req.ExpiresAt).Scan(&keyID)
 	if err != nil {
 		log.Printf("Failed to store API key: %v", err)
 		return c.Status(500).JSON(fiber.Map{
@@ -162,7 +161,7 @@ func HandleCreateAPIKey(c *fiber.Ctx) error {
 		"message": "API key created successfully",
 		"api_key": apiKeyValue, // Only shown once
 		"key_info": fiber.Map{
-			"id":          keyID.String(),
+			"id":          keyID,
 			"name":        req.Name,
 			"masked_key":  maskedKey,
 			"permissions": req.Permissions,
@@ -214,8 +213,8 @@ func HandleRevokeAPIKey(c *fiber.Ctx) error {
 	}
 
 	// 1. Verify key belongs to user or user is admin
-	var existingUserID uuid.UUID
-	var existingOrgID uuid.UUID
+	var existingUserID int
+	var existingOrgID int
 	checkQuery := formatQuery(`SELECT user_id, organization_id FROM api_keys WHERE id = ? AND status = 'active'`)
 	err := db.QueryRow(checkQuery, keyID).Scan(&existingUserID, &existingOrgID)
 	if err == sql.ErrNoRows {
@@ -231,8 +230,7 @@ func HandleRevokeAPIKey(c *fiber.Ctx) error {
 	}
 
 	// Check if user owns the key or is in the same organization
-	// TODO: Fix type mismatch - database uses UUID but model uses int
-	if existingUserID.String() != fmt.Sprintf("%d", user.ID) && existingOrgID.String() != fmt.Sprintf("%d", user.OrganizationID) {
+	if existingUserID != user.ID && existingOrgID != user.OrganizationID {
 		return c.Status(403).JSON(fiber.Map{
 			"error": "You don't have permission to revoke this API key",
 		})
@@ -274,8 +272,8 @@ func HandleDeleteAPIKey(c *fiber.Ctx) error {
 	}
 
 	// 1. Verify key belongs to user or user is admin
-	var existingUserID uuid.UUID
-	var existingOrgID uuid.UUID
+	var existingUserID int
+	var existingOrgID int
 	checkQuery := formatQuery(`SELECT user_id, organization_id FROM api_keys WHERE id = ?`)
 	err := db.QueryRow(checkQuery, keyID).Scan(&existingUserID, &existingOrgID)
 	if err == sql.ErrNoRows {
@@ -291,8 +289,7 @@ func HandleDeleteAPIKey(c *fiber.Ctx) error {
 	}
 
 	// Check if user owns the key or is in the same organization
-	// TODO: Fix type mismatch - database uses UUID but model uses int
-	if existingUserID.String() != fmt.Sprintf("%d", user.ID) && existingOrgID.String() != fmt.Sprintf("%d", user.OrganizationID) {
+	if existingUserID != user.ID && existingOrgID != user.OrganizationID {
 		return c.Status(403).JSON(fiber.Map{
 			"error": "You don't have permission to delete this API key",
 		})
@@ -379,8 +376,8 @@ func generateRandomString(length int) string {
 	bytes := make([]byte, length)
 	if _, err := rand.Read(bytes); err != nil {
 		log.Printf("Error generating random string: %v", err)
-		// Fallback to current timestamp + uuid as last resort
-		fallback := fmt.Sprintf("%d%s", time.Now().UnixNano(), uuid.New().String())
+		// Fallback to current timestamp as last resort
+		fallback := fmt.Sprintf("%d", time.Now().UnixNano())
 		if len(fallback) > length {
 			return fallback[:length]
 		}
@@ -420,9 +417,9 @@ func createMaskedKey(apiKey string) string {
 
 // APIKeyInfo holds information about a validated API key
 type APIKeyInfo struct {
-	ID             string
-	UserID         uuid.UUID
-	OrganizationID uuid.UUID
+	ID             int
+	UserID         int
+	OrganizationID int
 	Permissions    string
 	Status         string
 	ExpiresAt      *time.Time
