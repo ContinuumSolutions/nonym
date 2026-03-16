@@ -201,6 +201,25 @@ func getPostgreSQLMigrations() []*Migration {
 				DELETE FROM organizations WHERE id = '00000000-0000-0000-0000-000000000001';
 			`,
 		},
+		{
+			Version:     4,
+			Name:        "add_owner_id_to_organizations",
+			Description: "Add owner_id column to organizations table",
+			UpSQL: `
+				-- Add owner_id column to organizations
+				ALTER TABLE organizations ADD COLUMN owner_id UUID REFERENCES users(id) ON DELETE SET NULL;
+
+				-- Create index for owner_id
+				CREATE INDEX idx_organizations_owner_id ON organizations(owner_id);
+			`,
+			DownSQL: `
+				-- Remove index
+				DROP INDEX IF EXISTS idx_organizations_owner_id;
+
+				-- Remove owner_id column
+				ALTER TABLE organizations DROP COLUMN IF EXISTS owner_id;
+			`,
+		},
 	}
 }
 
@@ -382,6 +401,26 @@ func getSQLiteMigrations() []*Migration {
 			DownSQL: `
 				DELETE FROM users WHERE email = 'admin@localhost';
 				DELETE FROM organizations WHERE id = '00000000-0000-0000-0000-000000000001';
+			`,
+		},
+		{
+			Version:     4,
+			Name:        "add_owner_id_to_organizations",
+			Description: "Add owner_id column to organizations table",
+			UpSQL: `
+				-- Add owner_id column to organizations
+				ALTER TABLE organizations ADD COLUMN owner_id TEXT REFERENCES users(id) ON DELETE SET NULL;
+
+				-- Create index for owner_id
+				CREATE INDEX idx_organizations_owner_id ON organizations(owner_id);
+			`,
+			DownSQL: `
+				-- Remove index
+				DROP INDEX IF EXISTS idx_organizations_owner_id;
+
+				-- Remove owner_id column (SQLite doesn't support DROP COLUMN directly)
+				-- This would require table recreation in a real scenario
+				-- For now, we'll just note this limitation
 			`,
 		},
 	}

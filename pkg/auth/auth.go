@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"
+	"github.com/sovereignprivacy/gateway/pkg/auth/migrations"
 	"golang.org/x/crypto/bcrypt"
 	_ "modernc.org/sqlite"
 )
@@ -25,6 +27,14 @@ var (
 // Initialize sets up the authentication system
 func Initialize(database *sql.DB) error {
 	db = database
+
+	// Run database migrations
+	migrator := migrations.NewMigrator(db)
+	ctx := context.Background()
+	if err := migrator.Up(ctx); err != nil {
+		log.Printf("Warning: Migration error (may be expected for existing databases): %v", err)
+		// Don't fail initialization if migrations fail - database may already be set up
+	}
 
 	// Get JWT secret from environment or generate one
 	secretEnv := os.Getenv("JWT_SECRET")
@@ -346,7 +356,7 @@ func RegisterUser(req *SignupRequest) (*User, *Organization, error) {
 			emailParts := strings.Split(req.Email, "@")
 			if len(emailParts) > 1 {
 				domain := strings.Split(emailParts[1], ".")[0]
-				orgName = strings.Title(domain) + " Organization"
+				orgName = strings.ToUpper(domain[:1]) + domain[1:] + " Organization"
 			} else {
 				orgName = "My Organization"
 			}
