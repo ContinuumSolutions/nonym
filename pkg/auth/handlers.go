@@ -22,9 +22,10 @@ func HandleRegister(c *fiber.Ctx) error {
 		})
 	}
 
-	if req.FirstName == "" || req.LastName == "" {
+	// Name validation is now handled in RegisterUser function
+	if req.FirstName == "" && req.LastName == "" && req.Name == "" {
 		return c.Status(400).JSON(fiber.Map{
-			"error": "First name and last name are required",
+			"error": "Name is required (either 'name' or 'first_name'+'last_name')",
 		})
 	}
 

@@ -256,9 +256,26 @@ func RegisterUser(req *SignupRequest) (*User, *Organization, error) {
 		return nil, nil, fmt.Errorf("password must be at least 8 characters long")
 	}
 
-	// Validate names
-	if strings.TrimSpace(req.FirstName) == "" || strings.TrimSpace(req.LastName) == "" {
-		return nil, nil, fmt.Errorf("first name and last name are required")
+	// Handle name validation - support both single name and first+last name
+	var firstName, lastName string
+	if req.FirstName != "" || req.LastName != "" {
+		// Using separate first/last name fields
+		firstName = strings.TrimSpace(req.FirstName)
+		lastName = strings.TrimSpace(req.LastName)
+		if firstName == "" || lastName == "" {
+			return nil, nil, fmt.Errorf("first name and last name are required when using separate fields")
+		}
+	} else if req.Name != "" {
+		// Using single name field - split it
+		fullName := strings.TrimSpace(req.Name)
+		nameParts := strings.Fields(fullName)
+		if len(nameParts) < 2 {
+			return nil, nil, fmt.Errorf("name must include both first and last name (e.g., 'John Doe')")
+		}
+		firstName = nameParts[0]
+		lastName = strings.Join(nameParts[1:], " ") // Join remaining parts as last name
+	} else {
+		return nil, nil, fmt.Errorf("name is required (either 'name' or 'first_name'+'last_name')")
 	}
 
 	// Start atomic database transaction
@@ -314,8 +331,8 @@ func RegisterUser(req *SignupRequest) (*User, *Organization, error) {
 			ID:             uuid.New(),
 			Email:          req.Email,
 			PasswordHash:   hashedPassword,
-			FirstName:      strings.TrimSpace(req.FirstName),
-			LastName:       strings.TrimSpace(req.LastName),
+			FirstName:      firstName,
+			LastName:       lastName,
 			Role:           RoleUser,
 			OrganizationID: *req.OrganizationID,
 			IsActive:       true,
@@ -347,7 +364,7 @@ func RegisterUser(req *SignupRequest) (*User, *Organization, error) {
 			ID:          uuid.New(),
 			Name:        orgName,
 			Slug:        uniqueSlug,
-			Description: fmt.Sprintf("Organization for %s %s", req.FirstName, req.LastName),
+			Description: fmt.Sprintf("Organization for %s %s", firstName, lastName),
 			IsActive:    true,
 		}
 
@@ -356,8 +373,8 @@ func RegisterUser(req *SignupRequest) (*User, *Organization, error) {
 			ID:             uuid.New(),
 			Email:          req.Email,
 			PasswordHash:   hashedPassword,
-			FirstName:      strings.TrimSpace(req.FirstName),
-			LastName:       strings.TrimSpace(req.LastName),
+			FirstName:      firstName,
+			LastName:       lastName,
 			Role:           RoleOwner,
 			OrganizationID: organization.ID,
 			IsActive:       true,

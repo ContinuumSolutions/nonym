@@ -75,8 +75,9 @@ func (r Role) IsValid() bool {
 type SignupRequest struct {
 	Email        string `json:"email" validate:"required,email"`
 	Password     string `json:"password" validate:"required,min=8"`
-	FirstName    string `json:"first_name" validate:"required"`
-	LastName     string `json:"last_name" validate:"required"`
+	FirstName    string `json:"first_name,omitempty"`
+	LastName     string `json:"last_name,omitempty"`
+	Name         string `json:"name,omitempty"` // Alternative to FirstName + LastName
 	Organization string `json:"organization,omitempty"`
 	// For joining existing organization
 	OrganizationID *uuid.UUID `json:"organization_id,omitempty"`
