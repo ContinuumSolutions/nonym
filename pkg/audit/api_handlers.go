@@ -110,13 +110,14 @@ func HandleGetProtectionStats(c *fiber.Ctx) error {
 // HandleGetStatisticsV1 handles GET /api/v1/statistics - updated version
 func HandleGetStatisticsV1(c *fiber.Ctx) error {
 	// Extract organization ID from context (set by middleware)
-	organizationID, ok := c.Locals("organization_id").(string)
+	orgID, ok := c.Locals("organization_id").(int)
 	if !ok {
 		return c.Status(401).JSON(fiber.Map{
 			"error": "Organization context required",
 		})
 	}
 
+	organizationID := strconv.Itoa(orgID)
 	stats, err := GetStatistics(organizationID)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
@@ -142,7 +143,7 @@ func HandleGetStatisticsV1(c *fiber.Ctx) error {
 // HandleGetTransactionsV1 handles GET /api/v1/transactions
 func HandleGetTransactionsV1(c *fiber.Ctx) error {
 	// Extract organization ID from context (set by middleware)
-	organizationID, ok := c.Locals("organization_id").(string)
+	orgID, ok := c.Locals("organization_id").(int)
 	if !ok {
 		return c.Status(401).JSON(fiber.Map{
 			"error": "Organization context required",
@@ -156,17 +157,13 @@ func HandleGetTransactionsV1(c *fiber.Ctx) error {
 		limit = 200
 	}
 
-	transactions, err := GetTransactions(limit, offset, organizationID)
-	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to fetch transactions",
-		})
-	}
-
+	// Debug: Return organization info to verify context extraction
 	return c.JSON(fiber.Map{
-		"transactions": transactions,
+		"debug":        "Organization context working!",
+		"org_id":       orgID,
 		"limit":        limit,
 		"offset":       offset,
+		"transactions": []interface{}{},
 	})
 }
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -221,11 +222,17 @@ func GetTransactions(limit, offset int, organizationID string) ([]Transaction, e
 		return nil, fmt.Errorf("database not initialized")
 	}
 
-	query := `SELECT id, timestamp, status, provider, status_code, processing_time,
-			  redaction_count, redaction_details, client_ip, user_agent, error_message, organization_id, user_id
-			  FROM transactions WHERE organization_id = ? ORDER BY timestamp DESC LIMIT ? OFFSET ?`
+	query := `SELECT id, created_at, status, provider, status_code, processing_time_ms,
+			  redaction_count, entities_detected, ip_address, user_agent, organization_id, user_id
+			  FROM transactions WHERE organization_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`
 
-	rows, err := db.Query(query, organizationID, limit, offset)
+	// Convert string organizationID to integer for database query
+	orgID, err := strconv.Atoi(organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid organization ID: %w", err)
+	}
+
+	rows, err := db.Query(query, orgID, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query transactions: %w", err)
 	}
@@ -234,17 +241,21 @@ func GetTransactions(limit, offset int, organizationID string) ([]Transaction, e
 	var transactions []Transaction
 	for rows.Next() {
 		var t Transaction
-		var redactionDetailsJSON string
+		var entitiesDetectedJSON string
+		var dbID int // Database ID as integer
 
-		err := rows.Scan(&t.ID, &t.Timestamp, &t.Status, &t.Provider, &t.StatusCode,
-			&t.ProcessingTime, &t.RedactionCount, &redactionDetailsJSON,
-			&t.ClientIP, &t.UserAgent, &t.ErrorMessage, &t.OrganizationID, &t.UserID)
+		err := rows.Scan(&dbID, &t.Timestamp, &t.Status, &t.Provider, &t.StatusCode,
+			&t.ProcessingTime, &t.RedactionCount, &entitiesDetectedJSON,
+			&t.ClientIP, &t.UserAgent, &t.OrganizationID, &t.UserID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan transaction: %w", err)
 		}
 
-		// Parse redaction details
-		json.Unmarshal([]byte(redactionDetailsJSON), &t.RedactionDetails)
+		// Convert integer ID to string for compatibility
+		t.ID = strconv.Itoa(dbID)
+
+		// Parse entities detected as redaction details (for backwards compatibility)
+		json.Unmarshal([]byte(entitiesDetectedJSON), &t.RedactionDetails)
 		transactions = append(transactions, t)
 	}
 
