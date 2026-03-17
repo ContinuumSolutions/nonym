@@ -94,7 +94,9 @@
       "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkbWluQGxvY2FsaG9zdCIsImV4cCI6MTc3MzU4OTUwMiwiaWF0IjoxNzczNTAzMTAyLCJvcmdhbml6YXRpb25faWQiOiIxIiwib3JnYW5pemF0aW9uX3NsdWciOiJkZWZhdWx0Iiwicm9sZSI6ImFkbWluIiwidXNlcl9pZCI6IjEifQ.BTosI7B77YiYkAet-_jQotctC7j1GyATQFUUocIaTSw\" __NEW_LINE_9ffebcb8c586271b__ echo \"🧪 Testing Multiple Authenticated Endpoints:\" echo \"\" __NEW_LINE_9ffebcb8c586271b__ echo \"1. ✅ /api/v1/statistics:\" curl -s -X GET \"http://localhost/api/v1/statistics\" -H \"Authorization: Bearer $TOKEN\")",
       "Bash(cd:*)",
       "Bash(go clean:*)",
-      "Bash(env | grep -E \"\\(DB_|POSTGRES\\)\" || echo \"No DB environment variables set\")"
+      "Bash(env | grep -E \"\\(DB_|POSTGRES\\)\" || echo \"No DB environment variables set\")",
+      "Bash(unset:*)",
+      "Bash(env -i PATH=\"$PATH\" HOME=\"$HOME\" GOPATH=\"$GOPATH\" timeout 5 go run cmd/gateway/main.go || true)"
     ]
   }
 }

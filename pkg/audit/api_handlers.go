@@ -235,7 +235,7 @@ func LogTransactionWithRedactions(id, status, provider string, statusCode int, p
 
 	query := `INSERT INTO transactions (
 		id, status, provider, status_code, processing_time, redaction_count, redaction_details, timestamp
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
 
 	_, err := db.Exec(query, id, status, provider, statusCode, processingTime, len(redactionDetails), string(redactionJSON), time.Now())
 	if err != nil {
