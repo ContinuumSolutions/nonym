@@ -289,10 +289,10 @@ func handleStatTotalRequests(c *fiber.Ctx, orgID int) error {
 	var current, previous int64
 
 	// Current period (last 24h)
-	db.QueryRow("SELECT COUNT(*) FROM transactions WHERE timestamp >= datetime('now', '-24 hours') AND organization_id = ?", orgID).Scan(&current)
+	db.QueryRow(formatQuery("SELECT COUNT(*) FROM transactions WHERE created_at >= NOW() - INTERVAL '24 hours' AND organization_id = ?"), orgID).Scan(&current)
 
 	// Previous period (24-48h ago)
-	db.QueryRow("SELECT COUNT(*) FROM transactions WHERE timestamp BETWEEN datetime('now', '-48 hours') AND datetime('now', '-24 hours') AND organization_id = ?", orgID).Scan(&previous)
+	db.QueryRow(formatQuery("SELECT COUNT(*) FROM transactions WHERE created_at BETWEEN NOW() - INTERVAL '48 hours' AND NOW() - INTERVAL '24 hours' AND organization_id = ?"), orgID).Scan(&previous)
 
 	delta := float64(current - previous)
 	return c.JSON(StatCardData{
@@ -310,10 +310,10 @@ func handleStatPIIProtected(c *fiber.Ctx, orgID int) error {
 	var current, previous int64
 
 	// Current period - requests with redactions
-	db.QueryRow("SELECT COUNT(*) FROM transactions WHERE timestamp >= datetime('now', '-24 hours') AND redaction_count > 0 AND organization_id = ?", orgID).Scan(&current)
+	db.QueryRow(formatQuery("SELECT COUNT(*) FROM transactions WHERE created_at >= NOW() - INTERVAL '24 hours' AND redaction_count > 0 AND organization_id = ?"), orgID).Scan(&current)
 
 	// Previous period
-	db.QueryRow("SELECT COUNT(*) FROM transactions WHERE timestamp BETWEEN datetime('now', '-48 hours') AND datetime('now', '-24 hours') AND redaction_count > 0 AND organization_id = ?", orgID).Scan(&previous)
+	db.QueryRow(formatQuery("SELECT COUNT(*) FROM transactions WHERE created_at BETWEEN NOW() - INTERVAL '48 hours' AND NOW() - INTERVAL '24 hours' AND redaction_count > 0 AND organization_id = ?"), orgID).Scan(&previous)
 
 	delta := float64(current - previous)
 	return c.JSON(StatCardData{
@@ -331,10 +331,10 @@ func handleStatBlockedRequests(c *fiber.Ctx, orgID int) error {
 	var current, previous int64
 
 	// Current period - blocked requests
-	db.QueryRow("SELECT COUNT(*) FROM transactions WHERE timestamp >= datetime('now', '-24 hours') AND status = 'blocked' AND organization_id = ?", orgID).Scan(&current)
+	db.QueryRow(formatQuery("SELECT COUNT(*) FROM transactions WHERE created_at >= NOW() - INTERVAL '24 hours' AND status = 'blocked' AND organization_id = ?"), orgID).Scan(&current)
 
 	// Previous period
-	db.QueryRow("SELECT COUNT(*) FROM transactions WHERE timestamp BETWEEN datetime('now', '-48 hours') AND datetime('now', '-24 hours') AND status = 'blocked' AND organization_id = ?", orgID).Scan(&previous)
+	db.QueryRow(formatQuery("SELECT COUNT(*) FROM transactions WHERE created_at BETWEEN NOW() - INTERVAL '48 hours' AND NOW() - INTERVAL '24 hours' AND status = 'blocked' AND organization_id = ?"), orgID).Scan(&previous)
 
 	delta := float64(current - previous)
 	return c.JSON(StatCardData{
@@ -352,10 +352,10 @@ func handleStatAvgLatency(c *fiber.Ctx, orgID int) error {
 	var current, previous float64
 
 	// Current period average latency
-	db.QueryRow("SELECT AVG(processing_time) FROM transactions WHERE timestamp >= datetime('now', '-24 hours') AND processing_time > 0 AND organization_id = ?", orgID).Scan(&current)
+	db.QueryRow(formatQuery("SELECT AVG(processing_time_ms) FROM transactions WHERE created_at >= NOW() - INTERVAL '24 hours' AND processing_time_ms > 0 AND organization_id = ?"), orgID).Scan(&current)
 
 	// Previous period average latency
-	db.QueryRow("SELECT AVG(processing_time) FROM transactions WHERE timestamp BETWEEN datetime('now', '-48 hours') AND datetime('now', '-24 hours') AND processing_time > 0 AND organization_id = ?", orgID).Scan(&previous)
+	db.QueryRow(formatQuery("SELECT AVG(processing_time_ms) FROM transactions WHERE created_at BETWEEN NOW() - INTERVAL '48 hours' AND NOW() - INTERVAL '24 hours' AND processing_time_ms > 0 AND organization_id = ?"), orgID).Scan(&previous)
 
 	delta := current - previous
 	return c.JSON(StatCardData{
@@ -374,9 +374,9 @@ func handleSuccessRate(c *fiber.Ctx, orgID int) error {
 	var total, successful, redacted int64
 
 	// Get counts for last 24h
-	db.QueryRow("SELECT COUNT(*) FROM transactions WHERE timestamp >= datetime('now', '-24 hours') AND organization_id = ?", orgID).Scan(&total)
-	db.QueryRow("SELECT COUNT(*) FROM transactions WHERE timestamp >= datetime('now', '-24 hours') AND status = 'success' AND organization_id = ?", orgID).Scan(&successful)
-	db.QueryRow("SELECT COUNT(*) FROM transactions WHERE timestamp >= datetime('now', '-24 hours') AND redaction_count > 0 AND organization_id = ?", orgID).Scan(&redacted)
+	db.QueryRow(formatQuery("SELECT COUNT(*) FROM transactions WHERE created_at >= NOW() - INTERVAL '24 hours' AND organization_id = ?"), orgID).Scan(&total)
+	db.QueryRow(formatQuery("SELECT COUNT(*) FROM transactions WHERE created_at >= NOW() - INTERVAL '24 hours' AND status = 'success' AND organization_id = ?"), orgID).Scan(&successful)
+	db.QueryRow(formatQuery("SELECT COUNT(*) FROM transactions WHERE created_at >= NOW() - INTERVAL '24 hours' AND redaction_count > 0 AND organization_id = ?"), orgID).Scan(&redacted)
 
 	var successRate float64
 	if total > 0 {
@@ -398,9 +398,9 @@ func handleProtectionSummary(c *fiber.Ctx, orgID int) error {
 	var protected, blocked, total int64
 
 	// Get today's stats
-	db.QueryRow("SELECT COUNT(*) FROM transactions WHERE date(timestamp) = date('now') AND redaction_count > 0 AND organization_id = ?", orgID).Scan(&protected)
-	db.QueryRow("SELECT COUNT(*) FROM transactions WHERE date(timestamp) = date('now') AND status = 'blocked' AND organization_id = ?", orgID).Scan(&blocked)
-	db.QueryRow("SELECT COUNT(*) FROM transactions WHERE date(timestamp) = date('now') AND organization_id = ?", orgID).Scan(&total)
+	db.QueryRow(formatQuery("SELECT COUNT(*) FROM transactions WHERE DATE(created_at) = CURRENT_DATE AND redaction_count > 0 AND organization_id = ?"), orgID).Scan(&protected)
+	db.QueryRow(formatQuery("SELECT COUNT(*) FROM transactions WHERE DATE(created_at) = CURRENT_DATE AND status = 'blocked' AND organization_id = ?"), orgID).Scan(&blocked)
+	db.QueryRow(formatQuery("SELECT COUNT(*) FROM transactions WHERE DATE(created_at) = CURRENT_DATE AND organization_id = ?"), orgID).Scan(&total)
 
 	var detectionRate float64
 	if total > 0 {
@@ -452,14 +452,14 @@ func handleTopProviders(c *fiber.Ctx, orgID int) error {
 		return c.JSON(TopProvidersData{Providers: []ProviderData{}})
 	}
 
-	rows, err := db.Query(`
+	rows, err := db.Query(formatQuery(`
 		SELECT provider, COUNT(*) as requests,
-		       COUNT(*) * 100.0 / (SELECT COUNT(*) FROM transactions WHERE timestamp >= datetime('now', '-24 hours') AND organization_id = ?) as percent
+		       COUNT(*) * 100.0 / (SELECT COUNT(*) FROM transactions WHERE created_at >= NOW() - INTERVAL '24 hours' AND organization_id = ?) as percent
 		FROM transactions
-		WHERE timestamp >= datetime('now', '-24 hours') AND organization_id = ? AND provider != ''
+		WHERE created_at >= NOW() - INTERVAL '24 hours' AND organization_id = ? AND provider != ''
 		GROUP BY provider
 		ORDER BY requests DESC
-		LIMIT 10`, orgID, orgID)
+		LIMIT 10`), orgID, orgID)
 
 	if err != nil {
 		return c.JSON(TopProvidersData{Providers: []ProviderData{}})
@@ -494,12 +494,12 @@ func handleRecentActivity(c *fiber.Ctx, orgID int) error {
 		return c.JSON(ActivityChartData{PeriodLabel: "Last 24 hours", Points: []ActivityData{}})
 	}
 
-	rows, err := db.Query(`
-		SELECT datetime(timestamp, 'start of hour') as hour, COUNT(*) as count
+	rows, err := db.Query(formatQuery(`
+		SELECT DATE_TRUNC('hour', created_at) as hour, COUNT(*) as count
 		FROM transactions
-		WHERE timestamp >= datetime('now', '-24 hours') AND organization_id = ?
+		WHERE created_at >= NOW() - INTERVAL '24 hours' AND organization_id = ?
 		GROUP BY hour
-		ORDER BY hour ASC`, orgID)
+		ORDER BY hour ASC`), orgID)
 
 	if err != nil {
 		return c.JSON(ActivityChartData{PeriodLabel: "Last 24 hours", Points: []ActivityData{}})
@@ -533,8 +533,8 @@ func handleLiveStats(c *fiber.Ctx, orgID int) error {
 	var errorRate float64
 	if db != nil {
 		var errors, total int64
-		db.QueryRow("SELECT COUNT(*) FROM transactions WHERE timestamp >= datetime('now', '-5 minutes') AND status != 'success' AND organization_id = ?", orgID).Scan(&errors)
-		db.QueryRow("SELECT COUNT(*) FROM transactions WHERE timestamp >= datetime('now', '-5 minutes') AND organization_id = ?", orgID).Scan(&total)
+		db.QueryRow(formatQuery("SELECT COUNT(*) FROM transactions WHERE created_at >= NOW() - INTERVAL '5 minutes' AND status != 'success' AND organization_id = ?"), orgID).Scan(&errors)
+		db.QueryRow(formatQuery("SELECT COUNT(*) FROM transactions WHERE created_at >= NOW() - INTERVAL '5 minutes' AND organization_id = ?"), orgID).Scan(&total)
 		if total > 0 {
 			errorRate = float64(errors) / float64(total)
 		}
@@ -593,7 +593,7 @@ func updateRequestRate(orgID int) {
 	if now.Sub(lastUpdateTime) >= time.Minute {
 		if db != nil {
 			var count int64
-			db.QueryRow("SELECT COUNT(*) FROM transactions WHERE timestamp >= datetime('now', '-1 minute') AND organization_id = ?", orgID).Scan(&count)
+			db.QueryRow(formatQuery("SELECT COUNT(*) FROM transactions WHERE created_at >= NOW() - INTERVAL '1 minute' AND organization_id = ?"), orgID).Scan(&count)
 			currentRPS = float64(count) / 60.0
 		}
 		lastUpdateTime = now
