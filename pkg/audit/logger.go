@@ -243,9 +243,9 @@ func GetTransactions(limit, offset int, organizationID string) ([]Transaction, e
 		return nil, fmt.Errorf("database not initialized")
 	}
 
-	query := `SELECT id, created_at, status, provider, status_code, processing_time_ms,
+	query := formatQuery(`SELECT id, created_at, status, provider, status_code, processing_time_ms,
 			  redaction_count, entities_detected, ip_address, user_agent, organization_id, user_id
-			  FROM transactions WHERE organization_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`
+			  FROM transactions WHERE organization_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`)
 
 	// Convert string organizationID to integer for database query
 	orgID, err := strconv.Atoi(organizationID)
@@ -292,25 +292,25 @@ func GetStatistics(organizationID string) (*Statistics, error) {
 	stats := &Statistics{}
 
 	// Total requests
-	err := db.QueryRow("SELECT COUNT(*) FROM transactions WHERE organization_id = ?", organizationID).Scan(&stats.TotalRequests)
+	err := db.QueryRow(formatQuery("SELECT COUNT(*) FROM transactions WHERE organization_id = ?"), organizationID).Scan(&stats.TotalRequests)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get total requests: %w", err)
 	}
 
 	// Successful requests
-	err = db.QueryRow("SELECT COUNT(*) FROM transactions WHERE status = 'success' AND organization_id = ?", organizationID).Scan(&stats.SuccessfulRequests)
+	err = db.QueryRow(formatQuery("SELECT COUNT(*) FROM transactions WHERE status = 'success' AND organization_id = ?"), organizationID).Scan(&stats.SuccessfulRequests)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get successful requests: %w", err)
 	}
 
 	// Blocked requests
-	err = db.QueryRow("SELECT COUNT(*) FROM transactions WHERE status = 'blocked' AND organization_id = ?", organizationID).Scan(&stats.BlockedRequests)
+	err = db.QueryRow(formatQuery("SELECT COUNT(*) FROM transactions WHERE status = 'blocked' AND organization_id = ?"), organizationID).Scan(&stats.BlockedRequests)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get blocked requests: %w", err)
 	}
 
 	// Redacted requests
-	err = db.QueryRow("SELECT COUNT(*) FROM transactions WHERE redaction_count > 0 AND organization_id = ?", organizationID).Scan(&stats.RedactedRequests)
+	err = db.QueryRow(formatQuery("SELECT COUNT(*) FROM transactions WHERE redaction_count > 0 AND organization_id = ?"), organizationID).Scan(&stats.RedactedRequests)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get redacted requests: %w", err)
 	}
@@ -321,16 +321,16 @@ func GetStatistics(organizationID string) (*Statistics, error) {
 	}
 
 	// Average processing time
-	err = db.QueryRow("SELECT AVG(processing_time) FROM transactions WHERE processing_time > 0 AND organization_id = ?", organizationID).Scan(&stats.AvgProcessingTime)
+	err = db.QueryRow(formatQuery("SELECT AVG(processing_time_ms) FROM transactions WHERE processing_time_ms > 0 AND organization_id = ?"), organizationID).Scan(&stats.AvgProcessingTime)
 	if err != nil {
 		stats.AvgProcessingTime = 0
 	}
 
 	// Top providers
-	providerRows, err := db.Query(`SELECT provider, COUNT(*) as requests
+	providerRows, err := db.Query(formatQuery(`SELECT provider, COUNT(*) as requests
 									FROM transactions WHERE organization_id = ?
 									GROUP BY provider
-									ORDER BY requests DESC LIMIT 5`, organizationID)
+									ORDER BY requests DESC LIMIT 5`), organizationID)
 	if err == nil {
 		defer providerRows.Close()
 		for providerRows.Next() {
