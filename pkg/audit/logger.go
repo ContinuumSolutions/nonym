@@ -266,9 +266,10 @@ func GetTransactions(limit, offset int, organizationID string) ([]Transaction, e
 		var dbID int // Database ID as integer
 		var clientIP *string // Can be NULL
 		var userAgent *string // Can be NULL
+		var processingTime *float64 // Can be NULL
 
 		err := rows.Scan(&dbID, &t.Timestamp, &t.Status, &t.Provider, &t.StatusCode,
-			&t.ProcessingTime, &t.RedactionCount, &entitiesDetectedJSON,
+			&processingTime, &t.RedactionCount, &entitiesDetectedJSON,
 			&clientIP, &userAgent, &t.OrganizationID, &t.UserID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan transaction: %w", err)
@@ -283,6 +284,9 @@ func GetTransactions(limit, offset int, organizationID string) ([]Transaction, e
 		}
 		if userAgent != nil {
 			t.UserAgent = *userAgent
+		}
+		if processingTime != nil {
+			t.ProcessingTime = *processingTime
 		}
 
 		// Parse entities detected as redaction details (for backwards compatibility)

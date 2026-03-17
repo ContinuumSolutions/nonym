@@ -391,6 +391,64 @@ func TestTransactionScanningWithNullableFields(t *testing.T) {
 	}
 }
 
+func TestTransactionNullProcessingTime(t *testing.T) {
+	// Test that nullable processing_time_ms field is handled correctly
+	testDB := setupTestDB(t)
+	defer testDB.Close()
+
+	// Backup original db and replace with test db
+	originalDB := db
+	db = testDB
+	defer func() { db = originalDB }()
+
+	// Insert transaction with NULL processing_time_ms
+	_, err := testDB.Exec(`
+		INSERT INTO transactions (status, provider, status_code, organization_id, user_id, entities_detected, processing_time_ms)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, "success", "openai", 200, 1, 1, "[]", nil)
+	if err != nil {
+		t.Fatalf("Failed to insert test data with NULL processing_time_ms: %v", err)
+	}
+
+	// Insert transaction with actual processing_time_ms
+	_, err = testDB.Exec(`
+		INSERT INTO transactions (status, provider, status_code, organization_id, user_id, entities_detected, processing_time_ms)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, "success", "anthropic", 200, 1, 1, "[]", 125.5)
+	if err != nil {
+		t.Fatalf("Failed to insert test data with processing_time_ms: %v", err)
+	}
+
+	transactions, err := GetTransactions(10, 0, "1")
+	if err != nil {
+		t.Fatalf("Failed to get transactions: %v", err)
+	}
+
+	if len(transactions) != 2 {
+		t.Fatalf("Expected 2 transactions, got %d", len(transactions))
+	}
+
+	// Check that NULL and non-NULL processing times are handled correctly
+	foundNullProcessingTime := false
+	foundNonNullProcessingTime := false
+
+	for _, tx := range transactions {
+		if tx.ProcessingTime == 0 && tx.Provider == "openai" {
+			foundNullProcessingTime = true
+		}
+		if tx.ProcessingTime == 125.5 && tx.Provider == "anthropic" {
+			foundNonNullProcessingTime = true
+		}
+	}
+
+	if !foundNullProcessingTime {
+		t.Error("Should have found transaction with null processing time (set to 0)")
+	}
+	if !foundNonNullProcessingTime {
+		t.Error("Should have found transaction with non-null processing time (125.5)")
+	}
+}
+
 func TestEventJSONParsing(t *testing.T) {
 	// Test that event metadata JSON is parsed correctly
 	testDB := setupTestDB(t)
