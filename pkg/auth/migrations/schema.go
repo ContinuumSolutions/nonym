@@ -247,6 +247,41 @@ func getPostgreSQLMigrations() []*Migration {
 				DROP TABLE IF EXISTS api_keys CASCADE;
 			`,
 		},
+		{
+			Version:     6,
+			Name:        "create_transactions_table",
+			Description: "Create transactions table for audit logging",
+			UpSQL: `
+				-- Transactions table for audit logging
+				CREATE TABLE transactions (
+					id SERIAL PRIMARY KEY,
+					request_id VARCHAR(255),
+					method VARCHAR(10) NOT NULL DEFAULT 'POST',
+					path TEXT NOT NULL DEFAULT '/v1/chat/completions',
+					provider VARCHAR(100),
+					status VARCHAR(50) NOT NULL,
+					status_code INTEGER,
+					processing_time_ms DOUBLE PRECISION,
+					redaction_count INTEGER DEFAULT 0,
+					entities_detected JSONB DEFAULT '[]',
+					organization_id INTEGER,
+					user_id INTEGER,
+					ip_address INET,
+					user_agent TEXT,
+					created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+				);
+
+				-- Create indexes for transactions
+				CREATE INDEX idx_transactions_created_at ON transactions(created_at);
+				CREATE INDEX idx_transactions_organization_id ON transactions(organization_id);
+				CREATE INDEX idx_transactions_user_id ON transactions(user_id);
+				CREATE INDEX idx_transactions_provider ON transactions(provider);
+				CREATE INDEX idx_transactions_status ON transactions(status);
+			`,
+			DownSQL: `
+				DROP TABLE IF EXISTS transactions CASCADE;
+			`,
+		},
 	}
 }
 
@@ -478,6 +513,41 @@ func getSQLiteMigrations() []*Migration {
 			`,
 			DownSQL: `
 				DROP TABLE IF EXISTS api_keys;
+			`,
+		},
+		{
+			Version:     6,
+			Name:        "create_transactions_table",
+			Description: "Create transactions table for audit logging",
+			UpSQL: `
+				-- Transactions table for audit logging
+				CREATE TABLE transactions (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					request_id TEXT,
+					method TEXT NOT NULL DEFAULT 'POST',
+					path TEXT NOT NULL DEFAULT '/v1/chat/completions',
+					provider TEXT,
+					status TEXT NOT NULL,
+					status_code INTEGER,
+					processing_time_ms REAL,
+					redaction_count INTEGER DEFAULT 0,
+					entities_detected TEXT DEFAULT '[]',
+					organization_id INTEGER,
+					user_id INTEGER,
+					ip_address TEXT,
+					user_agent TEXT,
+					created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+				);
+
+				-- Create indexes for transactions
+				CREATE INDEX idx_transactions_created_at ON transactions(created_at);
+				CREATE INDEX idx_transactions_organization_id ON transactions(organization_id);
+				CREATE INDEX idx_transactions_user_id ON transactions(user_id);
+				CREATE INDEX idx_transactions_provider ON transactions(provider);
+				CREATE INDEX idx_transactions_status ON transactions(status);
+			`,
+			DownSQL: `
+				DROP TABLE IF EXISTS transactions;
 			`,
 		},
 	}
