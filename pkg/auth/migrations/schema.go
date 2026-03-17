@@ -164,13 +164,12 @@ func getPostgreSQLMigrations() []*Migration {
 			Description: "Insert default organization and admin user",
 			UpSQL: `
 				-- Insert default organization
-				INSERT INTO organizations (id, name, slug, description)
+				INSERT INTO organizations (name, slug, description)
 				VALUES (
-					'00000000-0000-0000-0000-000000000001',
 					'Default Organization',
 					'default',
 					'Default organization for initial setup'
-				) ON CONFLICT (id) DO NOTHING;
+				) ON CONFLICT (name) DO NOTHING;
 
 				-- Insert default admin user (password: admin123)
 				INSERT INTO users (
@@ -183,7 +182,7 @@ func getPostgreSQLMigrations() []*Migration {
 					is_active,
 					email_verified
 				) VALUES (
-					'00000000-0000-0000-0000-000000000001',
+					1,
 					'admin@localhost',
 					'$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj8xwLdqRg3m',
 					'Admin',
@@ -195,7 +194,7 @@ func getPostgreSQLMigrations() []*Migration {
 			`,
 			DownSQL: `
 				DELETE FROM users WHERE email = 'admin@localhost';
-				DELETE FROM organizations WHERE id = '00000000-0000-0000-0000-000000000001';
+				DELETE FROM organizations WHERE name = 'Default Organization';
 			`,
 		},
 		{
@@ -397,9 +396,8 @@ func getSQLiteMigrations() []*Migration {
 			Description: "Insert default organization and admin user",
 			UpSQL: `
 				-- Insert default organization
-				INSERT OR IGNORE INTO organizations (id, name, slug, description)
+				INSERT OR IGNORE INTO organizations (name, slug, description)
 				VALUES (
-					'00000000-0000-0000-0000-000000000001',
 					'Default Organization',
 					'default',
 					'Default organization for initial setup'
@@ -416,7 +414,7 @@ func getSQLiteMigrations() []*Migration {
 					is_active,
 					email_verified
 				) VALUES (
-					'00000000-0000-0000-0000-000000000001',
+					1,
 					'admin@localhost',
 					'$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj8xwLdqRg3m',
 					'Admin',
@@ -428,7 +426,7 @@ func getSQLiteMigrations() []*Migration {
 			`,
 			DownSQL: `
 				DELETE FROM users WHERE email = 'admin@localhost';
-				DELETE FROM organizations WHERE id = '00000000-0000-0000-0000-000000000001';
+				DELETE FROM organizations WHERE name = 'Default Organization';
 			`,
 		},
 		{
