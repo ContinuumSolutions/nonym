@@ -234,10 +234,10 @@ func LogTransactionWithRedactions(id, status, provider string, statusCode int, p
 	redactionJSON, _ := json.Marshal(redactionDetails)
 
 	query := formatQuery(`INSERT INTO transactions (
-		id, status, provider, status_code, processing_time, redaction_count, redaction_details, timestamp
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+		request_id, method, path, provider, status, status_code, processing_time_ms, redaction_count, entities_detected
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 
-	_, err := db.Exec(query, id, status, provider, statusCode, processingTime, len(redactionDetails), string(redactionJSON), time.Now())
+	_, err := db.Exec(query, id, "POST", "/v1/chat/completions", provider, status, statusCode, processingTime, len(redactionDetails), string(redactionJSON))
 	if err != nil {
 		fmt.Printf("Failed to log transaction: %v", err)
 	}
