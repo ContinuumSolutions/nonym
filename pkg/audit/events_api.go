@@ -137,10 +137,10 @@ func storeEvent(event *Event) error {
 
 	metadataJSON, _ := json.Marshal(event.Metadata)
 
-	query := `INSERT INTO events (
+	query := formatQuery(`INSERT INTO events (
 		id, timestamp, type, pii_type, action, request_id, user_id,
 		provider, model, metadata, severity, status, description
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 
 	_, err := db.Exec(query,
 		event.ID, event.Timestamp, event.Type, event.PIIType, event.Action,
@@ -374,7 +374,7 @@ func HandleUpdateEventStatus(c *fiber.Ctx) error {
 	}
 
 	// Update event status
-	query := `UPDATE events SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+	query := formatQuery(`UPDATE events SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
 	_, err := db.Exec(query, req.Status, eventID)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
@@ -415,8 +415,8 @@ func HandleCreateWebhook(c *fiber.Ctx) error {
 
 	// Store webhook
 	eventsJSON, _ := json.Marshal(webhook.Events)
-	query := `INSERT INTO webhooks (id, url, events, secret, status, created_at, user_id)
-			  VALUES (?, ?, ?, ?, ?, ?, ?)`
+	query := formatQuery(`INSERT INTO webhooks (id, url, events, secret, status, created_at, user_id)
+			  VALUES (?, ?, ?, ?, ?, ?, ?)`)
 	_, err := db.Exec(query, webhook.ID, webhook.URL, string(eventsJSON),
 		webhook.Secret, webhook.Status, webhook.CreatedAt, webhook.UserID)
 	if err != nil {
@@ -432,8 +432,8 @@ func HandleCreateWebhook(c *fiber.Ctx) error {
 func HandleGetWebhooks(c *fiber.Ctx) error {
 	userID := getUserIDFromContext(c)
 
-	query := `SELECT id, url, events, status, created_at, last_trigger
-			  FROM webhooks WHERE user_id = ? ORDER BY created_at DESC`
+	query := formatQuery(`SELECT id, url, events, status, created_at, last_trigger
+			  FROM webhooks WHERE user_id = ? ORDER BY created_at DESC`)
 	rows, err := db.Query(query, userID)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
@@ -495,7 +495,7 @@ func InitializeEventsTables() error {
 	queries := []string{
 		`CREATE TABLE IF NOT EXISTS events (
 			id TEXT PRIMARY KEY,
-			timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+			timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			type TEXT NOT NULL,
 			pii_type TEXT,
 			action TEXT NOT NULL,
@@ -507,7 +507,7 @@ func InitializeEventsTables() error {
 			severity TEXT DEFAULT 'low',
 			status TEXT DEFAULT 'open',
 			description TEXT,
-			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp)`,
 		`CREATE INDEX IF NOT EXISTS idx_events_type ON events(type)`,
@@ -519,8 +519,8 @@ func InitializeEventsTables() error {
 			events TEXT NOT NULL,
 			secret TEXT,
 			status TEXT DEFAULT 'active',
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			last_trigger DATETIME,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			last_trigger TIMESTAMP,
 			user_id TEXT NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_webhooks_user_id ON webhooks(user_id)`,
