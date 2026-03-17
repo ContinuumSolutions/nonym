@@ -264,16 +264,26 @@ func GetTransactions(limit, offset int, organizationID string) ([]Transaction, e
 		var t Transaction
 		var entitiesDetectedJSON string
 		var dbID int // Database ID as integer
+		var clientIP *string // Can be NULL
+		var userAgent *string // Can be NULL
 
 		err := rows.Scan(&dbID, &t.Timestamp, &t.Status, &t.Provider, &t.StatusCode,
 			&t.ProcessingTime, &t.RedactionCount, &entitiesDetectedJSON,
-			&t.ClientIP, &t.UserAgent, &t.OrganizationID, &t.UserID)
+			&clientIP, &userAgent, &t.OrganizationID, &t.UserID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan transaction: %w", err)
 		}
 
 		// Convert integer ID to string for compatibility
 		t.ID = strconv.Itoa(dbID)
+
+		// Handle nullable fields
+		if clientIP != nil {
+			t.ClientIP = *clientIP
+		}
+		if userAgent != nil {
+			t.UserAgent = *userAgent
+		}
 
 		// Parse entities detected as redaction details (for backwards compatibility)
 		json.Unmarshal([]byte(entitiesDetectedJSON), &t.RedactionDetails)

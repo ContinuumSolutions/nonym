@@ -196,13 +196,16 @@ func GetEvents(filter EventFilter) (*EventsResponse, error) {
 	}
 
 	// Count total for pagination
-	countQuery := "SELECT COUNT(*) FROM (" + query + ")"
+	countQuery := formatQuery("SELECT COUNT(*) FROM (" + query + ")")
 	var total int64
 	db.QueryRow(countQuery, args...).Scan(&total)
 
 	// Add ordering and pagination
 	query += " ORDER BY timestamp DESC LIMIT ? OFFSET ?"
 	args = append(args, filter.Limit, filter.Offset)
+
+	// Format query for PostgreSQL parameter binding
+	query = formatQuery(query)
 
 	rows, err := db.Query(query, args...)
 	if err != nil {
@@ -211,15 +214,44 @@ func GetEvents(filter EventFilter) (*EventsResponse, error) {
 	defer rows.Close()
 
 	var events []Event
+	rowCount := 0
 	for rows.Next() {
+		rowCount++
 		var event Event
 		var metadataJSON string
+		// Handle nullable fields
+		var piiType *string
+		var requestID *string
+		var userID *string
+		var provider *string
+		var model *string
+		var description *string
 
-		err := rows.Scan(&event.ID, &event.Timestamp, &event.Type, &event.PIIType,
-			&event.Action, &event.RequestID, &event.UserID, &event.Provider,
-			&event.Model, &metadataJSON, &event.Severity, &event.Status, &event.Description)
+		err := rows.Scan(&event.ID, &event.Timestamp, &event.Type, &piiType,
+			&event.Action, &requestID, &userID, &provider,
+			&model, &metadataJSON, &event.Severity, &event.Status, &description)
 		if err != nil {
 			continue
+		}
+
+		// Handle nullable fields
+		if piiType != nil {
+			event.PIIType = *piiType
+		}
+		if requestID != nil {
+			event.RequestID = *requestID
+		}
+		if userID != nil {
+			event.UserID = *userID
+		}
+		if provider != nil {
+			event.Provider = *provider
+		}
+		if model != nil {
+			event.Model = *model
+		}
+		if description != nil {
+			event.Description = *description
 		}
 
 		// Parse metadata
