@@ -22,14 +22,11 @@ func getPostgreSQLMigrations() []*Migration {
 		{
 			Version:     1,
 			Name:        "initial_schema",
-			Description: "Create initial auth schema for PostgreSQL with UUID support",
+			Description: "Create initial auth schema for PostgreSQL with INTEGER IDs",
 			UpSQL: `
-				-- Enable UUID extension
-				CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
 				-- Organizations table
 				CREATE TABLE organizations (
-					id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+					id SERIAL PRIMARY KEY,
 					name VARCHAR(255) NOT NULL UNIQUE,
 					slug VARCHAR(100) NOT NULL UNIQUE,
 					description TEXT,
@@ -41,8 +38,8 @@ func getPostgreSQLMigrations() []*Migration {
 
 				-- Users table
 				CREATE TABLE users (
-					id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-					organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+					id SERIAL PRIMARY KEY,
+					organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
 					email VARCHAR(255) NOT NULL UNIQUE,
 					password_hash VARCHAR(255) NOT NULL,
 					first_name VARCHAR(100),
@@ -57,9 +54,9 @@ func getPostgreSQLMigrations() []*Migration {
 
 				-- User sessions table
 				CREATE TABLE user_sessions (
-					id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-					user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-					organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+					id SERIAL PRIMARY KEY,
+					user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+					organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
 					session_token VARCHAR(255) NOT NULL UNIQUE,
 					ip_address INET,
 					user_agent TEXT,
@@ -71,9 +68,9 @@ func getPostgreSQLMigrations() []*Migration {
 
 				-- Refresh tokens table
 				CREATE TABLE refresh_tokens (
-					id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-					user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-					organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+					id SERIAL PRIMARY KEY,
+					user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+					organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
 					token_hash VARCHAR(255) NOT NULL UNIQUE,
 					expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
 					created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -85,10 +82,10 @@ func getPostgreSQLMigrations() []*Migration {
 
 				-- Auth events table for audit logging
 				CREATE TABLE auth_events (
-					id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+					id SERIAL PRIMARY KEY,
 					type VARCHAR(100) NOT NULL,
-					user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-					organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
+					user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+					organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL,
 					ip_address INET,
 					user_agent TEXT,
 					success BOOLEAN NOT NULL,
@@ -99,8 +96,8 @@ func getPostgreSQLMigrations() []*Migration {
 
 				-- Password resets table
 				CREATE TABLE password_resets (
-					id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-					user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+					id SERIAL PRIMARY KEY,
+					user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 					token VARCHAR(255) NOT NULL UNIQUE,
 					expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
 					created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -207,7 +204,7 @@ func getPostgreSQLMigrations() []*Migration {
 			Description: "Add owner_id column to organizations table",
 			UpSQL: `
 				-- Add owner_id column to organizations
-				ALTER TABLE organizations ADD COLUMN owner_id UUID REFERENCES users(id) ON DELETE SET NULL;
+				ALTER TABLE organizations ADD COLUMN owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
 
 				-- Create index for owner_id
 				CREATE INDEX idx_organizations_owner_id ON organizations(owner_id);
@@ -227,13 +224,13 @@ func getPostgreSQLMigrations() []*Migration {
 			UpSQL: `
 				-- API keys table
 				CREATE TABLE api_keys (
-					id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+					id SERIAL PRIMARY KEY,
 					name VARCHAR(255) NOT NULL,
 					key_hash VARCHAR(255) NOT NULL,
 					masked_key VARCHAR(50) NOT NULL,
 					permissions VARCHAR(500) NOT NULL,
-					user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-					organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+					user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+					organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
 					created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 					expires_at TIMESTAMP WITH TIME ZONE,
 					status VARCHAR(50) DEFAULT 'active' CHECK (status IN ('active', 'revoked', 'expired', 'deleted')),
@@ -264,7 +261,7 @@ func getSQLiteMigrations() []*Migration {
 			UpSQL: `
 				-- Organizations table
 				CREATE TABLE organizations (
-					id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))),2) || '-' || lower(hex(randomblob(6)))),
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
 					name TEXT NOT NULL UNIQUE,
 					slug TEXT NOT NULL UNIQUE,
 					description TEXT,
@@ -276,8 +273,8 @@ func getSQLiteMigrations() []*Migration {
 
 				-- Users table
 				CREATE TABLE users (
-					id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))),2) || '-' || lower(hex(randomblob(6)))),
-					organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
 					email TEXT NOT NULL UNIQUE,
 					password_hash TEXT NOT NULL,
 					first_name TEXT,
@@ -292,9 +289,9 @@ func getSQLiteMigrations() []*Migration {
 
 				-- User sessions table
 				CREATE TABLE user_sessions (
-					id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))),2) || '-' || lower(hex(randomblob(6)))),
-					user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-					organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+					organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
 					session_token TEXT NOT NULL UNIQUE,
 					ip_address TEXT,
 					user_agent TEXT,
@@ -306,9 +303,9 @@ func getSQLiteMigrations() []*Migration {
 
 				-- Refresh tokens table
 				CREATE TABLE refresh_tokens (
-					id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))),2) || '-' || lower(hex(randomblob(6)))),
-					user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-					organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+					organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
 					token_hash TEXT NOT NULL UNIQUE,
 					expires_at DATETIME NOT NULL,
 					created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -320,10 +317,10 @@ func getSQLiteMigrations() []*Migration {
 
 				-- Auth events table for audit logging
 				CREATE TABLE auth_events (
-					id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))),2) || '-' || lower(hex(randomblob(6)))),
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
 					type TEXT NOT NULL,
-					user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
-					organization_id TEXT REFERENCES organizations(id) ON DELETE SET NULL,
+					user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+					organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL,
 					ip_address TEXT,
 					user_agent TEXT,
 					success BOOLEAN NOT NULL,
@@ -334,8 +331,8 @@ func getSQLiteMigrations() []*Migration {
 
 				-- Password resets table
 				CREATE TABLE password_resets (
-					id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))),2) || '-' || lower(hex(randomblob(6)))),
-					user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 					token TEXT NOT NULL UNIQUE,
 					expires_at DATETIME NOT NULL,
 					created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -440,7 +437,7 @@ func getSQLiteMigrations() []*Migration {
 			Description: "Add owner_id column to organizations table",
 			UpSQL: `
 				-- Add owner_id column to organizations
-				ALTER TABLE organizations ADD COLUMN owner_id TEXT REFERENCES users(id) ON DELETE SET NULL;
+				ALTER TABLE organizations ADD COLUMN owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
 
 				-- Create index for owner_id
 				CREATE INDEX idx_organizations_owner_id ON organizations(owner_id);
@@ -461,13 +458,13 @@ func getSQLiteMigrations() []*Migration {
 			UpSQL: `
 				-- API keys table
 				CREATE TABLE api_keys (
-					id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))),2) || '-' || lower(hex(randomblob(6)))),
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
 					name TEXT NOT NULL,
 					key_hash TEXT NOT NULL,
 					masked_key TEXT NOT NULL,
 					permissions TEXT NOT NULL,
-					user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-					organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+					user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+					organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
 					created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 					expires_at DATETIME,
 					status TEXT DEFAULT 'active' CHECK (status IN ('active', 'revoked', 'expired', 'deleted')),

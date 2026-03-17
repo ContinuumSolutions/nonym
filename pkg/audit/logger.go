@@ -66,8 +66,9 @@ type Settings struct {
 }
 
 var (
-	db       *sql.DB
-	settings *Settings
+	db         *sql.DB
+	settings   *Settings
+	isPostgres bool
 )
 
 // Initialize sets up the audit database and default settings
@@ -83,6 +84,7 @@ func Initialize(databasePath string) error {
 
 	if dbHost != "" && dbName != "" {
 		// Use PostgreSQL
+		isPostgres = true
 		dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 			dbHost, dbPort, dbUser, dbPassword, dbName, os.Getenv("DB_SSL_MODE"))
 
@@ -120,6 +122,25 @@ func Initialize(databasePath string) error {
 
 	log.Println("Audit system initialized successfully")
 	return nil
+}
+
+// formatQuery converts ? placeholders to $1, $2, etc for PostgreSQL
+func formatQuery(query string) string {
+	if !isPostgres {
+		return query
+	}
+
+	count := 1
+	result := ""
+	for _, char := range query {
+		if char == '?' {
+			result += fmt.Sprintf("$%d", count)
+			count++
+		} else {
+			result += string(char)
+		}
+	}
+	return result
 }
 
 func createTables() error {
@@ -193,9 +214,9 @@ func LogTransaction(id, status, provider string, statusCode int, redactionDetail
 
 	redactionJSON, _ := json.Marshal(redactionDetails)
 
-	query := `INSERT INTO transactions (
+	query := formatQuery(`INSERT INTO transactions (
 		id, status, provider, status_code, redaction_count, redaction_details, organization_id, user_id
-	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
 
 	_, err := db.Exec(query, id, status, provider, statusCode, len(redactionDetails), string(redactionJSON), organizationID, userID)
 	if err != nil {
