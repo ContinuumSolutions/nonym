@@ -423,8 +423,10 @@ func RegisterUser(req *SignupRequest) (*User, *Organization, error) {
 	// Update organization with owner_id (only for new organizations)
 	if req.OrganizationID == nil {
 		updateOrgQuery := formatQuery("UPDATE organizations SET owner_id = ? WHERE id = ?")
+		log.Printf("DEBUG: Executing query: %s with params: user.ID=%d, organization.ID=%d", updateOrgQuery, user.ID, organization.ID)
 		_, err = tx.Exec(updateOrgQuery, user.ID, organization.ID)
 		if err != nil {
+			log.Printf("DEBUG: Query execution failed: %v", err)
 			return nil, nil, fmt.Errorf("failed to set organization owner: %w", err)
 		}
 		organization.OwnerID = user.ID
