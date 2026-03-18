@@ -45,7 +45,7 @@ services:
       dockerfile: Dockerfile
       target: ${GATEWAY_TARGET:-development}
     environment:
-      - PORT=8080
+      - PORT=8000
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - STRICT_MODE=${STRICT_MODE:-false}
       # API Keys for AI providers
@@ -83,30 +83,8 @@ services:
     networks:
       - backend
 
-  # ── Reverse Proxy ──────────────────────────────────────────────────────────
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-    volumes:
-      - ./nginx/nginx.unified.conf:/etc/nginx/nginx.conf:ro
-      - ./api-docs:/usr/share/nginx/html/api-docs:ro
-    depends_on:
-      - gateway
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    networks:
-      - frontend
-      - backend
-
 # ── Networks ───────────────────────────────────────────────────────────────────
 networks:
-  frontend:
-    driver: bridge
   backend:
     driver: bridge
 

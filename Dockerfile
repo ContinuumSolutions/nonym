@@ -69,13 +69,13 @@ USER spguser
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-8080}/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-8000}/health || exit 1
 
 # Expose ports
-EXPOSE 8080 8081
+EXPOSE 8000 8081
 
 # Environment defaults
-ENV PORT=8080 \
+ENV PORT=8000 \
     DATABASE_PATH=/data/gateway.db \
     LOG_LEVEL=info \
     STRICT_MODE=false
@@ -120,7 +120,7 @@ RUN mkdir -p /data /tmp && \
 USER devuser
 
 # Development environment variables
-ENV PORT=8080 \
+ENV PORT=8000 \
     LOG_LEVEL=debug \
     DATABASE_PATH=/data/gateway.db
 
