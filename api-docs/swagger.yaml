@@ -157,7 +157,7 @@ paths:
               single_name_format:
                 summary: Using single name field
                 value:
-                  email: "user@egokernel.com"
+                  email: "user@nonym.io"
                   password: "my-password"
                   name: "John Doe"
                   organization: "Demo"
@@ -189,7 +189,7 @@ paths:
                 expires_at: "2024-03-17T10:30:00Z"
                 user:
                   id: "123e4567-e89b-12d3-a456-426614174000"
-                  email: "user@egokernel.io"
+                  email: "user@nonym.io.io"
                   first_name: "John"
                   last_name: "Doe"
                   full_name: "John Doe"
