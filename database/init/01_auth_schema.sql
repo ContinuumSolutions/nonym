@@ -1,8 +1,5 @@
 -- Sovereign Privacy Gateway Authentication Schema (Fixed)
--- This script initializes the authentication and organization system
-
--- Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- This script initializes the authentication and organization system with INTEGER IDs
 
 -- Drop existing tables if they exist (for clean setup)
 DROP TABLE IF EXISTS audit_logs CASCADE;
@@ -14,24 +11,26 @@ DROP TABLE IF EXISTS organizations CASCADE;
 
 -- Organizations table
 CREATE TABLE organizations (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL UNIQUE,
     slug VARCHAR(100) NOT NULL UNIQUE,
     description TEXT,
+    owner_id INTEGER,
     settings JSONB DEFAULT '{}',
+    is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Users table
 CREATE TABLE users (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    id SERIAL PRIMARY KEY,
+    organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     email VARCHAR(255) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     first_name VARCHAR(100),
     last_name VARCHAR(100),
-    role VARCHAR(50) NOT NULL DEFAULT 'user' CHECK (role IN ('admin', 'user', 'viewer')),
+    role VARCHAR(50) NOT NULL DEFAULT 'user' CHECK (role IN ('owner', 'admin', 'user', 'viewer')),
     is_active BOOLEAN DEFAULT TRUE,
     email_verified BOOLEAN DEFAULT FALSE,
     last_login TIMESTAMP WITH TIME ZONE,
@@ -41,21 +40,29 @@ CREATE TABLE users (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Add foreign key constraint for organization owner_id (after users table exists)
+ALTER TABLE organizations ADD CONSTRAINT fk_organizations_owner
+FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE SET NULL;
+
 -- Sessions table for managing user sessions
 CREATE TABLE user_sessions (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     session_token VARCHAR(255) NOT NULL UNIQUE,
+    ip_address INET,
+    user_agent TEXT,
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    last_accessed TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    last_accessed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    is_active BOOLEAN DEFAULT TRUE
 );
 
 -- API Keys table for programmatic access
 CREATE TABLE api_keys (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    id SERIAL PRIMARY KEY,
+    organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     key_hash VARCHAR(255) NOT NULL UNIQUE,
     permissions JSONB DEFAULT '{}',
@@ -67,9 +74,9 @@ CREATE TABLE api_keys (
 
 -- Transactions table (enhanced with organization isolation)
 CREATE TABLE transactions (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    id SERIAL PRIMARY KEY,
+    organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     request_id VARCHAR(255),
     method VARCHAR(10) NOT NULL,
     path TEXT NOT NULL,
@@ -77,20 +84,22 @@ CREATE TABLE transactions (
     status VARCHAR(50) NOT NULL,
     status_code INTEGER,
     redaction_count INTEGER DEFAULT 0,
+    redaction_details JSONB DEFAULT '[]',
     entities_detected JSONB DEFAULT '[]',
-    processing_time_ms FLOAT,
+    processing_time FLOAT,
     request_size INTEGER,
     response_size INTEGER,
     ip_address INET,
     user_agent TEXT,
+    timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Audit log table
 CREATE TABLE audit_logs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
-    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    id SERIAL PRIMARY KEY,
+    organization_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     action VARCHAR(100) NOT NULL,
     resource_type VARCHAR(100),
     resource_id VARCHAR(255),
@@ -101,6 +110,7 @@ CREATE TABLE audit_logs (
 );
 
 -- Indexes for performance
+CREATE INDEX idx_organizations_owner_id ON organizations(owner_id);
 CREATE INDEX idx_users_organization_id ON users(organization_id);
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_role ON users(role);
@@ -140,49 +150,48 @@ CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
 BEGIN;
 
 -- Insert default organization
-INSERT INTO organizations (id, name, slug, description)
+INSERT INTO organizations (name, slug, description, is_active)
 VALUES (
-    '00000000-0000-0000-0000-000000000001',
     'Default Organization',
     'default',
-    'Default organization for initial setup'
-);
-
--- Verify organization was created
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM organizations WHERE id = '00000000-0000-0000-0000-000000000001') THEN
-        RAISE EXCEPTION 'Failed to create default organization';
-    END IF;
-END $$;
-
--- Create default admin user (password: admin123 - CHANGE IN PRODUCTION!)
-INSERT INTO users (
-    organization_id,
-    email,
-    password_hash,
-    first_name,
-    last_name,
-    role,
-    is_active,
-    email_verified
-) VALUES (
-    '00000000-0000-0000-0000-000000000001',
-    'admin@localhost',
-    '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj8xwLdqRg3m', -- admin123
-    'Admin',
-    'User',
-    'admin',
-    TRUE,
+    'Default organization for initial setup',
     TRUE
 );
 
--- Verify user was created
+-- Get the organization ID for creating the default user
 DO $$
+DECLARE
+    default_org_id INTEGER;
+    admin_user_id INTEGER;
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM users WHERE email = 'admin@localhost') THEN
-        RAISE EXCEPTION 'Failed to create default admin user';
-    END IF;
+    -- Get the organization ID
+    SELECT id INTO default_org_id FROM organizations WHERE slug = 'default';
+
+    -- Create default admin user (password: admin123 - CHANGE IN PRODUCTION!)
+    INSERT INTO users (
+        organization_id,
+        email,
+        password_hash,
+        first_name,
+        last_name,
+        role,
+        is_active,
+        email_verified
+    ) VALUES (
+        default_org_id,
+        'admin@localhost',
+        '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj8xwLdqRg3m', -- admin123
+        'Admin',
+        'User',
+        'owner',
+        TRUE,
+        TRUE
+    ) RETURNING id INTO admin_user_id;
+
+    -- Set the organization owner
+    UPDATE organizations SET owner_id = admin_user_id WHERE id = default_org_id;
+
+    RAISE NOTICE 'Created default organization (ID: %) and admin user (ID: %)', default_org_id, admin_user_id;
 END $$;
 
 COMMIT;

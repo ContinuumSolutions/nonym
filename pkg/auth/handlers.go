@@ -8,7 +8,7 @@ import (
 
 // HandleRegister handles POST /api/auth/register
 func HandleRegister(c *fiber.Ctx) error {
-	var req RegisterRequest
+	var req SignupRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(400).JSON(fiber.Map{
 			"error": "Invalid request body",
@@ -22,24 +22,14 @@ func HandleRegister(c *fiber.Ctx) error {
 		})
 	}
 
-	// Combine firstName and lastName or use name field
-	var fullName string
-	if req.FirstName != "" || req.LastName != "" {
-		fullName = strings.TrimSpace(req.FirstName + " " + req.LastName)
-	} else {
-		fullName = req.Name
-	}
-
-	if fullName == "" {
+	// Name validation is now handled in RegisterUser function
+	if req.FirstName == "" && req.LastName == "" && req.Name == "" {
 		return c.Status(400).JSON(fiber.Map{
-			"error": "Name (or firstName/lastName) is required",
+			"error": "Name is required (either 'name' or 'first_name'+'last_name')",
 		})
 	}
 
-	// Update the request with combined name
-	req.Name = fullName
-
-	// Register user
+	// Register user with atomic transaction
 	user, organization, err := RegisterUser(&req)
 	if err != nil {
 		return c.Status(400).JSON(fiber.Map{
@@ -47,21 +37,17 @@ func HandleRegister(c *fiber.Ctx) error {
 		})
 	}
 
-	// Convert to profile (remove sensitive data)
-	profile := &UserProfile{
-		ID:             user.ID,
-		Email:          user.Email,
-		Name:           user.Name,
-		Role:           user.Role,
-		OrganizationID: user.OrganizationID,
-		Active:         user.Active,
-		CreatedAt:      user.CreatedAt,
-		Organization:   organization,
-	}
+	// Send welcome email (non-blocking)
+	go func() {
+		if err := SendWelcomeEmail(user, organization); err != nil {
+			// Log error but don't fail the registration since it's already committed
+			// In a real implementation, you'd handle email send failures gracefully
+		}
+	}()
 
 	return c.Status(201).JSON(fiber.Map{
 		"message":      "User registered successfully",
-		"user":         profile,
+		"user":         user.ToProfile(),
 		"organization": organization,
 	})
 }
@@ -94,24 +80,11 @@ func HandleLogin(c *fiber.Ctx) error {
 		})
 	}
 
-	// Convert user to profile
-	profile := &UserProfile{
-		ID:             response.User.ID,
-		Email:          response.User.Email,
-		Name:           response.User.Name,
-		Role:           response.User.Role,
-		OrganizationID: response.User.OrganizationID,
-		Active:         response.User.Active,
-		CreatedAt:      response.User.CreatedAt,
-		LastLogin:      response.User.LastLogin,
-		Organization:   response.Organization,
-	}
-
 	return c.JSON(fiber.Map{
 		"message":      "Login successful",
 		"token":        response.Token,
 		"expires_at":   response.ExpiresAt,
-		"user":         profile,
+		"user":         response.User,
 		"organization": response.Organization,
 	})
 }
@@ -210,9 +183,27 @@ func AdminMiddleware(c *fiber.Ctx) error {
 		})
 	}
 
-	if user.Role != "admin" {
+	if !user.IsAdmin() {
 		return c.Status(403).JSON(fiber.Map{
 			"error": "Admin access required",
+		})
+	}
+
+	return c.Next()
+}
+
+// OwnerMiddleware ensures the user has owner role
+func OwnerMiddleware(c *fiber.Ctx) error {
+	user, ok := c.Locals("user").(*User)
+	if !ok {
+		return c.Status(401).JSON(fiber.Map{
+			"error": "Authentication required",
+		})
+	}
+
+	if user.Role != RoleOwner {
+		return c.Status(403).JSON(fiber.Map{
+			"error": "Owner access required",
 		})
 	}
 

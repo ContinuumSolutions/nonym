@@ -45,8 +45,7 @@ services:
       dockerfile: Dockerfile
       target: ${GATEWAY_TARGET:-development}
     environment:
-      - PORT=8080
-      - DASHBOARD_PORT=8081
+      - PORT=8000
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - STRICT_MODE=${STRICT_MODE:-false}
       # API Keys for AI providers
@@ -84,46 +83,8 @@ services:
     networks:
       - backend
 
-  # ── Vue.js Dashboard ────────────────────────────────────────────────────────
-  dashboard:
-    build:
-      context: ./dashboard
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    ports:
-      - "8081:8081"
-    healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    networks:
-      - frontend
-
-  # ── Reverse Proxy ──────────────────────────────────────────────────────────
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-    volumes:
-      - ./nginx/nginx.unified.conf:/etc/nginx/nginx.conf:ro
-    depends_on:
-      - gateway
-      - dashboard
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    networks:
-      - frontend
-      - backend
-
 # ── Networks ───────────────────────────────────────────────────────────────────
 networks:
-  frontend:
-    driver: bridge
   backend:
     driver: bridge
 

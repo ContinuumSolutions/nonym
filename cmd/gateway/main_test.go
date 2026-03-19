@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -105,7 +106,7 @@ func TestProxyWithPIIDetection(t *testing.T) {
 
 	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(requestJSON))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer test-key")
+	req.Header.Set("Authorization", "Bearer test-openai-key")
 
 	resp, err := app.Test(req, 30*1000) // 30 second timeout
 	if err != nil {
@@ -318,6 +319,10 @@ func TestDashboardAPI(t *testing.T) {
 // Helper functions for testing
 
 func setupTestApp() *fiber.App {
+	// Set up test environment variables
+	os.Setenv("OPENAI_API_KEY", "test-openai-key")
+	os.Setenv("ANTHROPIC_API_KEY", "test-anthropic-key")
+
 	// Initialize services
 	ner.Initialize()
 	audit.Initialize(":memory:") // Use in-memory SQLite for testing

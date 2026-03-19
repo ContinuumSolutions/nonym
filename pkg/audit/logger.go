@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -65,8 +66,9 @@ type Settings struct {
 }
 
 var (
-	db       *sql.DB
-	settings *Settings
+	db         *sql.DB
+	settings   *Settings
+	isPostgres bool
 )
 
 // Initialize sets up the audit database and default settings
@@ -82,6 +84,7 @@ func Initialize(databasePath string) error {
 
 	if dbHost != "" && dbName != "" {
 		// Use PostgreSQL
+		isPostgres = true
 		dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 			dbHost, dbPort, dbUser, dbPassword, dbName, os.Getenv("DB_SSL_MODE"))
 
@@ -119,6 +122,25 @@ func Initialize(databasePath string) error {
 
 	log.Println("Audit system initialized successfully")
 	return nil
+}
+
+// formatQuery converts ? placeholders to $1, $2, etc for PostgreSQL
+func formatQuery(query string) string {
+	if !isPostgres {
+		return query
+	}
+
+	count := 1
+	result := ""
+	for _, char := range query {
+		if char == '?' {
+			result += fmt.Sprintf("$%d", count)
+			count++
+		} else {
+			result += string(char)
+		}
+	}
+	return result
 }
 
 func createTables() error {
@@ -192,11 +214,11 @@ func LogTransaction(id, status, provider string, statusCode int, redactionDetail
 
 	redactionJSON, _ := json.Marshal(redactionDetails)
 
-	query := `INSERT INTO transactions (
-		id, status, provider, status_code, redaction_count, redaction_details, organization_id, user_id
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+	query := formatQuery(`INSERT INTO transactions (
+		request_id, method, path, provider, status, status_code, redaction_count, entities_detected, organization_id, user_id
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 
-	_, err := db.Exec(query, id, status, provider, statusCode, len(redactionDetails), string(redactionJSON), organizationID, userID)
+	_, err := db.Exec(query, id, "POST", "/v1/chat/completions", provider, status, statusCode, len(redactionDetails), string(redactionJSON), organizationID, userID)
 	if err != nil {
 		log.Printf("Failed to log transaction: %v", err)
 	}
@@ -221,11 +243,17 @@ func GetTransactions(limit, offset int, organizationID string) ([]Transaction, e
 		return nil, fmt.Errorf("database not initialized")
 	}
 
-	query := `SELECT id, timestamp, status, provider, status_code, processing_time,
-			  redaction_count, redaction_details, client_ip, user_agent, error_message, organization_id, user_id
-			  FROM transactions WHERE organization_id = ? ORDER BY timestamp DESC LIMIT ? OFFSET ?`
+	query := formatQuery(`SELECT id, created_at, status, provider, status_code, processing_time_ms,
+			  redaction_count, entities_detected, ip_address, user_agent, organization_id, user_id
+			  FROM transactions WHERE organization_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`)
 
-	rows, err := db.Query(query, organizationID, limit, offset)
+	// Convert string organizationID to integer for database query
+	orgID, err := strconv.Atoi(organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid organization ID: %w", err)
+	}
+
+	rows, err := db.Query(query, orgID, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query transactions: %w", err)
 	}
@@ -234,17 +262,35 @@ func GetTransactions(limit, offset int, organizationID string) ([]Transaction, e
 	var transactions []Transaction
 	for rows.Next() {
 		var t Transaction
-		var redactionDetailsJSON string
+		var entitiesDetectedJSON string
+		var dbID int // Database ID as integer
+		var clientIP *string // Can be NULL
+		var userAgent *string // Can be NULL
+		var processingTime *float64 // Can be NULL
 
-		err := rows.Scan(&t.ID, &t.Timestamp, &t.Status, &t.Provider, &t.StatusCode,
-			&t.ProcessingTime, &t.RedactionCount, &redactionDetailsJSON,
-			&t.ClientIP, &t.UserAgent, &t.ErrorMessage, &t.OrganizationID, &t.UserID)
+		err := rows.Scan(&dbID, &t.Timestamp, &t.Status, &t.Provider, &t.StatusCode,
+			&processingTime, &t.RedactionCount, &entitiesDetectedJSON,
+			&clientIP, &userAgent, &t.OrganizationID, &t.UserID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan transaction: %w", err)
 		}
 
-		// Parse redaction details
-		json.Unmarshal([]byte(redactionDetailsJSON), &t.RedactionDetails)
+		// Convert integer ID to string for compatibility
+		t.ID = strconv.Itoa(dbID)
+
+		// Handle nullable fields
+		if clientIP != nil {
+			t.ClientIP = *clientIP
+		}
+		if userAgent != nil {
+			t.UserAgent = *userAgent
+		}
+		if processingTime != nil {
+			t.ProcessingTime = *processingTime
+		}
+
+		// Parse entities detected as redaction details (for backwards compatibility)
+		json.Unmarshal([]byte(entitiesDetectedJSON), &t.RedactionDetails)
 		transactions = append(transactions, t)
 	}
 
@@ -260,25 +306,25 @@ func GetStatistics(organizationID string) (*Statistics, error) {
 	stats := &Statistics{}
 
 	// Total requests
-	err := db.QueryRow("SELECT COUNT(*) FROM transactions WHERE organization_id = ?", organizationID).Scan(&stats.TotalRequests)
+	err := db.QueryRow(formatQuery("SELECT COUNT(*) FROM transactions WHERE organization_id = ?"), organizationID).Scan(&stats.TotalRequests)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get total requests: %w", err)
 	}
 
 	// Successful requests
-	err = db.QueryRow("SELECT COUNT(*) FROM transactions WHERE status = 'success' AND organization_id = ?", organizationID).Scan(&stats.SuccessfulRequests)
+	err = db.QueryRow(formatQuery("SELECT COUNT(*) FROM transactions WHERE status = 'success' AND organization_id = ?"), organizationID).Scan(&stats.SuccessfulRequests)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get successful requests: %w", err)
 	}
 
 	// Blocked requests
-	err = db.QueryRow("SELECT COUNT(*) FROM transactions WHERE status = 'blocked' AND organization_id = ?", organizationID).Scan(&stats.BlockedRequests)
+	err = db.QueryRow(formatQuery("SELECT COUNT(*) FROM transactions WHERE status = 'blocked' AND organization_id = ?"), organizationID).Scan(&stats.BlockedRequests)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get blocked requests: %w", err)
 	}
 
 	// Redacted requests
-	err = db.QueryRow("SELECT COUNT(*) FROM transactions WHERE redaction_count > 0 AND organization_id = ?", organizationID).Scan(&stats.RedactedRequests)
+	err = db.QueryRow(formatQuery("SELECT COUNT(*) FROM transactions WHERE redaction_count > 0 AND organization_id = ?"), organizationID).Scan(&stats.RedactedRequests)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get redacted requests: %w", err)
 	}
@@ -289,16 +335,16 @@ func GetStatistics(organizationID string) (*Statistics, error) {
 	}
 
 	// Average processing time
-	err = db.QueryRow("SELECT AVG(processing_time) FROM transactions WHERE processing_time > 0 AND organization_id = ?", organizationID).Scan(&stats.AvgProcessingTime)
+	err = db.QueryRow(formatQuery("SELECT AVG(processing_time_ms) FROM transactions WHERE processing_time_ms > 0 AND organization_id = ?"), organizationID).Scan(&stats.AvgProcessingTime)
 	if err != nil {
 		stats.AvgProcessingTime = 0
 	}
 
 	// Top providers
-	providerRows, err := db.Query(`SELECT provider, COUNT(*) as requests
+	providerRows, err := db.Query(formatQuery(`SELECT provider, COUNT(*) as requests
 									FROM transactions WHERE organization_id = ?
 									GROUP BY provider
-									ORDER BY requests DESC LIMIT 5`, organizationID)
+									ORDER BY requests DESC LIMIT 5`), organizationID)
 	if err == nil {
 		defer providerRows.Close()
 		for providerRows.Next() {

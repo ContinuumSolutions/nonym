@@ -19,19 +19,14 @@ import (
 
 // authRepository implements the AuthRepository interface
 type authRepository struct {
-	db       *sqlx.DB
-	tx       *sqlx.Tx // For transaction mode
-	config   *config.Config
+	db         *sqlx.DB
+	tx         *sqlx.Tx // For transaction mode
+	config     *config.Config
 	isPostgres bool
 }
 
 // getDB returns the appropriate database connection (tx if in transaction, db otherwise)
-func (r *authRepository) getDB() sqlx.Ext {
-	if r.tx != nil {
-		return r.tx
-	}
-	return r.db
-}
+// Note: This method was replaced with direct tx/db access in query methods for better type safety
 
 // New creates a new AuthRepository instance
 func New(cfg *config.Config) (interfaces.AuthRepository, error) {
@@ -93,17 +88,37 @@ func (r *authRepository) CreateUser(ctx context.Context, req *models.CreateUserR
 	`)
 
 	var user models.User
-	err := r.getDB().QueryRowContext(ctx, query,
-		req.ID,
-		req.OrganizationID,
-		req.Email,
-		req.PasswordHash,
-		req.FirstName,
-		req.LastName,
-		string(req.Role),
-		req.IsActive,
-		req.EmailVerified,
-	).Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
+	var returnedUserID uuid.UUID
+	var createdAt, updatedAt time.Time
+	var err error
+
+	if r.tx != nil {
+		// In transaction, use the transaction's QueryRowxContext
+		err = r.tx.QueryRowxContext(ctx, query,
+			req.ID,
+			req.OrganizationID,
+			req.Email,
+			req.PasswordHash,
+			req.FirstName,
+			req.LastName,
+			string(req.Role),
+			req.IsActive,
+			req.EmailVerified,
+		).Scan(&returnedUserID, &createdAt, &updatedAt)
+	} else {
+		// Not in transaction, use the DB's QueryRowxContext
+		err = r.db.QueryRowxContext(ctx, query,
+			req.ID,
+			req.OrganizationID,
+			req.Email,
+			req.PasswordHash,
+			req.FirstName,
+			req.LastName,
+			string(req.Role),
+			req.IsActive,
+			req.EmailVerified,
+		).Scan(&returnedUserID, &createdAt, &updatedAt)
+	}
 
 	if err != nil {
 		if isDuplicateKeyError(err) {
@@ -113,6 +128,7 @@ func (r *authRepository) CreateUser(ctx context.Context, req *models.CreateUserR
 	}
 
 	// Populate the user object
+	user.ID = req.ID
 	user.OrganizationID = req.OrganizationID
 	user.Email = req.Email
 	user.PasswordHash = req.PasswordHash
@@ -121,6 +137,8 @@ func (r *authRepository) CreateUser(ctx context.Context, req *models.CreateUserR
 	user.Role = req.Role
 	user.IsActive = req.IsActive
 	user.EmailVerified = req.EmailVerified
+	user.CreatedAt = createdAt
+	user.UpdatedAt = updatedAt
 
 	return &user, nil
 }
@@ -328,9 +346,10 @@ func (r *authRepository) CreateOrganization(ctx context.Context, req *models.Cre
 	query := r.formatQuery(`
 		INSERT INTO organizations (id, name, slug, description, settings, is_active)
 		VALUES (?, ?, ?, ?, ?, ?)
-		RETURNING created_at, updated_at
+		RETURNING id, created_at, updated_at
 	`)
 
+	var returnedID uuid.UUID
 	err := r.db.QueryRowxContext(ctx, query,
 		org.ID,
 		org.Name,
@@ -338,7 +357,7 @@ func (r *authRepository) CreateOrganization(ctx context.Context, req *models.Cre
 		org.Description,
 		settingsJSON,
 		org.IsActive,
-	).Scan(&org.CreatedAt, &org.UpdatedAt)
+	).Scan(&returnedID, &org.CreatedAt, &org.UpdatedAt)
 
 	if err != nil {
 		if isDuplicateKeyError(err) {
@@ -452,7 +471,8 @@ func (r *authRepository) WithTx(ctx context.Context, fn func(interfaces.AuthRepo
 
 	// Create a new repository instance with the transaction
 	txRepo := &authRepository{
-		db:         tx,
+		db:         r.db,
+		tx:         tx,
 		config:     r.config,
 		isPostgres: r.isPostgres,
 	}

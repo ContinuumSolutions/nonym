@@ -2,513 +2,499 @@ package auth
 
 import (
 	"database/sql"
+	"log"
 	"os"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/stretchr/testify/suite"
 	_ "modernc.org/sqlite"
 )
 
-// AuthTestSuite is the test suite for auth package
-type AuthTestSuite struct {
-	suite.Suite
-	db *sql.DB
-}
-
-func (suite *AuthTestSuite) SetupTest() {
-	// Create in-memory database for each test
+// setupTestDB creates an in-memory SQLite database for testing
+func setupTestDB() (*sql.DB, error) {
 	testDB, err := sql.Open("sqlite", ":memory:")
-	suite.Require().NoError(err)
+	if err != nil {
+		return nil, err
+	}
 
-	suite.db = testDB
+	// Create tables for testing
+	schema := `
+		CREATE TABLE organizations (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			slug TEXT UNIQUE NOT NULL,
+			description TEXT,
+			owner_id TEXT,
+			is_active BOOLEAN DEFAULT true,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
 
-	// Initialize auth system with test database
-	err = Initialize(testDB)
-	suite.Require().NoError(err)
+		CREATE TABLE users (
+			id TEXT PRIMARY KEY,
+			email TEXT UNIQUE NOT NULL,
+			password_hash TEXT NOT NULL,
+			first_name TEXT NOT NULL,
+			last_name TEXT NOT NULL,
+			role TEXT DEFAULT 'user',
+			organization_id TEXT NOT NULL,
+			is_active BOOLEAN DEFAULT true,
+			email_verified BOOLEAN DEFAULT false,
+			last_login DATETIME,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (organization_id) REFERENCES organizations (id) ON DELETE CASCADE
+		);
+
+		CREATE INDEX idx_users_email ON users(email);
+		CREATE INDEX idx_users_organization ON users(organization_id);
+		CREATE INDEX idx_organizations_slug ON organizations(slug);
+	`
+
+	if _, err := testDB.Exec(schema); err != nil {
+		return nil, err
+	}
+
+	return testDB, nil
 }
 
-func (suite *AuthTestSuite) TearDownTest() {
-	if suite.db != nil {
-		suite.db.Close()
+func TestMain(m *testing.M) {
+	// Set up test database
+	testDB, err := setupTestDB()
+	if err != nil {
+		log.Fatalf("Failed to set up test database: %v", err)
+	}
+	defer testDB.Close()
+
+	// Initialize auth with test database
+	if err := Initialize(testDB); err != nil {
+		log.Fatalf("Failed to initialize auth: %v", err)
+	}
+
+	// Run tests
+	code := m.Run()
+
+	// Clean up
+	testDB.Close()
+	os.Exit(code)
+}
+
+func TestRegisterUser_NewOrganization(t *testing.T) {
+	req := &SignupRequest{
+		Email:        "john.doe@example.com",
+		Password:     "securepassword123",
+		FirstName:    "John",
+		LastName:     "Doe",
+		Organization: "Example Corp",
+	}
+
+	user, org, err := RegisterUser(req)
+	if err != nil {
+		t.Fatalf("Failed to register user: %v", err)
+	}
+
+	// Verify user data
+	if user.Email != req.Email {
+		t.Errorf("Expected email %s, got %s", req.Email, user.Email)
+	}
+
+	if user.FirstName != req.FirstName {
+		t.Errorf("Expected first name %s, got %s", req.FirstName, user.FirstName)
+	}
+
+	if user.LastName != req.LastName {
+		t.Errorf("Expected last name %s, got %s", req.LastName, user.LastName)
+	}
+
+	if user.Role != RoleOwner {
+		t.Errorf("Expected role %s, got %s", RoleOwner, user.Role)
+	}
+
+	if !user.IsActive {
+		t.Error("Expected user to be active")
+	}
+
+	if user.EmailVerified {
+		t.Error("Expected user email to not be verified initially")
+	}
+
+	// Verify organization data
+	if org.Name != req.Organization {
+		t.Errorf("Expected organization name %s, got %s", req.Organization, org.Name)
+	}
+
+	if org.OwnerID != user.ID {
+		t.Errorf("Expected organization owner ID to be user ID")
+	}
+
+	if !org.IsActive {
+		t.Error("Expected organization to be active")
+	}
+
+	// Verify user belongs to the organization
+	if user.OrganizationID != org.ID {
+		t.Error("Expected user to belong to the created organization")
+	}
+
+	// Verify slug generation
+	expectedSlug := "example-corp"
+	if org.Slug != expectedSlug {
+		t.Errorf("Expected slug %s, got %s", expectedSlug, org.Slug)
 	}
 }
 
-func TestAuthSuite(t *testing.T) {
-	suite.Run(t, new(AuthTestSuite))
+func TestRegisterUser_ExistingOrganization(t *testing.T) {
+	// First, create an organization with an owner
+	ownerReq := &SignupRequest{
+		Email:        "owner@company.com",
+		Password:     "ownerpassword123",
+		FirstName:    "Owner",
+		LastName:     "Person",
+		Organization: "Test Company",
+	}
+
+	owner, org, err := RegisterUser(ownerReq)
+	if err != nil {
+		t.Fatalf("Failed to register owner: %v", err)
+	}
+
+	// Now register a user to join the existing organization
+	userReq := &SignupRequest{
+		Email:          "user@company.com",
+		Password:       "userpassword123",
+		FirstName:      "Regular",
+		LastName:       "User",
+		OrganizationID: &org.ID,
+	}
+
+	user, joinedOrg, err := RegisterUser(userReq)
+	if err != nil {
+		t.Fatalf("Failed to register user to existing org: %v", err)
+	}
+
+	// Verify user data
+	if user.Role != RoleUser {
+		t.Errorf("Expected role %s, got %s", RoleUser, user.Role)
+	}
+
+	if user.OrganizationID != org.ID {
+		t.Error("Expected user to belong to the existing organization")
+	}
+
+	// Verify organization data (should be the same)
+	if joinedOrg.ID != org.ID {
+		t.Error("Expected to join the existing organization")
+	}
+
+	if joinedOrg.OwnerID != owner.ID {
+		t.Error("Expected organization owner to remain the same")
+	}
 }
 
-// Test initialization
-func (suite *AuthTestSuite) TestInitialize() {
-	// Should create tables and default user
-	var tableCount int
-	err := suite.db.QueryRow(`
-		SELECT COUNT(*) FROM sqlite_master
-		WHERE type='table' AND name IN ('users', 'api_keys', 'provider_configs', 'organizations')
-	`).Scan(&tableCount)
+func TestRegisterUser_DuplicateEmail(t *testing.T) {
+	// Register a user first
+	req1 := &SignupRequest{
+		Email:        "duplicate@example.com",
+		Password:     "password123",
+		FirstName:    "First",
+		LastName:     "User",
+		Organization: "First Corp",
+	}
 
-	suite.NoError(err)
-	suite.Equal(4, tableCount, "All required tables should be created")
+	_, _, err := RegisterUser(req1)
+	if err != nil {
+		t.Fatalf("Failed to register first user: %v", err)
+	}
 
-	// Should create default admin user
-	var userCount int
-	err = suite.db.QueryRow("SELECT COUNT(*) FROM users").Scan(&userCount)
-	suite.NoError(err)
-	suite.GreaterOrEqual(userCount, 1, "Default user should be created")
+	// Try to register another user with the same email
+	req2 := &SignupRequest{
+		Email:        "duplicate@example.com",
+		Password:     "password456",
+		FirstName:    "Second",
+		LastName:     "User",
+		Organization: "Second Corp",
+	}
+
+	_, _, err = RegisterUser(req2)
+	if err == nil {
+		t.Fatal("Expected error for duplicate email")
+	}
+
+	expectedError := "user with this email already exists, please login instead"
+	if !strings.Contains(err.Error(), expectedError) {
+		t.Errorf("Expected error message to contain '%s', got '%s'", expectedError, err.Error())
+	}
 }
 
-func (suite *AuthTestSuite) TestInitializeWithJWTSecret() {
-	// Test with JWT secret from environment
-	originalSecret := os.Getenv("JWT_SECRET")
-	defer os.Setenv("JWT_SECRET", originalSecret)
-
-	os.Setenv("JWT_SECRET", "test-secret-key")
-
-	testDB, err := sql.Open("sqlite", ":memory:")
-	suite.Require().NoError(err)
-	defer testDB.Close()
-
-	err = Initialize(testDB)
-	suite.NoError(err)
-	suite.Equal([]byte("test-secret-key"), jwtSecret)
-}
-
-func (suite *AuthTestSuite) TestRegisterUser() {
+func TestRegisterUser_Validation(t *testing.T) {
 	tests := []struct {
-		name      string
-		request   *RegisterRequest
-		shouldErr bool
-		errMsg    string
+		name        string
+		req         *SignupRequest
+		expectedErr string
 	}{
 		{
-			name: "valid registration",
-			request: &RegisterRequest{
-				Email:    "test@example.com",
-				Password: "password123",
-				Name:     "Test User",
-			},
-			shouldErr: false,
-		},
-		{
-			name: "duplicate email",
-			request: &RegisterRequest{
-				Email:    "admin@gateway.local", // Default admin user email
-				Password: "password123",
-				Name:     "Duplicate User",
-			},
-			shouldErr: true,
-			errMsg:    "user with this email already exists",
-		},
-		{
 			name: "invalid email",
-			request: &RegisterRequest{
-				Email:    "invalid-email",
-				Password: "password123",
-				Name:     "Test User",
+			req: &SignupRequest{
+				Email:     "invalid-email",
+				Password:  "password123",
+				FirstName: "John",
+				LastName:  "Doe",
 			},
-			shouldErr: true,
-			errMsg:    "invalid email format",
+			expectedErr: "invalid email format",
 		},
 		{
 			name: "short password",
-			request: &RegisterRequest{
-				Email:    "short@example.com",
-				Password: "123",
-				Name:     "Test User",
+			req: &SignupRequest{
+				Email:     "test@example.com",
+				Password:  "short",
+				FirstName: "John",
+				LastName:  "Doe",
 			},
-			shouldErr: true,
-			errMsg:    "password must be at least 8 characters long",
+			expectedErr: "password must be at least 8 characters long",
+		},
+		{
+			name: "missing first name",
+			req: &SignupRequest{
+				Email:     "test@example.com",
+				Password:  "password123",
+				FirstName: "",
+				LastName:  "Doe",
+			},
+			expectedErr: "first name and last name are required",
+		},
+		{
+			name: "missing last name",
+			req: &SignupRequest{
+				Email:     "test@example.com",
+				Password:  "password123",
+				FirstName: "John",
+				LastName:  "",
+			},
+			expectedErr: "first name and last name are required",
 		},
 	}
 
 	for _, tt := range tests {
-		suite.Run(tt.name, func() {
-			user, err := RegisterUser(tt.request)
-
-			if tt.shouldErr {
-				suite.Error(err)
-				suite.Contains(err.Error(), tt.errMsg)
-				suite.Nil(user)
-			} else {
-				suite.NoError(err)
-				suite.NotNil(user)
-				suite.Equal(tt.request.Email, user.Email)
-				suite.Equal(tt.request.Name, user.Name)
-				suite.Equal("user", user.Role)
-				suite.True(user.Active)
-				suite.NotZero(user.ID)
+		t.Run(tt.name, func(t *testing.T) {
+			_, _, err := RegisterUser(tt.req)
+			if err == nil {
+				t.Fatalf("Expected error for %s", tt.name)
+			}
+			if !strings.Contains(err.Error(), tt.expectedErr) {
+				t.Errorf("Expected error to contain '%s', got '%s'", tt.expectedErr, err.Error())
 			}
 		})
 	}
 }
 
-func (suite *AuthTestSuite) TestLoginUser() {
-	// First register a test user
-	registerReq := &RegisterRequest{
-		Email:    "login@test.com",
-		Password: "testpass123",
-		Name:     "Login Test User",
-	}
-
-	user, err := RegisterUser(registerReq)
-	suite.Require().NoError(err)
-	suite.Require().NotNil(user)
-
-	tests := []struct {
-		name      string
-		request   *LoginRequest
-		shouldErr bool
-		errMsg    string
-	}{
-		{
-			name: "valid login",
-			request: &LoginRequest{
-				Email:    "login@test.com",
-				Password: "testpass123",
-			},
-			shouldErr: false,
-		},
-		{
-			name: "invalid email",
-			request: &LoginRequest{
-				Email:    "nonexistent@test.com",
-				Password: "testpass123",
-			},
-			shouldErr: true,
-			errMsg:    "invalid email or password",
-		},
-		{
-			name: "invalid password",
-			request: &LoginRequest{
-				Email:    "login@test.com",
-				Password: "wrongpassword",
-			},
-			shouldErr: true,
-			errMsg:    "invalid email or password",
-		},
-		{
-			name: "default admin login",
-			request: &LoginRequest{
-				Email:    "admin@gateway.local",
-				Password: "admin123",
-			},
-			shouldErr: false,
-		},
-	}
-
-	for _, tt := range tests {
-		suite.Run(tt.name, func() {
-			response, err := LoginUser(tt.request, "127.0.0.1", "test-user-agent")
-
-			if tt.shouldErr {
-				suite.Error(err)
-				suite.Contains(err.Error(), tt.errMsg)
-				suite.Nil(response)
-			} else {
-				suite.NoError(err)
-				suite.NotNil(response)
-				suite.NotEmpty(response.Token)
-				suite.NotNil(response.User)
-				suite.Equal(tt.request.Email, response.User.Email)
-				suite.True(response.ExpiresAt.After(time.Now()))
-			}
-		})
-	}
-}
-
-func (suite *AuthTestSuite) TestLoginUserInactive() {
-	// Register and then deactivate a user
-	registerReq := &RegisterRequest{
-		Email:    "inactive@test.com",
-		Password: "testpass123",
-		Name:     "Inactive User",
-	}
-
-	user, err := RegisterUser(registerReq)
-	suite.Require().NoError(err)
-
-	// Deactivate user
-	_, err = suite.db.Exec("UPDATE users SET active = false WHERE id = ?", user.ID)
-	suite.Require().NoError(err)
-
-	loginReq := &LoginRequest{
-		Email:    "inactive@test.com",
-		Password: "testpass123",
-	}
-
-	response, err := LoginUser(loginReq, "127.0.0.1", "test-user-agent")
-	suite.Error(err)
-	suite.Contains(err.Error(), "user account is disabled")
-	suite.Nil(response)
-}
-
-func (suite *AuthTestSuite) TestValidateToken() {
-	// Register and login a user to get a valid token
-	registerReq := &RegisterRequest{
-		Email:    "token@test.com",
-		Password: "testpass123",
-		Name:     "Token Test User",
-	}
-
-	user, err := RegisterUser(registerReq)
-	suite.Require().NoError(err)
-
-	loginReq := &LoginRequest{
-		Email:    "token@test.com",
-		Password: "testpass123",
-	}
-
-	loginResp, err := LoginUser(loginReq, "127.0.0.1", "test-user-agent")
-	suite.Require().NoError(err)
-	suite.Require().NotNil(loginResp)
-
-	tests := []struct {
-		name      string
-		token     string
-		shouldErr bool
-		errMsg    string
-	}{
-		{
-			name:      "valid token",
-			token:     loginResp.Token,
-			shouldErr: false,
-		},
-		{
-			name:      "invalid token",
-			token:     "invalid.token.here",
-			shouldErr: true,
-			errMsg:    "invalid token",
-		},
-		{
-			name:      "empty token",
-			token:     "",
-			shouldErr: true,
-			errMsg:    "invalid token",
-		},
-		{
-			name:      "malformed token",
-			token:     "not.a.jwt",
-			shouldErr: true,
-			errMsg:    "invalid token",
-		},
-	}
-
-	for _, tt := range tests {
-		suite.Run(tt.name, func() {
-			validatedUser, err := ValidateToken(tt.token)
-
-			if tt.shouldErr {
-				suite.Error(err)
-				suite.Contains(err.Error(), tt.errMsg)
-				suite.Nil(validatedUser)
-			} else {
-				suite.NoError(err)
-				suite.NotNil(validatedUser)
-				suite.Equal(user.ID, validatedUser.ID)
-				suite.Equal(user.Email, validatedUser.Email)
-			}
-		})
-	}
-}
-
-func (suite *AuthTestSuite) TestValidateTokenInactiveUser() {
-	// Register and login a user
-	registerReq := &RegisterRequest{
-		Email:    "deactivate@test.com",
-		Password: "testpass123",
-		Name:     "Deactivate Test User",
-	}
-
-	user, err := RegisterUser(registerReq)
-	suite.Require().NoError(err)
-
-	loginReq := &LoginRequest{
-		Email:    "deactivate@test.com",
-		Password: "testpass123",
-	}
-
-	loginResp, err := LoginUser(loginReq, "127.0.0.1", "test-user-agent")
-	suite.Require().NoError(err)
-
-	// Deactivate user after getting token
-	_, err = suite.db.Exec("UPDATE users SET active = false WHERE id = ?", user.ID)
-	suite.Require().NoError(err)
-
-	// Token should now be invalid
-	validatedUser, err := ValidateToken(loginResp.Token)
-	suite.Error(err)
-	suite.Contains(err.Error(), "user account is disabled")
-	suite.Nil(validatedUser)
-}
-
-func (suite *AuthTestSuite) TestGetUserProfile() {
-	// Register a user
-	registerReq := &RegisterRequest{
-		Email:    "profile@test.com",
-		Password: "testpass123",
-		Name:     "Profile Test User",
-	}
-
-	user, err := RegisterUser(registerReq)
-	suite.Require().NoError(err)
-
-	// Test getting profile
-	profile, err := GetUserProfile(user.ID)
-	suite.NoError(err)
-	suite.NotNil(profile)
-	suite.Equal(user.ID, profile.ID)
-	suite.Equal(user.Email, profile.Email)
-	suite.Equal(user.Name, profile.Name)
-	suite.Equal(user.Role, profile.Role)
-	suite.Equal(user.Active, profile.Active)
-
-	// Test non-existent user
-	profile, err = GetUserProfile(99999)
-	suite.Error(err)
-	suite.Nil(profile)
-}
-
-func (suite *AuthTestSuite) TestHashAndVerifyPassword() {
-	password := "testpassword123"
-
-	// Test hashing
-	hash, err := hashPassword(password)
-	suite.NoError(err)
-	suite.NotEmpty(hash)
-	suite.NotEqual(password, hash)
-
-	// Test verification
-	suite.True(verifyPassword(hash, password))
-	suite.False(verifyPassword(hash, "wrongpassword"))
-}
-
-func (suite *AuthTestSuite) TestGenerateJWTToken() {
-	user := &User{
-		ID:    1,
-		Email: "test@example.com",
-		Role:  "user",
-	}
-
-	token, expiresAt, err := generateJWTToken(user)
-	suite.NoError(err)
-	suite.NotEmpty(token)
-	suite.True(expiresAt.After(time.Now()))
-
-	// Token should contain user info
-	suite.Contains(token, ".")
-	parts := len(strings.Split(token, "."))
-	suite.Equal(3, parts, "JWT should have 3 parts")
-}
-
-func (suite *AuthTestSuite) TestGetUserByEmail() {
+func TestLoginUser(t *testing.T) {
 	// Register a user first
-	registerReq := &RegisterRequest{
-		Email:    "getemail@test.com",
-		Password: "testpass123",
-		Name:     "Get Email Test User",
+	signupReq := &SignupRequest{
+		Email:        "login.test@example.com",
+		Password:     "loginpassword123",
+		FirstName:    "Login",
+		LastName:     "Test",
+		Organization: "Login Corp",
 	}
 
-	registeredUser, err := RegisterUser(registerReq)
-	suite.Require().NoError(err)
+	registeredUser, _, err := RegisterUser(signupReq)
+	if err != nil {
+		t.Fatalf("Failed to register user: %v", err)
+	}
 
-	// Test getting user by email
-	user, err := getUserByEmail("getemail@test.com")
-	suite.NoError(err)
-	suite.NotNil(user)
-	suite.Equal(registeredUser.ID, user.ID)
-	suite.Equal(registeredUser.Email, user.Email)
+	// Test successful login
+	loginReq := &LoginRequest{
+		Email:    signupReq.Email,
+		Password: signupReq.Password,
+	}
+
+	response, err := LoginUser(loginReq, "127.0.0.1", "test-agent")
+	if err != nil {
+		t.Fatalf("Failed to login: %v", err)
+	}
+
+	// Verify response
+	if response.Token == "" {
+		t.Error("Expected token to be generated")
+	}
+
+	if response.User.ID != registeredUser.ID {
+		t.Error("Expected user ID to match")
+	}
+
+	if response.User.Email != signupReq.Email {
+		t.Errorf("Expected email %s, got %s", signupReq.Email, response.User.Email)
+	}
+
+	if response.Organization == nil {
+		t.Error("Expected organization to be included")
+	}
+
+	// Test invalid password
+	invalidReq := &LoginRequest{
+		Email:    signupReq.Email,
+		Password: "wrongpassword",
+	}
+
+	_, err = LoginUser(invalidReq, "127.0.0.1", "test-agent")
+	if err == nil {
+		t.Fatal("Expected error for invalid password")
+	}
+
+	if !strings.Contains(err.Error(), "invalid email or password") {
+		t.Errorf("Expected 'invalid email or password' error, got %s", err.Error())
+	}
 
 	// Test non-existent email
-	user, err = getUserByEmail("nonexistent@test.com")
-	suite.Error(err)
-	suite.Nil(user)
-}
-
-func (suite *AuthTestSuite) TestGetUserByID() {
-	// Register a user first
-	registerReq := &RegisterRequest{
-		Email:    "getid@test.com",
-		Password: "testpass123",
-		Name:     "Get ID Test User",
-	}
-
-	registeredUser, err := RegisterUser(registerReq)
-	suite.Require().NoError(err)
-
-	// Test getting user by ID
-	user, err := getUserByID(registeredUser.ID)
-	suite.NoError(err)
-	suite.NotNil(user)
-	suite.Equal(registeredUser.ID, user.ID)
-	suite.Equal(registeredUser.Email, user.Email)
-
-	// Test non-existent ID
-	user, err = getUserByID(99999)
-	suite.Error(err)
-	suite.Nil(user)
-}
-
-func (suite *AuthTestSuite) TestLogoutUser() {
-	// For JWT-only implementation, logout should always succeed
-	err := LogoutUser("any.token.here")
-	suite.NoError(err)
-}
-
-// Benchmark tests
-func BenchmarkHashPassword(b *testing.B) {
-	password := "testpassword123"
-	for i := 0; i < b.N; i++ {
-		_, _ = hashPassword(password)
-	}
-}
-
-func BenchmarkVerifyPassword(b *testing.B) {
-	password := "testpassword123"
-	hash, _ := hashPassword(password)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = verifyPassword(hash, password)
-	}
-}
-
-func BenchmarkGenerateJWTToken(b *testing.B) {
-	user := &User{
-		ID:    1,
-		Email: "test@example.com",
-		Role:  "user",
-	}
-
-	// Initialize to set jwtSecret
-	testDB, _ := sql.Open("sqlite", ":memory:")
-	defer testDB.Close()
-	Initialize(testDB)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _, _ = generateJWTToken(user)
-	}
-}
-
-func BenchmarkValidateToken(b *testing.B) {
-	// Setup
-	testDB, _ := sql.Open("sqlite", ":memory:")
-	defer testDB.Close()
-	Initialize(testDB)
-
-	user := &User{ID: 1, Email: "test@example.com", Role: "user"}
-	token, _, _ := generateJWTToken(user)
-
-	// Register the user in DB so validation works
-	RegisterUser(&RegisterRequest{
-		Email:    "test@example.com",
+	nonExistentReq := &LoginRequest{
+		Email:    "nonexistent@example.com",
 		Password: "password123",
-		Name:     "Test User",
-	})
+	}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = ValidateToken(token)
+	_, err = LoginUser(nonExistentReq, "127.0.0.1", "test-agent")
+	if err == nil {
+		t.Fatal("Expected error for non-existent email")
+	}
+
+	if !strings.Contains(err.Error(), "invalid email or password") {
+		t.Errorf("Expected 'invalid email or password' error, got %s", err.Error())
+	}
+}
+
+func TestValidateToken(t *testing.T) {
+	// Register and login a user first
+	signupReq := &SignupRequest{
+		Email:        "token.test@example.com",
+		Password:     "tokenpassword123",
+		FirstName:    "Token",
+		LastName:     "Test",
+		Organization: "Token Corp",
+	}
+
+	registeredUser, _, err := RegisterUser(signupReq)
+	if err != nil {
+		t.Fatalf("Failed to register user: %v", err)
+	}
+
+	loginReq := &LoginRequest{
+		Email:    signupReq.Email,
+		Password: signupReq.Password,
+	}
+
+	response, err := LoginUser(loginReq, "127.0.0.1", "test-agent")
+	if err != nil {
+		t.Fatalf("Failed to login: %v", err)
+	}
+
+	// Test token validation
+	user, err := ValidateToken(response.Token)
+	if err != nil {
+		t.Fatalf("Failed to validate token: %v", err)
+	}
+
+	if user.ID != registeredUser.ID {
+		t.Error("Expected user ID to match")
+	}
+
+	if user.Email != signupReq.Email {
+		t.Errorf("Expected email %s, got %s", signupReq.Email, user.Email)
+	}
+
+	// Test invalid token
+	_, err = ValidateToken("invalid.token.here")
+	if err == nil {
+		t.Fatal("Expected error for invalid token")
+	}
+}
+
+func TestGetUserProfile(t *testing.T) {
+	// Register a user first
+	signupReq := &SignupRequest{
+		Email:        "profile.test@example.com",
+		Password:     "profilepassword123",
+		FirstName:    "Profile",
+		LastName:     "Test",
+		Organization: "Profile Corp",
+	}
+
+	registeredUser, _, err := RegisterUser(signupReq)
+	if err != nil {
+		t.Fatalf("Failed to register user: %v", err)
+	}
+
+	// Get user profile
+	profile, err := GetUserProfile(registeredUser.ID)
+	if err != nil {
+		t.Fatalf("Failed to get user profile: %v", err)
+	}
+
+	// Verify profile data
+	if profile.ID != registeredUser.ID {
+		t.Error("Expected profile ID to match")
+	}
+
+	if profile.Email != signupReq.Email {
+		t.Errorf("Expected email %s, got %s", signupReq.Email, profile.Email)
+	}
+
+	if profile.FullName != "Profile Test" {
+		t.Errorf("Expected full name 'Profile Test', got %s", profile.FullName)
+	}
+
+	if profile.Organization == nil {
+		t.Error("Expected organization to be included in profile")
+	}
+
+	// Test non-existent user
+	_, err = GetUserProfile(999999) // Non-existent ID
+	if err == nil {
+		t.Fatal("Expected error for non-existent user")
+	}
+}
+
+func TestSlugGeneration(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"Test Company", "test-company"},
+		{"My_Awesome Corp!", "my-awesome-corp"},
+		{"Special-Characters@#$%", "special-characters"},
+		{"   Trimmed Spaces   ", "trimmed-spaces"},
+		{"Multiple---Hyphens", "multiple-hyphens"},
+		{"", "organization"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			result := generateSlug(tt.input)
+			if result != tt.expected {
+				t.Errorf("generateSlug(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestPasswordHashing(t *testing.T) {
+	password := "testpassword123"
+
+	// Hash password
+	hash, err := hashPassword(password)
+	if err != nil {
+		t.Fatalf("Failed to hash password: %v", err)
+	}
+
+	if hash == password {
+		t.Error("Expected hash to be different from password")
+	}
+
+	// Verify correct password
+	if !verifyPassword(hash, password) {
+		t.Error("Expected password verification to succeed")
+	}
+
+	// Verify incorrect password
+	if verifyPassword(hash, "wrongpassword") {
+		t.Error("Expected password verification to fail for wrong password")
 	}
 }

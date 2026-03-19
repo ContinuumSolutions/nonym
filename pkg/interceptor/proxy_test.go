@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -55,7 +56,7 @@ func TestHandleProxy_HealthyRequest(t *testing.T) {
 
 	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(requestJSON))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer test-key")
+	req.Header.Set("Authorization", "Bearer test-openai-key")
 
 	resp, err := app.Test(req, 10*1000)
 	if err != nil {
@@ -130,7 +131,7 @@ func TestHandleProxy_PIIDetectionAndAnonymization(t *testing.T) {
 
 	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(requestJSON))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer test-key")
+	req.Header.Set("Authorization", "Bearer test-openai-key")
 
 	resp, err := app.Test(req, 10*1000)
 	if err != nil {
@@ -329,6 +330,10 @@ func TestHandleStats(t *testing.T) {
 
 // Helper functions
 func setupTestServices() {
+	// Set up test environment variables
+	os.Setenv("OPENAI_API_KEY", "test-openai-key")
+	os.Setenv("ANTHROPIC_API_KEY", "test-anthropic-key")
+
 	ner.Initialize()
 	audit.Initialize(":memory:")
 	router.Initialize(map[string]router.ProviderConfig{

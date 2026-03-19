@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/sovereignprivacy/gateway/pkg/auth"
 )
 
 // ProtectionEvent represents a protection event for the frontend
@@ -73,28 +72,74 @@ func HandleGetProtectionEvents(c *fiber.Ctx) error {
 	// Parse query parameters
 	limit := c.QueryInt("limit", 50)
 	offset := c.QueryInt("offset", 0)
-	eventType := c.Query("eventType")
-	status := c.Query("status")
-	provider := c.Query("provider")
-	timeRange := c.Query("timeRange", "24h")
 
 	// Limit max results
 	if limit > 200 {
 		limit = 200
 	}
 
-	// Get user ID from context if available
-	userID := getUserIDFromContextAudit(c)
+	// Create event filter from query parameters
+	filter := EventFilter{
+		Limit:    limit,
+		Offset:   offset,
+		Type:     c.Query("eventType"), // Map eventType to Type for consistency with frontend
+		PIIType:  c.Query("pii_type"),
+		Provider: c.Query("provider"),
+		Severity: c.Query("severity"),
+		Status:   c.Query("status"),
+		UserID:   c.Query("user_id"),
+	}
 
-	// Fetch events from database (or return empty if not implemented)
-	events, total := fetchProtectionEvents(limit, offset, eventType, status, provider, timeRange, userID)
+	// Call the actual database query function
+	eventsResponse, err := GetEvents(filter)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("Failed to fetch protection events: %v", err),
+		})
+	}
+
+	// Convert Event to ProtectionEvent format
+	protectionEvents := make([]ProtectionEvent, len(eventsResponse.Events))
+	for i, event := range eventsResponse.Events {
+		protectionEvents[i] = ProtectionEvent{
+			ID:             event.ID,
+			Timestamp:      event.Timestamp,
+			Type:           event.Type,
+			Action:         event.Action,
+			Provider:       event.Provider,
+			Model:          event.Model,
+			Status:         event.Status,
+			Protection:     event.PIIType,
+			RedactionCount: getInt(event.Metadata, "redaction_count"),
+			ProcessingTime: 0, // Not tracked in current event model
+			Severity:       event.Severity,
+			Metadata:       event.Metadata,
+		}
+
+		// Extract redaction details from metadata if available
+		if redactionDetails, ok := event.Metadata["redaction_details"]; ok {
+			if details, ok := redactionDetails.([]interface{}); ok {
+				protectionEvents[i].RedactionDetails = make([]RedactionDetail, len(details))
+				for j, detail := range details {
+					if detailMap, ok := detail.(map[string]interface{}); ok {
+						protectionEvents[i].RedactionDetails[j] = RedactionDetail{
+							Type:          getString(detailMap, "type"),
+							OriginalValue: getString(detailMap, "original_value"),
+							Token:         getString(detailMap, "token"),
+							Position:      getInt(detailMap, "position"),
+						}
+					}
+				}
+			}
+		}
+	}
 
 	response := &ProtectionEventsResponse{
-		Events:  events,
-		Total:   total,
-		HasMore: int64(offset+limit) < total,
-		Limit:   limit,
-		Offset:  offset,
+		Events:  protectionEvents,
+		Total:   eventsResponse.Total,
+		HasMore: eventsResponse.HasMore,
+		Limit:   eventsResponse.Limit,
+		Offset:  eventsResponse.Offset,
 	}
 
 	return c.JSON(response)
@@ -110,13 +155,14 @@ func HandleGetProtectionStats(c *fiber.Ctx) error {
 // HandleGetStatisticsV1 handles GET /api/v1/statistics - updated version
 func HandleGetStatisticsV1(c *fiber.Ctx) error {
 	// Extract organization ID from context (set by middleware)
-	organizationID, ok := c.Locals("organization_id").(string)
+	orgID, ok := c.Locals("organization_id").(int)
 	if !ok {
 		return c.Status(401).JSON(fiber.Map{
 			"error": "Organization context required",
 		})
 	}
 
+	organizationID := strconv.Itoa(orgID)
 	stats, err := GetStatistics(organizationID)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
@@ -142,7 +188,7 @@ func HandleGetStatisticsV1(c *fiber.Ctx) error {
 // HandleGetTransactionsV1 handles GET /api/v1/transactions
 func HandleGetTransactionsV1(c *fiber.Ctx) error {
 	// Extract organization ID from context (set by middleware)
-	organizationID, ok := c.Locals("organization_id").(string)
+	orgID, ok := c.Locals("organization_id").(int)
 	if !ok {
 		return c.Status(401).JSON(fiber.Map{
 			"error": "Organization context required",
@@ -156,10 +202,12 @@ func HandleGetTransactionsV1(c *fiber.Ctx) error {
 		limit = 200
 	}
 
-	transactions, err := GetTransactions(limit, offset, organizationID)
+	// Call the actual database query function
+	organizationIDStr := strconv.Itoa(orgID)
+	transactions, err := GetTransactions(limit, offset, organizationIDStr)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to fetch transactions",
+			"error": fmt.Sprintf("Failed to fetch transactions: %v", err),
 		})
 	}
 
@@ -167,26 +215,10 @@ func HandleGetTransactionsV1(c *fiber.Ctx) error {
 		"transactions": transactions,
 		"limit":        limit,
 		"offset":       offset,
+		"total":        len(transactions),
 	})
 }
 
-// fetchProtectionEvents fetches protection events from database
-func fetchProtectionEvents(limit, offset int, eventType, status, provider, timeRange, userID string) ([]ProtectionEvent, int64) {
-	// TODO: Implement database query to fetch actual protection events
-	// For now, return empty data until real event logging is implemented
-
-	var events []ProtectionEvent
-	var total int64 = 0
-
-	// Apply filters would go here when implemented
-	_ = eventType
-	_ = status
-	_ = provider
-	_ = timeRange
-	_ = userID
-
-	return events, total
-}
 
 // calculateProtectionStats calculates protection statistics
 func calculateProtectionStats() *ProtectionStatsResponse {
@@ -203,29 +235,6 @@ func calculateProtectionStats() *ProtectionStatsResponse {
 }
 
 
-// getUserIDFromContextAudit extracts user ID from fiber context
-func getUserIDFromContextAudit(c *fiber.Ctx) string {
-	if user := c.Locals("user"); user != nil {
-		if u, ok := user.(*auth.User); ok {
-			return u.ID
-		}
-		// Handle different user context formats
-		if userMap, ok := user.(map[string]interface{}); ok {
-			if id, exists := userMap["id"]; exists {
-				if idStr, ok := id.(string); ok {
-					return idStr
-				}
-				if idInt, ok := id.(int); ok {
-					return strconv.Itoa(idInt)
-				}
-				if idFloat, ok := id.(float64); ok {
-					return strconv.Itoa(int(idFloat))
-				}
-			}
-		}
-	}
-	return "anonymous"
-}
 
 // Helper function to update transaction to include redaction details
 func LogTransactionWithRedactions(id, status, provider string, statusCode int, processingTime float64, redactionDetails []RedactionDetail) {
@@ -236,12 +245,38 @@ func LogTransactionWithRedactions(id, status, provider string, statusCode int, p
 
 	redactionJSON, _ := json.Marshal(redactionDetails)
 
-	query := `INSERT INTO transactions (
-		id, status, provider, status_code, processing_time, redaction_count, redaction_details, timestamp
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+	query := formatQuery(`INSERT INTO transactions (
+		request_id, method, path, provider, status, status_code, processing_time_ms, redaction_count, entities_detected
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 
-	_, err := db.Exec(query, id, status, provider, statusCode, processingTime, len(redactionDetails), string(redactionJSON), time.Now())
+	_, err := db.Exec(query, id, "POST", "/v1/chat/completions", provider, status, statusCode, processingTime, len(redactionDetails), string(redactionJSON))
 	if err != nil {
 		fmt.Printf("Failed to log transaction: %v", err)
 	}
+}
+
+// Helper functions for metadata conversion
+func getString(m map[string]interface{}, key string) string {
+	if val, ok := m[key]; ok {
+		if str, ok := val.(string); ok {
+			return str
+		}
+	}
+	return ""
+}
+
+func getInt(m map[string]interface{}, key string) int {
+	if val, ok := m[key]; ok {
+		switch v := val.(type) {
+		case int:
+			return v
+		case float64:
+			return int(v)
+		case string:
+			if intVal, err := strconv.Atoi(v); err == nil {
+				return intVal
+			}
+		}
+	}
+	return 0
 }

@@ -91,7 +91,16 @@
       "Bash(DB_HOST=localhost go run test_uuid_fix.go)",
       "Bash(chmod:*)",
       "Bash(node:*)",
-      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkbWluQGxvY2FsaG9zdCIsImV4cCI6MTc3MzU4OTUwMiwiaWF0IjoxNzczNTAzMTAyLCJvcmdhbml6YXRpb25faWQiOiIxIiwib3JnYW5pemF0aW9uX3NsdWciOiJkZWZhdWx0Iiwicm9sZSI6ImFkbWluIiwidXNlcl9pZCI6IjEifQ.BTosI7B77YiYkAet-_jQotctC7j1GyATQFUUocIaTSw\" __NEW_LINE_9ffebcb8c586271b__ echo \"🧪 Testing Multiple Authenticated Endpoints:\" echo \"\" __NEW_LINE_9ffebcb8c586271b__ echo \"1. ✅ /api/v1/statistics:\" curl -s -X GET \"http://localhost/api/v1/statistics\" -H \"Authorization: Bearer $TOKEN\")"
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkbWluQGxvY2FsaG9zdCIsImV4cCI6MTc3MzU4OTUwMiwiaWF0IjoxNzczNTAzMTAyLCJvcmdhbml6YXRpb25faWQiOiIxIiwib3JnYW5pemF0aW9uX3NsdWciOiJkZWZhdWx0Iiwicm9sZSI6ImFkbWluIiwidXNlcl9pZCI6IjEifQ.BTosI7B77YiYkAet-_jQotctC7j1GyATQFUUocIaTSw\" __NEW_LINE_9ffebcb8c586271b__ echo \"🧪 Testing Multiple Authenticated Endpoints:\" echo \"\" __NEW_LINE_9ffebcb8c586271b__ echo \"1. ✅ /api/v1/statistics:\" curl -s -X GET \"http://localhost/api/v1/statistics\" -H \"Authorization: Bearer $TOKEN\")",
+      "Bash(cd:*)",
+      "Bash(go clean:*)",
+      "Bash(env | grep -E \"\\(DB_|POSTGRES\\)\" || echo \"No DB environment variables set\")",
+      "Bash(unset:*)",
+      "Bash(env -i PATH=\"$PATH\" HOME=\"$HOME\" GOPATH=\"$GOPATH\" timeout 5 go run cmd/gateway/main.go || true)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkbWluQHRlc3QuY29tIiwiZXhwIjoxNzczODUxNTUzLCJpYXQiOjE3NzM3NjUxNTMsIm9yZ2FuaXphdGlvbl9pZCI6IjYiLCJyb2xlIjoib3duZXIiLCJ1c2VyX2lkIjoiNSJ9.boqMWPqvxgOxYPR4pegLvzNwka5sBP2OeUbSWtgng9I\" __NEW_LINE_713246534caee504__ echo \"=== Testing Transactions Endpoint ===\" curl -s -X GET \"http://localhost/api/v1/transactions\" -H \"Authorization: Bearer $TOKEN\" -H \"Content-Type: application/json\")",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkbWluQHRlc3QuY29tIiwiZXhwIjoxNzczODUxNTUzLCJpYXQiOjE3NzM3NjUxNTMsIm9yZ2FuaXphdGlvbl9pZCI6IjYiLCJyb2xlIjoib3duZXIiLCJ1c2VyX2lkIjoiNSJ9.boqMWPqvxgOxYPR4pegLvzNwka5sBP2OeUbSWtgng9I\")",
+      "Bash(__NEW_LINE_5c56d933cff7b16d__ echo:*)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkbWluQHRlc3QuY29tIiwiZXhwIjoxNzczODUxNTUzLCJpYXQiOjE3NzM3NjUxNTMsIm9yZ2FuaXphdGlvbl9pZCI6IjYiLCJyb2xlIjoib3duZXIiLCJ1c2VyX2lkIjoiNSJ9.boqMWPqvxgOxYPR4pegLvzNwka5sBP2OeUbSWtgng9I\" __NEW_LINE_d56909b9f5fdc09c__ echo \"=== Testing Fixed Transactions Endpoint ===\" curl -s -X GET \"http://localhost/api/v1/transactions\" -H \"Authorization: Bearer $TOKEN\" -H \"Content-Type: application/json\")"
     ]
   }
 }

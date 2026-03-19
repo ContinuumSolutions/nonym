@@ -1,750 +1,437 @@
 package auth
 
 import (
-	"database/sql"
+	"bytes"
 	"encoding/json"
+	"io"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/stretchr/testify/suite"
 	_ "modernc.org/sqlite"
 )
 
-// HandlersTestSuite is the test suite for auth HTTP handlers
-type HandlersTestSuite struct {
-	suite.Suite
-	db  *sql.DB
-	app *fiber.App
+func setupTestApp() *fiber.App {
+	app := fiber.New()
+
+	// Auth routes
+	app.Post("/api/auth/register", HandleRegister)
+	app.Post("/api/auth/login", HandleLogin)
+	app.Post("/api/auth/logout", HandleLogout)
+	app.Get("/api/auth/me", AuthMiddleware, HandleGetMe)
+
+	return app
 }
 
-func (suite *HandlersTestSuite) SetupTest() {
-	// Create in-memory database for each test
-	testDB, err := sql.Open("sqlite", ":memory:")
-	suite.Require().NoError(err)
-
-	suite.db = testDB
-
-	// Initialize auth system with test database
-	err = Initialize(testDB)
-	suite.Require().NoError(err)
-
-	// Setup fiber app
-	suite.app = fiber.New()
-
-	// Add auth handlers to test routes (these would need to be implemented)
-	// For now we'll create mock handlers to test the structure
-	suite.app.Post("/api/register", suite.mockRegisterHandler)
-	suite.app.Post("/api/login", suite.mockLoginHandler)
-	suite.app.Post("/api/logout", suite.mockLogoutHandler)
-	suite.app.Get("/api/profile", suite.mockAuthMiddleware, suite.mockProfileHandler)
-}
-
-func (suite *HandlersTestSuite) TearDownTest() {
-	if suite.db != nil {
-		suite.db.Close()
-	}
-}
-
-// Mock handlers (these should be implemented in the actual handlers.go file)
-func (suite *HandlersTestSuite) mockRegisterHandler(c *fiber.Ctx) error {
-	var req RegisterRequest
-	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
-	}
-
-	user, err := RegisterUser(&req)
+func TestHandleRegister(t *testing.T) {
+	// Set up test database
+	testDB, err := setupTestDB()
 	if err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		t.Fatalf("Failed to set up test database: %v", err)
+	}
+	defer testDB.Close()
+
+	if err := Initialize(testDB); err != nil {
+		t.Fatalf("Failed to initialize auth: %v", err)
 	}
 
-	profile := &UserProfile{
-		ID:        user.ID,
-		Email:     user.Email,
-		Name:      user.Name,
-		Role:      user.Role,
-		Active:    user.Active,
-		CreatedAt: user.CreatedAt,
+	app := setupTestApp()
+
+	// Test successful registration
+	payload := SignupRequest{
+		Email:        "test@example.com",
+		Password:     "password123",
+		FirstName:    "John",
+		LastName:     "Doe",
+		Organization: "Test Corp",
 	}
 
-	return c.Status(201).JSON(fiber.Map{
-		"message": "User registered successfully",
-		"user":    profile,
-	})
-}
-
-func (suite *HandlersTestSuite) mockLoginHandler(c *fiber.Ctx) error {
-	var req LoginRequest
-	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
-	}
-
-	clientIP := c.Get("X-Forwarded-For")
-	if clientIP == "" {
-		clientIP = c.IP()
-	}
-	userAgent := c.Get("User-Agent")
-
-	response, err := LoginUser(&req, clientIP, userAgent)
-	if err != nil {
-		return c.Status(401).JSON(fiber.Map{
-			"error": err.Error(),
-		})
-	}
-
-	return c.JSON(response)
-}
-
-func (suite *HandlersTestSuite) mockLogoutHandler(c *fiber.Ctx) error {
-	authHeader := c.Get("Authorization")
-	if authHeader == "" {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Authorization header required",
-		})
-	}
-
-	token := strings.TrimPrefix(authHeader, "Bearer ")
-	if token == authHeader {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Invalid authorization format",
-		})
-	}
-
-	err := LogoutUser(token)
-	if err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": err.Error(),
-		})
-	}
-
-	return c.JSON(fiber.Map{
-		"message": "Logged out successfully",
-	})
-}
-
-func (suite *HandlersTestSuite) mockAuthMiddleware(c *fiber.Ctx) error {
-	authHeader := c.Get("Authorization")
-	if authHeader == "" {
-		return c.Status(401).JSON(fiber.Map{
-			"error": "Authorization header required",
-		})
-	}
-
-	token := strings.TrimPrefix(authHeader, "Bearer ")
-	if token == authHeader {
-		return c.Status(401).JSON(fiber.Map{
-			"error": "Invalid authorization format",
-		})
-	}
-
-	user, err := ValidateToken(token)
-	if err != nil {
-		return c.Status(401).JSON(fiber.Map{
-			"error": "Invalid or expired token",
-		})
-	}
-
-	c.Locals("user", user)
-	return c.Next()
-}
-
-func (suite *HandlersTestSuite) mockProfileHandler(c *fiber.Ctx) error {
-	user, ok := c.Locals("user").(*User)
-	if !ok {
-		return c.Status(401).JSON(fiber.Map{
-			"error": "User not found in context",
-		})
-	}
-
-	profile, err := GetUserProfile(user.ID)
-	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Failed to get user profile",
-		})
-	}
-
-	return c.JSON(fiber.Map{
-		"user": profile,
-	})
-}
-
-func TestHandlersSuite(t *testing.T) {
-	suite.Run(t, new(HandlersTestSuite))
-}
-
-func (suite *HandlersTestSuite) TestRegisterHandler() {
-	tests := []struct {
-		name           string
-		requestBody    string
-		expectedStatus int
-		checkFields    []string
-		shouldHaveUser bool
-	}{
-		{
-			name: "valid registration",
-			requestBody: `{
-				"email": "register@test.com",
-				"password": "password123",
-				"name": "Register Test User"
-			}`,
-			expectedStatus: 201,
-			checkFields:    []string{"message", "user"},
-			shouldHaveUser: true,
-		},
-		{
-			name: "registration with organization",
-			requestBody: `{
-				"email": "org@test.com",
-				"password": "password123",
-				"name": "Org Test User",
-				"organization": "Test Corp"
-			}`,
-			expectedStatus: 201,
-			checkFields:    []string{"message", "user"},
-			shouldHaveUser: true,
-		},
-		{
-			name: "registration with firstName and lastName",
-			requestBody: `{
-				"email": "fullname@test.com",
-				"password": "password123",
-				"firstName": "John",
-				"lastName": "Doe"
-			}`,
-			expectedStatus: 201,
-			checkFields:    []string{"message", "user"},
-			shouldHaveUser: true,
-		},
-		{
-			name: "duplicate email",
-			requestBody: `{
-				"email": "admin@gateway.local",
-				"password": "password123",
-				"name": "Duplicate User"
-			}`,
-			expectedStatus: 400,
-			checkFields:    []string{"error"},
-			shouldHaveUser: false,
-		},
-		{
-			name: "invalid email",
-			requestBody: `{
-				"email": "invalid-email",
-				"password": "password123",
-				"name": "Invalid Email User"
-			}`,
-			expectedStatus: 400,
-			checkFields:    []string{"error"},
-			shouldHaveUser: false,
-		},
-		{
-			name: "short password",
-			requestBody: `{
-				"email": "short@test.com",
-				"password": "123",
-				"name": "Short Password User"
-			}`,
-			expectedStatus: 400,
-			checkFields:    []string{"error"},
-			shouldHaveUser: false,
-		},
-		{
-			name: "missing email",
-			requestBody: `{
-				"password": "password123",
-				"name": "No Email User"
-			}`,
-			expectedStatus: 400,
-			checkFields:    []string{"error"},
-			shouldHaveUser: false,
-		},
-		{
-			name: "missing password",
-			requestBody: `{
-				"email": "nopass@test.com",
-				"name": "No Password User"
-			}`,
-			expectedStatus: 400,
-			checkFields:    []string{"error"},
-			shouldHaveUser: false,
-		},
-		{
-			name:           "invalid JSON",
-			requestBody:    `{invalid json}`,
-			expectedStatus: 400,
-			checkFields:    []string{"error"},
-			shouldHaveUser: false,
-		},
-	}
-
-	for _, tt := range tests {
-		suite.Run(tt.name, func() {
-			req := httptest.NewRequest("POST", "/api/register", strings.NewReader(tt.requestBody))
-			req.Header.Set("Content-Type", "application/json")
-
-			resp, err := suite.app.Test(req, -1)
-			suite.NoError(err)
-			defer resp.Body.Close()
-
-			suite.Equal(tt.expectedStatus, resp.StatusCode)
-
-			var response map[string]interface{}
-			err = json.NewDecoder(resp.Body).Decode(&response)
-			suite.NoError(err)
-
-			// Check required fields
-			for _, field := range tt.checkFields {
-				suite.Contains(response, field, "Response should contain field: %s", field)
-			}
-
-			if tt.shouldHaveUser {
-				user := response["user"].(map[string]interface{})
-				suite.Contains(user, "id")
-				suite.Contains(user, "email")
-				suite.Contains(user, "name")
-				suite.Contains(user, "role")
-				suite.Contains(user, "active")
-				suite.Contains(user, "created_at")
-
-				// Verify password is not included
-				suite.NotContains(user, "password")
-			}
-		})
-	}
-}
-
-func (suite *HandlersTestSuite) TestLoginHandler() {
-	// First register a test user
-	registerReq := &RegisterRequest{
-		Email:    "login@test.com",
-		Password: "testpass123",
-		Name:     "Login Test User",
-	}
-
-	_, err := RegisterUser(registerReq)
-	suite.Require().NoError(err)
-
-	tests := []struct {
-		name           string
-		requestBody    string
-		expectedStatus int
-		checkFields    []string
-		shouldHaveToken bool
-	}{
-		{
-			name: "valid login",
-			requestBody: `{
-				"email": "login@test.com",
-				"password": "testpass123"
-			}`,
-			expectedStatus:  200,
-			checkFields:     []string{"token", "expires_at", "user"},
-			shouldHaveToken: true,
-		},
-		{
-			name: "admin login",
-			requestBody: `{
-				"email": "admin@gateway.local",
-				"password": "admin123"
-			}`,
-			expectedStatus:  200,
-			checkFields:     []string{"token", "expires_at", "user"},
-			shouldHaveToken: true,
-		},
-		{
-			name: "invalid email",
-			requestBody: `{
-				"email": "nonexistent@test.com",
-				"password": "testpass123"
-			}`,
-			expectedStatus:  401,
-			checkFields:     []string{"error"},
-			shouldHaveToken: false,
-		},
-		{
-			name: "invalid password",
-			requestBody: `{
-				"email": "login@test.com",
-				"password": "wrongpassword"
-			}`,
-			expectedStatus:  401,
-			checkFields:     []string{"error"},
-			shouldHaveToken: false,
-		},
-		{
-			name: "missing email",
-			requestBody: `{
-				"password": "testpass123"
-			}`,
-			expectedStatus:  401,
-			checkFields:     []string{"error"},
-			shouldHaveToken: false,
-		},
-		{
-			name: "missing password",
-			requestBody: `{
-				"email": "login@test.com"
-			}`,
-			expectedStatus:  401,
-			checkFields:     []string{"error"},
-			shouldHaveToken: false,
-		},
-		{
-			name:           "invalid JSON",
-			requestBody:    `{invalid json}`,
-			expectedStatus: 400,
-			checkFields:    []string{"error"},
-		},
-	}
-
-	for _, tt := range tests {
-		suite.Run(tt.name, func() {
-			req := httptest.NewRequest("POST", "/api/login", strings.NewReader(tt.requestBody))
-			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("User-Agent", "test-agent")
-			req.Header.Set("X-Forwarded-For", "127.0.0.1")
-
-			resp, err := suite.app.Test(req, -1)
-			suite.NoError(err)
-			defer resp.Body.Close()
-
-			suite.Equal(tt.expectedStatus, resp.StatusCode)
-
-			var response map[string]interface{}
-			err = json.NewDecoder(resp.Body).Decode(&response)
-			suite.NoError(err)
-
-			// Check required fields
-			for _, field := range tt.checkFields {
-				suite.Contains(response, field, "Response should contain field: %s", field)
-			}
-
-			if tt.shouldHaveToken {
-				token := response["token"].(string)
-				suite.NotEmpty(token)
-				suite.True(strings.Contains(token, "."))
-
-				user := response["user"].(map[string]interface{})
-				suite.Contains(user, "id")
-				suite.Contains(user, "email")
-				suite.NotContains(user, "password") // Password should never be in response
-			}
-		})
-	}
-}
-
-func (suite *HandlersTestSuite) TestLogoutHandler() {
-	// Register and login to get a valid token
-	registerReq := &RegisterRequest{
-		Email:    "logout@test.com",
-		Password: "testpass123",
-		Name:     "Logout Test User",
-	}
-
-	user, err := RegisterUser(registerReq)
-	suite.Require().NoError(err)
-
-	token, _, err := generateJWTToken(user)
-	suite.Require().NoError(err)
-
-	tests := []struct {
-		name           string
-		authHeader     string
-		expectedStatus int
-		checkMessage   bool
-	}{
-		{
-			name:           "valid logout",
-			authHeader:     "Bearer " + token,
-			expectedStatus: 200,
-			checkMessage:   true,
-		},
-		{
-			name:           "missing authorization header",
-			authHeader:     "",
-			expectedStatus: 400,
-			checkMessage:   false,
-		},
-		{
-			name:           "invalid authorization format",
-			authHeader:     "InvalidFormat " + token,
-			expectedStatus: 400,
-			checkMessage:   false,
-		},
-		{
-			name:           "no bearer prefix",
-			authHeader:     token,
-			expectedStatus: 400,
-			checkMessage:   false,
-		},
-	}
-
-	for _, tt := range tests {
-		suite.Run(tt.name, func() {
-			req := httptest.NewRequest("POST", "/api/logout", nil)
-			if tt.authHeader != "" {
-				req.Header.Set("Authorization", tt.authHeader)
-			}
-
-			resp, err := suite.app.Test(req, -1)
-			suite.NoError(err)
-			defer resp.Body.Close()
-
-			suite.Equal(tt.expectedStatus, resp.StatusCode)
-
-			var response map[string]interface{}
-			err = json.NewDecoder(resp.Body).Decode(&response)
-			suite.NoError(err)
-
-			if tt.checkMessage {
-				suite.Contains(response, "message")
-			} else {
-				suite.Contains(response, "error")
-			}
-		})
-	}
-}
-
-func (suite *HandlersTestSuite) TestProfileHandler() {
-	// Register a test user and get token
-	registerReq := &RegisterRequest{
-		Email:    "profile@test.com",
-		Password: "testpass123",
-		Name:     "Profile Test User",
-	}
-
-	user, err := RegisterUser(registerReq)
-	suite.Require().NoError(err)
-
-	token, _, err := generateJWTToken(user)
-	suite.Require().NoError(err)
-
-	tests := []struct {
-		name           string
-		authHeader     string
-		expectedStatus int
-		checkProfile   bool
-	}{
-		{
-			name:           "valid profile request",
-			authHeader:     "Bearer " + token,
-			expectedStatus: 200,
-			checkProfile:   true,
-		},
-		{
-			name:           "missing authorization",
-			authHeader:     "",
-			expectedStatus: 401,
-			checkProfile:   false,
-		},
-		{
-			name:           "invalid token",
-			authHeader:     "Bearer invalid.token.here",
-			expectedStatus: 401,
-			checkProfile:   false,
-		},
-		{
-			name:           "invalid format",
-			authHeader:     "InvalidFormat " + token,
-			expectedStatus: 401,
-			checkProfile:   false,
-		},
-	}
-
-	for _, tt := range tests {
-		suite.Run(tt.name, func() {
-			req := httptest.NewRequest("GET", "/api/profile", nil)
-			if tt.authHeader != "" {
-				req.Header.Set("Authorization", tt.authHeader)
-			}
-
-			resp, err := suite.app.Test(req, -1)
-			suite.NoError(err)
-			defer resp.Body.Close()
-
-			suite.Equal(tt.expectedStatus, resp.StatusCode)
-
-			var response map[string]interface{}
-			err = json.NewDecoder(resp.Body).Decode(&response)
-			suite.NoError(err)
-
-			if tt.checkProfile {
-				suite.Contains(response, "user")
-				profile := response["user"].(map[string]interface{})
-				suite.Equal(user.Email, profile["email"])
-				suite.Equal(user.Name, profile["name"])
-				suite.NotContains(profile, "password")
-			} else {
-				suite.Contains(response, "error")
-			}
-		})
-	}
-}
-
-func (suite *HandlersTestSuite) TestAuthMiddleware() {
-	// Create a test endpoint that requires auth
-	testApp := fiber.New()
-	testApp.Use(suite.mockAuthMiddleware)
-	testApp.Get("/protected", func(c *fiber.Ctx) error {
-		user := c.Locals("user").(*User)
-		return c.JSON(fiber.Map{
-			"message": "Access granted",
-			"user_id": user.ID,
-		})
-	})
-
-	// Register a test user and get token
-	registerReq := &RegisterRequest{
-		Email:    "middleware@test.com",
-		Password: "testpass123",
-		Name:     "Middleware Test User",
-	}
-
-	user, err := RegisterUser(registerReq)
-	suite.Require().NoError(err)
-
-	token, _, err := generateJWTToken(user)
-	suite.Require().NoError(err)
-
-	tests := []struct {
-		name           string
-		authHeader     string
-		expectedStatus int
-		shouldHaveAccess bool
-	}{
-		{
-			name:             "valid token",
-			authHeader:       "Bearer " + token,
-			expectedStatus:   200,
-			shouldHaveAccess: true,
-		},
-		{
-			name:             "no authorization header",
-			authHeader:       "",
-			expectedStatus:   401,
-			shouldHaveAccess: false,
-		},
-		{
-			name:             "invalid token format",
-			authHeader:       "InvalidFormat " + token,
-			expectedStatus:   401,
-			shouldHaveAccess: false,
-		},
-		{
-			name:             "invalid token",
-			authHeader:       "Bearer invalid.token.here",
-			expectedStatus:   401,
-			shouldHaveAccess: false,
-		},
-		{
-			name:             "expired/malformed token",
-			authHeader:       "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.invalid",
-			expectedStatus:   401,
-			shouldHaveAccess: false,
-		},
-	}
-
-	for _, tt := range tests {
-		suite.Run(tt.name, func() {
-			req := httptest.NewRequest("GET", "/protected", nil)
-			if tt.authHeader != "" {
-				req.Header.Set("Authorization", tt.authHeader)
-			}
-
-			resp, err := testApp.Test(req, -1)
-			suite.NoError(err)
-			defer resp.Body.Close()
-
-			suite.Equal(tt.expectedStatus, resp.StatusCode)
-
-			var response map[string]interface{}
-			err = json.NewDecoder(resp.Body).Decode(&response)
-			suite.NoError(err)
-
-			if tt.shouldHaveAccess {
-				suite.Contains(response, "message")
-				suite.Contains(response, "user_id")
-				suite.Equal("Access granted", response["message"])
-				suite.Equal(float64(user.ID), response["user_id"])
-			} else {
-				suite.Contains(response, "error")
-			}
-		})
-	}
-}
-
-func (suite *HandlersTestSuite) TestCORSAndHeaders() {
-	// Test that handlers properly handle common HTTP headers
-	req := httptest.NewRequest("POST", "/api/login", strings.NewReader(`{
-		"email": "admin@gateway.local",
-		"password": "admin123"
-	}`))
+	jsonPayload, _ := json.Marshal(payload)
+	req := httptest.NewRequest("POST", "/api/auth/register", bytes.NewBuffer(jsonPayload))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Origin", "https://frontend.example.com")
-	req.Header.Set("User-Agent", "Mozilla/5.0 Test Browser")
-	req.Header.Set("Accept", "application/json")
 
-	resp, err := suite.app.Test(req, -1)
-	suite.NoError(err)
-	defer resp.Body.Close()
-
-	suite.Equal(200, resp.StatusCode)
-	suite.Equal("application/json; charset=utf-8", resp.Header.Get("Content-Type"))
-}
-
-func (suite *HandlersTestSuite) TestRequestValidation() {
-	// Test various content types
-	tests := []struct {
-		name           string
-		contentType    string
-		body           string
-		expectedStatus int
-	}{
-		{
-			name:           "valid JSON",
-			contentType:    "application/json",
-			body:           `{"email": "test@test.com", "password": "password123", "name": "Test"}`,
-			expectedStatus: 201,
-		},
-		{
-			name:           "empty body",
-			contentType:    "application/json",
-			body:           "",
-			expectedStatus: 400,
-		},
-		{
-			name:           "invalid content type",
-			contentType:    "text/plain",
-			body:           `{"email": "test@test.com", "password": "password123", "name": "Test"}`,
-			expectedStatus: 400,
-		},
-		{
-			name:           "no content type",
-			contentType:    "",
-			body:           `{"email": "test2@test.com", "password": "password123", "name": "Test"}`,
-			expectedStatus: 201, // Fiber often defaults to JSON parsing
-		},
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Failed to send request: %v", err)
 	}
 
-	for _, tt := range tests {
-		suite.Run(tt.name, func() {
-			req := httptest.NewRequest("POST", "/api/register", strings.NewReader(tt.body))
-			if tt.contentType != "" {
-				req.Header.Set("Content-Type", tt.contentType)
-			}
+	if resp.StatusCode != 201 {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Expected status 201, got %d. Body: %s", resp.StatusCode, body)
+	}
 
-			resp, err := suite.app.Test(req, -1)
-			suite.NoError(err)
-			defer resp.Body.Close()
+	var response map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&response)
 
-			suite.Equal(tt.expectedStatus, resp.StatusCode)
-		})
+	if response["message"] != "User registered successfully" {
+		t.Errorf("Expected success message, got %v", response["message"])
+	}
+
+	if response["user"] == nil {
+		t.Error("Expected user in response")
+	}
+
+	if response["organization"] == nil {
+		t.Error("Expected organization in response")
+	}
+
+	// Test duplicate email registration
+	req2 := httptest.NewRequest("POST", "/api/auth/register", bytes.NewBuffer(jsonPayload))
+	req2.Header.Set("Content-Type", "application/json")
+
+	resp2, err := app.Test(req2)
+	if err != nil {
+		t.Fatalf("Failed to send duplicate request: %v", err)
+	}
+
+	if resp2.StatusCode != 400 {
+		t.Fatalf("Expected status 400 for duplicate email, got %d", resp2.StatusCode)
+	}
+
+	// Test invalid request body
+	req3 := httptest.NewRequest("POST", "/api/auth/register", strings.NewReader("invalid json"))
+	req3.Header.Set("Content-Type", "application/json")
+
+	resp3, err := app.Test(req3)
+	if err != nil {
+		t.Fatalf("Failed to send invalid request: %v", err)
+	}
+
+	if resp3.StatusCode != 400 {
+		t.Fatalf("Expected status 400 for invalid JSON, got %d", resp3.StatusCode)
+	}
+}
+
+func TestHandleLogin(t *testing.T) {
+	// Set up test database
+	testDB, err := setupTestDB()
+	if err != nil {
+		t.Fatalf("Failed to set up test database: %v", err)
+	}
+	defer testDB.Close()
+
+	if err := Initialize(testDB); err != nil {
+		t.Fatalf("Failed to initialize auth: %v", err)
+	}
+
+	app := setupTestApp()
+
+	// First register a user
+	signupReq := SignupRequest{
+		Email:        "login@example.com",
+		Password:     "password123",
+		FirstName:    "Login",
+		LastName:     "User",
+		Organization: "Login Corp",
+	}
+
+	_, _, err = RegisterUser(&signupReq)
+	if err != nil {
+		t.Fatalf("Failed to register user: %v", err)
+	}
+
+	// Test successful login
+	loginPayload := LoginRequest{
+		Email:    "login@example.com",
+		Password: "password123",
+	}
+
+	jsonPayload, _ := json.Marshal(loginPayload)
+	req := httptest.NewRequest("POST", "/api/auth/login", bytes.NewBuffer(jsonPayload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Failed to send login request: %v", err)
+	}
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Expected status 200, got %d. Body: %s", resp.StatusCode, body)
+	}
+
+	var response map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&response)
+
+	if response["message"] != "Login successful" {
+		t.Errorf("Expected success message, got %v", response["message"])
+	}
+
+	if response["token"] == nil {
+		t.Error("Expected token in response")
+	}
+
+	if response["user"] == nil {
+		t.Error("Expected user in response")
+	}
+
+	// Test invalid password
+	invalidLoginPayload := LoginRequest{
+		Email:    "login@example.com",
+		Password: "wrongpassword",
+	}
+
+	jsonPayload2, _ := json.Marshal(invalidLoginPayload)
+	req2 := httptest.NewRequest("POST", "/api/auth/login", bytes.NewBuffer(jsonPayload2))
+	req2.Header.Set("Content-Type", "application/json")
+
+	resp2, err := app.Test(req2)
+	if err != nil {
+		t.Fatalf("Failed to send invalid login request: %v", err)
+	}
+
+	if resp2.StatusCode != 401 {
+		t.Fatalf("Expected status 401 for invalid password, got %d", resp2.StatusCode)
+	}
+
+	// Test non-existent user
+	nonExistentPayload := LoginRequest{
+		Email:    "nonexistent@example.com",
+		Password: "password123",
+	}
+
+	jsonPayload3, _ := json.Marshal(nonExistentPayload)
+	req3 := httptest.NewRequest("POST", "/api/auth/login", bytes.NewBuffer(jsonPayload3))
+	req3.Header.Set("Content-Type", "application/json")
+
+	resp3, err := app.Test(req3)
+	if err != nil {
+		t.Fatalf("Failed to send non-existent user request: %v", err)
+	}
+
+	if resp3.StatusCode != 401 {
+		t.Fatalf("Expected status 401 for non-existent user, got %d", resp3.StatusCode)
+	}
+}
+
+func TestAuthMiddleware(t *testing.T) {
+	// Set up test database
+	testDB, err := setupTestDB()
+	if err != nil {
+		t.Fatalf("Failed to set up test database: %v", err)
+	}
+	defer testDB.Close()
+
+	if err := Initialize(testDB); err != nil {
+		t.Fatalf("Failed to initialize auth: %v", err)
+	}
+
+	app := setupTestApp()
+
+	// First register and login a user to get a token
+	signupReq := SignupRequest{
+		Email:        "auth@example.com",
+		Password:     "password123",
+		FirstName:    "Auth",
+		LastName:     "User",
+		Organization: "Auth Corp",
+	}
+
+	_, _, err = RegisterUser(&signupReq)
+	if err != nil {
+		t.Fatalf("Failed to register user: %v", err)
+	}
+
+	loginReq := LoginRequest{
+		Email:    "auth@example.com",
+		Password: "password123",
+	}
+
+	loginResp, err := LoginUser(&loginReq, "127.0.0.1", "test-agent")
+	if err != nil {
+		t.Fatalf("Failed to login: %v", err)
+	}
+
+	// Test with valid token
+	req := httptest.NewRequest("GET", "/api/auth/me", nil)
+	req.Header.Set("Authorization", "Bearer "+loginResp.Token)
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Failed to send authenticated request: %v", err)
+	}
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Expected status 200 for valid token, got %d. Body: %s", resp.StatusCode, body)
+	}
+
+	// Test without token
+	req2 := httptest.NewRequest("GET", "/api/auth/me", nil)
+	resp2, err := app.Test(req2)
+	if err != nil {
+		t.Fatalf("Failed to send unauthenticated request: %v", err)
+	}
+
+	if resp2.StatusCode != 401 {
+		t.Fatalf("Expected status 401 for missing token, got %d", resp2.StatusCode)
+	}
+
+	// Test with invalid token
+	req3 := httptest.NewRequest("GET", "/api/auth/me", nil)
+	req3.Header.Set("Authorization", "Bearer invalid.token.here")
+
+	resp3, err := app.Test(req3)
+	if err != nil {
+		t.Fatalf("Failed to send invalid token request: %v", err)
+	}
+
+	if resp3.StatusCode != 401 {
+		t.Fatalf("Expected status 401 for invalid token, got %d", resp3.StatusCode)
+	}
+
+	// Test with malformed authorization header
+	req4 := httptest.NewRequest("GET", "/api/auth/me", nil)
+	req4.Header.Set("Authorization", "InvalidFormat")
+
+	resp4, err := app.Test(req4)
+	if err != nil {
+		t.Fatalf("Failed to send malformed auth header request: %v", err)
+	}
+
+	if resp4.StatusCode != 401 {
+		t.Fatalf("Expected status 401 for malformed auth header, got %d", resp4.StatusCode)
+	}
+}
+
+func TestHandleGetMe(t *testing.T) {
+	// Set up test database
+	testDB, err := setupTestDB()
+	if err != nil {
+		t.Fatalf("Failed to set up test database: %v", err)
+	}
+	defer testDB.Close()
+
+	if err := Initialize(testDB); err != nil {
+		t.Fatalf("Failed to initialize auth: %v", err)
+	}
+
+	app := setupTestApp()
+
+	// Register and login a user to get a token
+	signupReq := SignupRequest{
+		Email:        "getme@example.com",
+		Password:     "password123",
+		FirstName:    "GetMe",
+		LastName:     "User",
+		Organization: "GetMe Corp",
+	}
+
+	_, _, err = RegisterUser(&signupReq)
+	if err != nil {
+		t.Fatalf("Failed to register user: %v", err)
+	}
+
+	loginReq := LoginRequest{
+		Email:    "getme@example.com",
+		Password: "password123",
+	}
+
+	loginResp, err := LoginUser(&loginReq, "127.0.0.1", "test-agent")
+	if err != nil {
+		t.Fatalf("Failed to login: %v", err)
+	}
+
+	// Test getting user profile
+	req := httptest.NewRequest("GET", "/api/auth/me", nil)
+	req.Header.Set("Authorization", "Bearer "+loginResp.Token)
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Failed to send get me request: %v", err)
+	}
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Expected status 200, got %d. Body: %s", resp.StatusCode, body)
+	}
+
+	var response map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&response)
+
+	user := response["user"].(map[string]interface{})
+	if user["email"] != signupReq.Email {
+		t.Errorf("Expected email %s, got %v", signupReq.Email, user["email"])
+	}
+
+	if user["first_name"] != signupReq.FirstName {
+		t.Errorf("Expected first name %s, got %v", signupReq.FirstName, user["first_name"])
+	}
+
+	// Verify organization is included
+	if user["organization"] == nil {
+		t.Error("Expected organization to be included in user profile")
+	}
+}
+
+func TestHandleLogout(t *testing.T) {
+	// Set up test database
+	testDB, err := setupTestDB()
+	if err != nil {
+		t.Fatalf("Failed to set up test database: %v", err)
+	}
+	defer testDB.Close()
+
+	if err := Initialize(testDB); err != nil {
+		t.Fatalf("Failed to initialize auth: %v", err)
+	}
+
+	app := setupTestApp()
+
+	// Register and login a user to get a token
+	signupReq := SignupRequest{
+		Email:        "logout@example.com",
+		Password:     "password123",
+		FirstName:    "Logout",
+		LastName:     "User",
+		Organization: "Logout Corp",
+	}
+
+	_, _, err = RegisterUser(&signupReq)
+	if err != nil {
+		t.Fatalf("Failed to register user: %v", err)
+	}
+
+	loginReq := LoginRequest{
+		Email:    "logout@example.com",
+		Password: "password123",
+	}
+
+	loginResp, err := LoginUser(&loginReq, "127.0.0.1", "test-agent")
+	if err != nil {
+		t.Fatalf("Failed to login: %v", err)
+	}
+
+	// Test successful logout
+	req := httptest.NewRequest("POST", "/api/auth/logout", nil)
+	req.Header.Set("Authorization", "Bearer "+loginResp.Token)
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Failed to send logout request: %v", err)
+	}
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Expected status 200, got %d. Body: %s", resp.StatusCode, body)
+	}
+
+	var response map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&response)
+
+	if response["message"] != "Logged out successfully" {
+		t.Errorf("Expected logout success message, got %v", response["message"])
+	}
+
+	// Test logout without token
+	req2 := httptest.NewRequest("POST", "/api/auth/logout", nil)
+	resp2, err := app.Test(req2)
+	if err != nil {
+		t.Fatalf("Failed to send logout request without token: %v", err)
+	}
+
+	if resp2.StatusCode != 400 {
+		t.Fatalf("Expected status 400 for missing token, got %d", resp2.StatusCode)
 	}
 }

@@ -58,14 +58,10 @@ WORKDIR /app
 # Copy binary from builder
 COPY --from=builder --chown=spguser:spguser /build/gateway /app/gateway
 
-# Copy dashboard files
-COPY --chown=spguser:spguser dashboard/ /app/dashboard/
-
 # Create directories with proper permissions
 RUN mkdir -p /data /app/logs /tmp && \
     chown -R spguser:spguser /app /data && \
     chmod 755 /app/gateway && \
-    chmod -R 755 /app/dashboard && \
     chmod 755 /data
 
 # Switch to non-root user
@@ -73,14 +69,13 @@ USER spguser
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-8080}/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-8000}/health || exit 1
 
 # Expose ports
-EXPOSE 8080 8081
+EXPOSE 8000 8081
 
 # Environment defaults
-ENV PORT=8080 \
-    DASHBOARD_PORT=8081 \
+ENV PORT=8000 \
     DATABASE_PATH=/data/gateway.db \
     LOG_LEVEL=info \
     STRICT_MODE=false
@@ -125,8 +120,7 @@ RUN mkdir -p /data /tmp && \
 USER devuser
 
 # Development environment variables
-ENV PORT=8080 \
-    DASHBOARD_PORT=8081 \
+ENV PORT=8000 \
     LOG_LEVEL=debug \
     DATABASE_PATH=/data/gateway.db
 
