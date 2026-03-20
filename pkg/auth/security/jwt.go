@@ -8,10 +8,10 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/sovereignprivacy/gateway/pkg/auth/config"
-	"github.com/sovereignprivacy/gateway/pkg/auth/errors"
-	"github.com/sovereignprivacy/gateway/pkg/auth/interfaces"
-	"github.com/sovereignprivacy/gateway/pkg/auth/models"
+	"github.com/ContinuumSolutions/nonym/pkg/auth/config"
+	"github.com/ContinuumSolutions/nonym/pkg/auth/errors"
+	"github.com/ContinuumSolutions/nonym/pkg/auth/interfaces"
+	"github.com/ContinuumSolutions/nonym/pkg/auth/models"
 )
 
 // JWTTokenGenerator implements the TokenGenerator interface

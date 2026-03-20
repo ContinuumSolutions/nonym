@@ -2,7 +2,7 @@
 
 ## What We've Designed
 
-Based on the frontend's dynamic dashboard schema, I've designed a complete backend API system that will power the new dashboard with real-time data from the Sovereign Privacy Gateway.
+Based on the frontend's dynamic dashboard schema, I've designed a complete backend API system that will power the new dashboard with real-time data from the Nonym.
 
 ## Key Design Decisions
 

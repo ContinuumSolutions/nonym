@@ -1,4 +1,4 @@
-# Sovereign Privacy Gateway - Production Docker Image
+# Nonym - Production Docker Image
 # Multi-stage build for optimal security and size
 
 # ────────────────────────────────────────────────────────────────────────────

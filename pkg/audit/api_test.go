@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/sovereignprivacy/gateway/pkg/auth"
+	"github.com/ContinuumSolutions/nonym/pkg/auth"
 	_ "modernc.org/sqlite"
 )
 

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Quick Start: Sovereign Privacy Gateway with PostgreSQL"
+echo "🚀 Quick Start: Nonym with PostgreSQL"
 
 # Update .env with PostgreSQL settings if needed
 if ! grep -q "DB_HOST=postgres" .env 2>/dev/null; then

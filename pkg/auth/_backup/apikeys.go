@@ -490,7 +490,7 @@ func APIKeyMiddleware(c *fiber.Ctx) error {
 	if apiKey == "" {
 		return c.Status(401).JSON(fiber.Map{
 			"error": "Authentication required",
-			"message": "This Sovereign Privacy Gateway requires an API key for access. Please include your SPG API key in the X-API-Key header.",
+			"message": "This Nonym requires an API key for access. Please include your SPG API key in the X-API-Key header.",
 			"documentation": "Visit the dashboard to generate your API key at /integrations",
 			"migration_notice": "If you're upgrading from an earlier version, API keys are now required for security. This change protects your gateway from unauthorized access.",
 		})

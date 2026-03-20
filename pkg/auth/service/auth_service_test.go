@@ -7,12 +7,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sovereignprivacy/gateway/pkg/auth/config"
-	"github.com/sovereignprivacy/gateway/pkg/auth/errors"
-	"github.com/sovereignprivacy/gateway/pkg/auth/interfaces"
-	"github.com/sovereignprivacy/gateway/pkg/auth/models"
-	"github.com/sovereignprivacy/gateway/pkg/auth/security"
-	"github.com/sovereignprivacy/gateway/pkg/auth/validation"
+	"github.com/ContinuumSolutions/nonym/pkg/auth/config"
+	"github.com/ContinuumSolutions/nonym/pkg/auth/errors"
+	"github.com/ContinuumSolutions/nonym/pkg/auth/interfaces"
+	"github.com/ContinuumSolutions/nonym/pkg/auth/models"
+	"github.com/ContinuumSolutions/nonym/pkg/auth/security"
+	"github.com/ContinuumSolutions/nonym/pkg/auth/validation"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -380,9 +380,25 @@ func createTestAuthServiceWithMocks() *testMocks {
 	}
 }
 
-// Backward compatibility function for simple tests
+// Backward compatibility function for simple tests.
+// Sets up permissive defaults for rate limiter, audit, and email mocks so tests
+// that only care about repo/hasher/tokenGen don't have to set up all dependencies.
 func createTestAuthService() (*authService, *mockRepo, *mockHasher, *mockTokenGen) {
 	mocks := createTestAuthServiceWithMocks()
+	// Allow any rate limiter calls
+	mocks.rateLimiter.On("AllowRegistration", mock.Anything, mock.Anything).Return(true, nil)
+	mocks.rateLimiter.On("AllowLogin", mock.Anything, mock.Anything).Return(true, nil)
+	mocks.rateLimiter.On("AllowPasswordReset", mock.Anything, mock.Anything).Return(true, nil)
+	mocks.rateLimiter.On("RecordFailedLogin", mock.Anything, mock.Anything).Return(nil)
+	mocks.rateLimiter.On("ClearFailedLogins", mock.Anything, mock.Anything).Return(nil)
+	// Allow any audit events (async goroutine)
+	mocks.audit.On("LogAuthEvent", mock.Anything, mock.Anything).Return(nil)
+	mocks.audit.On("LogSecurityEvent", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	// Allow any email sends
+	mocks.email.On("SendWelcomeEmail", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mocks.email.On("SendPasswordResetEmail", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mocks.email.On("SendEmailVerificationEmail", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mocks.email.On("SendOrganizationInviteEmail", mock.Anything, mock.Anything).Return(nil)
 	return mocks.service, mocks.repo, mocks.hasher, mocks.tokenGen
 }
 
@@ -470,7 +486,7 @@ func TestAuthService_Register(t *testing.T) {
 	})
 
 	t.Run("registration fails when user already exists", func(t *testing.T) {
-		service, repo, _, _ := createTestAuthService()
+		mocks := createTestAuthServiceWithMocks()
 		ctx := context.Background()
 
 		req := &models.RegisterRequest{
@@ -485,17 +501,20 @@ func TestAuthService_Register(t *testing.T) {
 		existingUser.Email = req.Email
 
 		// Setup mocks
-		repo.On("GetUserByEmail", ctx, req.Email).Return(existingUser, nil)
+		mocks.rateLimiter.On("AllowRegistration", ctx, req.Email).Return(true, nil)
+		mocks.repo.On("GetUserByEmail", ctx, req.Email).Return(existingUser, nil)
+		mocks.audit.On("LogAuthEvent", mock.Anything, mock.AnythingOfType("*interfaces.AuthEvent")).Return(nil)
 
 		// Execute
-		response, err := service.Register(ctx, req)
+		response, err := mocks.service.Register(ctx, req)
 
 		// Assert
 		assert.Nil(t, response)
 		assert.Equal(t, errors.ErrUserExists, err)
 
 		// Verify mocks
-		repo.AssertExpectations(t)
+		mocks.repo.AssertExpectations(t)
+		mocks.rateLimiter.AssertExpectations(t)
 	})
 
 	t.Run("registration fails with invalid password", func(t *testing.T) {

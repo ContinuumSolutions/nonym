@@ -12,10 +12,10 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/sovereignprivacy/gateway/pkg/audit"
-	"github.com/sovereignprivacy/gateway/pkg/interceptor"
-	"github.com/sovereignprivacy/gateway/pkg/ner"
-	"github.com/sovereignprivacy/gateway/pkg/router"
+	"github.com/ContinuumSolutions/nonym/pkg/audit"
+	"github.com/ContinuumSolutions/nonym/pkg/interceptor"
+	"github.com/ContinuumSolutions/nonym/pkg/ner"
+	"github.com/ContinuumSolutions/nonym/pkg/router"
 )
 
 func TestHealthEndpoint(t *testing.T) {
@@ -64,13 +64,12 @@ func TestProxyWithPIIDetection(t *testing.T) {
 
 	requestJSON, _ := json.Marshal(requestData)
 
-	// Mock upstream server
+	// Mock upstream server — echoes the anonymized tokens back so de-anonymization can restore them.
 	mockUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		var receivedData map[string]interface{}
 		json.Unmarshal(body, &receivedData)
 
-		// Verify that PII was anonymized
 		messages := receivedData["messages"].([]interface{})
 		content := messages[0].(map[string]interface{})["content"].(string)
 
@@ -84,13 +83,13 @@ func TestProxyWithPIIDetection(t *testing.T) {
 			t.Errorf("Email should have been replaced with token")
 		}
 
-		// Mock AI response
+		// Echo the anonymized content back so the gateway can de-anonymize it.
 		response := map[string]interface{}{
 			"choices": []map[string]interface{}{
 				{
 					"message": map[string]string{
 						"role":    "assistant",
-						"content": "I understand you want to protect your email {{EMAIL_12345}} and SSN {{SSN_67890}}.",
+						"content": "I understand your message: " + content,
 					},
 				},
 			},
@@ -280,7 +279,7 @@ func TestDashboardAPI(t *testing.T) {
 	app := setupDashboardApp()
 
 	// Test statistics endpoint
-	req := httptest.NewRequest("GET", "/api/statistics", nil)
+	req := httptest.NewRequest("GET", "/api/v1/statistics", nil)
 	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatalf("Failed to test dashboard statistics: %v", err)
@@ -292,22 +291,10 @@ func TestDashboardAPI(t *testing.T) {
 	}
 
 	// Test transactions endpoint
-	req = httptest.NewRequest("GET", "/api/transactions?limit=10", nil)
+	req = httptest.NewRequest("GET", "/api/v1/transactions?limit=10", nil)
 	resp, err = app.Test(req, -1)
 	if err != nil {
 		t.Fatalf("Failed to test dashboard transactions: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		t.Errorf("Expected status 200, got %d", resp.StatusCode)
-	}
-
-	// Test settings endpoints
-	req = httptest.NewRequest("GET", "/api/settings", nil)
-	resp, err = app.Test(req, -1)
-	if err != nil {
-		t.Fatalf("Failed to test dashboard settings: %v", err)
 	}
 	defer resp.Body.Close()
 
@@ -319,16 +306,14 @@ func TestDashboardAPI(t *testing.T) {
 // Helper functions for testing
 
 func setupTestApp() *fiber.App {
-	// Set up test environment variables
 	os.Setenv("OPENAI_API_KEY", "test-openai-key")
 	os.Setenv("ANTHROPIC_API_KEY", "test-anthropic-key")
 
-	// Initialize services
 	ner.Initialize()
-	audit.Initialize(":memory:") // Use in-memory SQLite for testing
+	audit.Initialize(":memory:")
 
-	// Setup router with test configuration
-	config := map[string]router.ProviderConfig{
+	router.Reset()
+	router.Initialize(map[string]router.ProviderConfig{
 		"openai": {
 			BaseURL: "https://api.openai.com",
 			Enabled: true,
@@ -337,8 +322,7 @@ func setupTestApp() *fiber.App {
 			BaseURL: "http://localhost:11434",
 			Enabled: true,
 		},
-	}
-	router.Initialize(config)
+	})
 
 	app := fiber.New(fiber.Config{
 		DisableStartupMessage: true,
@@ -361,30 +345,32 @@ func setupTestApp() *fiber.App {
 }
 
 func setupDashboardApp() *fiber.App {
-	// Initialize audit system
 	audit.Initialize(":memory:")
+	audit.InitializeEventsTables()
 
 	app := fiber.New(fiber.Config{
 		DisableStartupMessage: true,
 	})
 
-	api := app.Group("/api")
-	api.Get("/transactions", audit.HandleGetTransactions)
-	api.Get("/statistics", audit.HandleGetStatistics)
-	api.Get("/settings", audit.HandleGetSettings)
-	api.Put("/settings", audit.HandleUpdateSettings)
+	// Inject organization context so handlers receive a valid int org ID.
+	app.Use(func(c *fiber.Ctx) error {
+		c.Locals("organization_id", 1)
+		return c.Next()
+	})
+
+	api := app.Group("/api/v1")
+	api.Get("/statistics", audit.HandleGetStatisticsV1)
+	api.Get("/transactions", audit.HandleGetTransactionsV1)
 
 	return app
 }
 
 func updateMockProvider(url string) {
-	// This would update the router configuration to use the mock server
-	// In a real implementation, you'd have a way to inject test configurations
-	config := map[string]router.ProviderConfig{
+	router.Reset()
+	router.Initialize(map[string]router.ProviderConfig{
 		"openai": {
 			BaseURL: url,
 			Enabled: true,
 		},
-	}
-	router.Initialize(config)
+	})
 }

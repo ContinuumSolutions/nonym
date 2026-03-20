@@ -7,11 +7,10 @@ import (
 	"log"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/sovereignprivacy/gateway/pkg/ner"
+	"github.com/ContinuumSolutions/nonym/pkg/ner"
 	_ "github.com/lib/pq"
 	_ "modernc.org/sqlite"
 )
@@ -144,61 +143,39 @@ func formatQuery(query string) string {
 }
 
 func createTables() error {
-	// Step 1: Create base tables without organization/user columns
-	baseQueries := []string{
+	queries := []string{
 		`CREATE TABLE IF NOT EXISTS transactions (
-			id TEXT PRIMARY KEY,
-			timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-			status TEXT NOT NULL,
-			provider TEXT NOT NULL,
-			status_code INTEGER DEFAULT 0,
-			processing_time REAL DEFAULT 0,
-			redaction_count INTEGER DEFAULT 0,
-			redaction_details TEXT DEFAULT '[]',
-			client_ip TEXT DEFAULT '',
-			user_agent TEXT DEFAULT '',
-			error_message TEXT DEFAULT ''
+			id               INTEGER PRIMARY KEY AUTOINCREMENT,
+			request_id       TEXT,
+			organization_id  INTEGER NOT NULL DEFAULT 1,
+			user_id          INTEGER DEFAULT 1,
+			method           TEXT NOT NULL DEFAULT '',
+			path             TEXT NOT NULL DEFAULT '',
+			provider         TEXT NOT NULL DEFAULT '',
+			status           TEXT NOT NULL,
+			status_code      INTEGER DEFAULT 0,
+			redaction_count  INTEGER DEFAULT 0,
+			entities_detected TEXT DEFAULT '[]',
+			processing_time_ms REAL DEFAULT 0,
+			ip_address       TEXT DEFAULT '',
+			user_agent       TEXT DEFAULT '',
+			created_at       DATETIME DEFAULT CURRENT_TIMESTAMP
 		)`,
 		`CREATE TABLE IF NOT EXISTS settings (
-			key TEXT PRIMARY KEY,
-			value TEXT NOT NULL,
+			key        TEXT PRIMARY KEY,
+			value      TEXT NOT NULL,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		)`,
+		`CREATE INDEX IF NOT EXISTS idx_transactions_created_at    ON transactions(created_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_transactions_status        ON transactions(status)`,
+		`CREATE INDEX IF NOT EXISTS idx_transactions_provider      ON transactions(provider)`,
+		`CREATE INDEX IF NOT EXISTS idx_transactions_organization  ON transactions(organization_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_transactions_user          ON transactions(user_id)`,
 	}
 
-	for _, query := range baseQueries {
+	for _, query := range queries {
 		if _, err := db.Exec(query); err != nil {
-			return fmt.Errorf("failed to execute base query %s: %w", query, err)
-		}
-	}
-
-	// Step 2: Migration - Add organization_id and user_id columns if they don't exist
-	migrationQueries := []string{
-		`ALTER TABLE transactions ADD COLUMN organization_id INTEGER NOT NULL DEFAULT 1`,
-		`ALTER TABLE transactions ADD COLUMN user_id INTEGER DEFAULT 1`,
-	}
-
-	for _, query := range migrationQueries {
-		if _, err := db.Exec(query); err != nil {
-			// Ignore "duplicate column name" errors - this means the column already exists
-			if !strings.Contains(err.Error(), "duplicate column name") && !strings.Contains(err.Error(), "already exists") {
-				log.Printf("Migration warning: %s: %v", query, err)
-			}
-		}
-	}
-
-	// Step 3: Create indexes after columns exist
-	indexQueries := []string{
-		`CREATE INDEX IF NOT EXISTS idx_transactions_timestamp ON transactions(timestamp)`,
-		`CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status)`,
-		`CREATE INDEX IF NOT EXISTS idx_transactions_provider ON transactions(provider)`,
-		`CREATE INDEX IF NOT EXISTS idx_transactions_organization ON transactions(organization_id)`,
-		`CREATE INDEX IF NOT EXISTS idx_transactions_user ON transactions(user_id)`,
-	}
-
-	for _, query := range indexQueries {
-		if _, err := db.Exec(query); err != nil {
-			return fmt.Errorf("failed to execute index query %s: %w", query, err)
+			return fmt.Errorf("failed to create table/index: %w", err)
 		}
 	}
 
@@ -243,7 +220,7 @@ func GetTransactions(limit, offset int, organizationID string) ([]Transaction, e
 		return nil, fmt.Errorf("database not initialized")
 	}
 
-	query := formatQuery(`SELECT id, created_at, status, provider, status_code, processing_time_ms,
+	query := formatQuery(`SELECT COALESCE(request_id, CAST(id AS TEXT)), created_at, status, provider, status_code, processing_time_ms,
 			  redaction_count, entities_detected, ip_address, user_agent, organization_id, user_id
 			  FROM transactions WHERE organization_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`)
 
@@ -263,22 +240,21 @@ func GetTransactions(limit, offset int, organizationID string) ([]Transaction, e
 	for rows.Next() {
 		var t Transaction
 		var entitiesDetectedJSON string
-		var dbID int // Database ID as integer
-		var clientIP *string // Can be NULL
-		var userAgent *string // Can be NULL
-		var processingTime *float64 // Can be NULL
+		var requestID *string
+		var clientIP *string
+		var userAgent *string
+		var processingTime *float64
 
-		err := rows.Scan(&dbID, &t.Timestamp, &t.Status, &t.Provider, &t.StatusCode,
+		err := rows.Scan(&requestID, &t.Timestamp, &t.Status, &t.Provider, &t.StatusCode,
 			&processingTime, &t.RedactionCount, &entitiesDetectedJSON,
 			&clientIP, &userAgent, &t.OrganizationID, &t.UserID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan transaction: %w", err)
 		}
 
-		// Convert integer ID to string for compatibility
-		t.ID = strconv.Itoa(dbID)
-
-		// Handle nullable fields
+		if requestID != nil {
+			t.ID = *requestID
+		}
 		if clientIP != nil {
 			t.ClientIP = *clientIP
 		}
@@ -289,7 +265,6 @@ func GetTransactions(limit, offset int, organizationID string) ([]Transaction, e
 			t.ProcessingTime = *processingTime
 		}
 
-		// Parse entities detected as redaction details (for backwards compatibility)
 		json.Unmarshal([]byte(entitiesDetectedJSON), &t.RedactionDetails)
 		transactions = append(transactions, t)
 	}

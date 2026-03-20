@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/sovereignprivacy/gateway/pkg/ner"
+	"github.com/ContinuumSolutions/nonym/pkg/ner"
 )
 
 const (

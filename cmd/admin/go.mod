@@ -1,4 +1,4 @@
-module github.com/sovereignprivacy/gateway/cmd/admin
+module github.com/ContinuumSolutions/nonym/cmd/admin
 
 go 1.24
 

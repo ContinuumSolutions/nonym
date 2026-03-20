@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,10 +39,93 @@ func NewProxyServer(config *ProxyConfig) (*ProxyServer, error) {
 }
 
 func (p *ProxyServer) HandleRequest(w http.ResponseWriter, r *http.Request) error {
-	// Mock implementation
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"choices": [{"message": {"content": "mock response"}}]}`))
+	// Validate content type if allowed list is configured
+	contentType := r.Header.Get("Content-Type")
+	if contentType != "" && len(p.config.AllowedContentTypes) > 0 {
+		allowed := false
+		for _, ct := range p.config.AllowedContentTypes {
+			if strings.HasPrefix(contentType, ct) {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Unsupported media type"})
+			return nil
+		}
+	}
+
+	// Check request size limit
+	if p.config.MaxRequestSize > 0 && r.Body != nil {
+		body, err := io.ReadAll(io.LimitReader(r.Body, int64(p.config.MaxRequestSize+1)))
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return nil
+		}
+		if len(body) > p.config.MaxRequestSize {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusRequestEntityTooLarge)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Request too large"})
+			return nil
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
+	}
+
+	// Set up timeout context
+	timeout := p.config.Timeout
+	if timeout == 0 {
+		timeout = 30 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), timeout)
+	defer cancel()
+
+	// Build upstream URL
+	targetURL := p.config.TargetURL + r.URL.Path
+	if r.URL.RawQuery != "" {
+		targetURL += "?" + r.URL.RawQuery
+	}
+
+	// Create upstream request
+	upstreamReq, err := http.NewRequestWithContext(ctx, r.Method, targetURL, r.Body)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return nil
+	}
+
+	// Forward request headers
+	for key, values := range r.Header {
+		for _, value := range values {
+			upstreamReq.Header.Add(key, value)
+		}
+	}
+
+	// Execute upstream request
+	client := &http.Client{}
+	resp, err := client.Do(upstreamReq)
+	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusGatewayTimeout)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "Gateway timeout"})
+			return nil
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadGateway)
+		json.NewEncoder(w).Encode(map[string]interface{}{"error": "Bad gateway"})
+		return nil
+	}
+	defer resp.Body.Close()
+
+	// Forward response headers and body
+	for key, values := range resp.Header {
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
 	return nil
 }
 

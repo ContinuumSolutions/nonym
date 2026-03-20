@@ -1,4 +1,4 @@
--- Sovereign Privacy Gateway Authentication Schema (Fixed)
+-- Nonym Authentication Schema (Fixed)
 -- This script initializes the authentication and organization system with INTEGER IDs
 
 -- Drop existing tables if they exist (for clean setup)

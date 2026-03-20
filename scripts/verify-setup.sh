@@ -1,10 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
-# Sovereign Privacy Gateway - Setup Verification Script
+# Nonym - Setup Verification Script
 # Verifies that the Privacy Gateway is properly configured and working
 
-echo "🔍 Verifying Sovereign Privacy Gateway Setup"
+echo "🔍 Verifying Nonym Setup"
 echo "============================================"
 
 # Color codes
@@ -306,7 +306,7 @@ main() {
         exit 1
     else
         echo
-        success "🎉 All tests passed! Sovereign Privacy Gateway is ready."
+        success "🎉 All tests passed! Nonym is ready."
         echo
         info "Next steps:"
         echo "  1. Configure API keys in .env file (if not done)"

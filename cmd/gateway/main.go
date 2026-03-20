@@ -15,11 +15,11 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/joho/godotenv"
-	"github.com/sovereignprivacy/gateway/pkg/audit"
-	"github.com/sovereignprivacy/gateway/pkg/auth"
-	"github.com/sovereignprivacy/gateway/pkg/interceptor"
-	"github.com/sovereignprivacy/gateway/pkg/ner"
-	"github.com/sovereignprivacy/gateway/pkg/router"
+	"github.com/ContinuumSolutions/nonym/pkg/audit"
+	"github.com/ContinuumSolutions/nonym/pkg/auth"
+	"github.com/ContinuumSolutions/nonym/pkg/interceptor"
+	"github.com/ContinuumSolutions/nonym/pkg/ner"
+	"github.com/ContinuumSolutions/nonym/pkg/router"
 )
 
 // Config holds the application configuration
@@ -129,7 +129,7 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 	app := fiber.New(fiber.Config{
 		Prefork:               false,
 		DisableStartupMessage: false,
-		AppName:               "Sovereign Privacy Gateway",
+		AppName:               "Nonym",
 		ServerHeader:          "SPG/1.0",
 	})
 
@@ -208,11 +208,6 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 	app.Get("/api/v1/team/members", authMiddleware, auth.HandleGetTeamMembers)
 	app.Post("/api/v1/team/members", authMiddleware, auth.HandleInviteTeamMember)
 	app.Delete("/api/v1/team/members/:id", authMiddleware, auth.HandleRemoveTeamMember)
-
-	// Provider configuration endpoints
-	app.Get("/api/v1/provider-config", authMiddleware, auth.HandleGetProviderConfig)
-	app.Put("/api/v1/provider-config", authMiddleware, auth.HandleSaveProviderConfig)
-	app.Post("/api/v1/providers/:provider/test", authMiddleware, auth.HandleTestProviderConnection)
 
 	// Security endpoints
 	app.Put("/api/v1/security/2fa", authMiddleware, auth.HandleUpdateTwoFactor)

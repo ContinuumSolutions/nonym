@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: Sovereign Privacy Gateway API
+  title: Nonym API
   description: |
     A high-performance Privacy Air-Gap middleware that intercepts data between internal systems and external AI models.
     Acts as a transparent reverse proxy that detects and anonymizes PII in real-time, ensuring sensitive data never leaves your infrastructure.
@@ -20,14 +20,13 @@ info:
     - **Real-time Dashboard**: Comprehensive monitoring via web interface
   version: 1.0.0
   contact:
-    name: Sovereign Privacy
-    email: licensing@sovereignprivacy.com
+    name: Continuum Solutions
+    email: support@continuumsolutions.com
   license:
-    name: OpenVPN-style Commercial License
-    url: https://sovereignprivacy.com/license
+    name: Commercial License
 
 servers:
-  - url: http://localhost:8080
+  - url: http://localhost:8000
     description: Development server
   - url: https://gateway.your-domain.com
     description: Production server
@@ -45,8 +44,6 @@ tags:
     description: Organization management
   - name: Team
     description: Team member management
-  - name: Providers
-    description: AI provider configuration and testing
   - name: Security
     description: Security settings and session management
   - name: Analytics
@@ -522,79 +519,6 @@ paths:
                 properties:
                   message:
                     type: string
-
-  # Provider configuration
-  /api/v1/provider-config:
-    get:
-      tags: [Providers]
-      summary: Get provider configuration
-      description: Returns AI provider configuration for the user
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Provider configuration
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  providers:
-                    $ref: '#/components/schemas/ProvidersConfig'
-    put:
-      tags: [Providers]
-      summary: Update provider configuration
-      description: Updates AI provider configuration
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                providers:
-                  $ref: '#/components/schemas/ProvidersConfig'
-      responses:
-        '200':
-          description: Configuration updated successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-
-  /api/v1/providers/{provider}/test:
-    post:
-      tags: [Providers]
-      summary: Test provider connection
-      description: Tests the connection to a specific AI provider
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: provider
-          in: path
-          required: true
-          schema:
-            type: string
-            enum: [spg, openai, anthropic, google, local]
-          description: Provider name
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ProviderTestRequest'
-      responses:
-        '200':
-          description: Test result
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProviderTestResponse'
 
   # Security settings
   /api/v1/security/2fa:
@@ -1295,69 +1219,6 @@ components:
       required:
         - email
         - role
-
-    # Provider configuration schemas
-    ProviderModel:
-      type: object
-      properties:
-        id:
-          type: string
-        name:
-          type: string
-        enabled:
-          type: boolean
-
-    ProviderConfig:
-      type: object
-      properties:
-        enabled:
-          type: boolean
-        api_key:
-          type: string
-        endpoint:
-          type: string
-        models:
-          type: array
-          items:
-            $ref: '#/components/schemas/ProviderModel'
-
-    ProvidersConfig:
-      type: object
-      properties:
-        spg:
-          $ref: '#/components/schemas/ProviderConfig'
-        openai:
-          $ref: '#/components/schemas/ProviderConfig'
-        anthropic:
-          $ref: '#/components/schemas/ProviderConfig'
-        google:
-          $ref: '#/components/schemas/ProviderConfig'
-        local:
-          $ref: '#/components/schemas/ProviderConfig'
-
-    ProviderTestRequest:
-      type: object
-      properties:
-        api_key:
-          type: string
-        endpoint:
-          type: string
-        models:
-          type: array
-          items:
-            $ref: '#/components/schemas/ProviderModel'
-
-    ProviderTestResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-        error:
-          type: string
-        models:
-          type: array
-          items:
-            $ref: '#/components/schemas/ProviderModel'
 
     # Analytics schemas
     Transaction:

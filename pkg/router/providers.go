@@ -47,6 +47,12 @@ var (
 	initOnce     sync.Once
 )
 
+// Reset clears router state so Initialize can be called again. For use in tests only.
+func Reset() {
+	globalRouter = nil
+	initOnce = sync.Once{}
+}
+
 // Initialize sets up the router with provider configurations
 func Initialize(configs map[string]ProviderConfig) error {
 	var err error

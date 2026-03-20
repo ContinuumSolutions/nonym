@@ -1,6 +1,6 @@
-# Sovereign Privacy Gateway API Documentation
+# Nonym API Documentation
 
-This directory contains comprehensive API documentation for the Sovereign Privacy Gateway using OpenAPI 3.0 (Swagger) specification.
+This directory contains comprehensive API documentation for the Nonym using OpenAPI 3.0 (Swagger) specification.
 
 ## Quick Start
 
@@ -23,7 +23,7 @@ This directory contains comprehensive API documentation for the Sovereign Privac
 
 ## API Overview
 
-The Sovereign Privacy Gateway provides several categories of endpoints:
+The Nonym provides several categories of endpoints:
 
 ### 🔐 Authentication & Users
 - `POST /api/v1/auth/register` - Register new user
@@ -200,4 +200,4 @@ Each endpoint in the documentation includes curl examples. You can copy them dir
 
 ## License
 
-This API documentation is part of the Sovereign Privacy Gateway project, licensed under the OpenVPN-style commercial license. See the main project README for license details.
+This API documentation is part of the Nonym project, licensed under the OpenVPN-style commercial license. See the main project README for license details.

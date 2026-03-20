@@ -1,4 +1,4 @@
--- Sovereign Privacy Gateway Authentication Schema
+-- Nonym Authentication Schema
 -- This script initializes the authentication and organization system
 
 -- Enable UUID extension
