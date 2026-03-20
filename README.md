@@ -239,10 +239,10 @@ This project is licensed under the **Nonym Commercial License**.
 - Commercial redistribution requires licensing
 - SaaS offerings require commercial license
 
-For commercial licensing, contact: licensing@sovereignprivacy.com
+For commercial licensing, contact: licensing@nonym.io
 
 ## Support
 
 - **Issues**: [GitHub Issues](https://github.com/ContinuumSolutions/nonym/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/ContinuumSolutions/nonym/discussions)
-- **Security**: security@sovereignprivacy.com
+- **Security**: security@nonym.io
