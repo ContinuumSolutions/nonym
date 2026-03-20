@@ -14,7 +14,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	_ "github.com/lib/pq"
-	"github.com/sovereignprivacy/gateway/pkg/auth/migrations"
+	"github.com/ContinuumSolutions/nonym/pkg/auth/migrations"
 	"golang.org/x/crypto/bcrypt"
 	_ "modernc.org/sqlite"
 )

@@ -12,10 +12,10 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/sovereignprivacy/gateway/pkg/audit"
-	"github.com/sovereignprivacy/gateway/pkg/interceptor"
-	"github.com/sovereignprivacy/gateway/pkg/ner"
-	"github.com/sovereignprivacy/gateway/pkg/router"
+	"github.com/ContinuumSolutions/nonym/pkg/audit"
+	"github.com/ContinuumSolutions/nonym/pkg/interceptor"
+	"github.com/ContinuumSolutions/nonym/pkg/ner"
+	"github.com/ContinuumSolutions/nonym/pkg/router"
 )
 
 func TestHealthEndpoint(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/sovereignprivacy/gateway/pkg/auth/models"
+	"github.com/ContinuumSolutions/nonym/pkg/auth/models"
 )
 
 // AuthService defines the business logic interface for authentication operations

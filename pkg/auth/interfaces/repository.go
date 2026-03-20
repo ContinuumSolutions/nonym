@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sovereignprivacy/gateway/pkg/auth/models"
+	"github.com/ContinuumSolutions/nonym/pkg/auth/models"
 )
 
 // AuthRepository defines the data layer interface for authentication operations

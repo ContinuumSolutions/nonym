@@ -1,4 +1,4 @@
-module github.com/sovereignprivacy/gateway
+module github.com/ContinuumSolutions/nonym
 
 go 1.25.0
 

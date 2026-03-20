@@ -6,11 +6,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/sovereignprivacy/gateway/pkg/auth/config"
-	"github.com/sovereignprivacy/gateway/pkg/auth/errors"
-	"github.com/sovereignprivacy/gateway/pkg/auth/interfaces"
-	"github.com/sovereignprivacy/gateway/pkg/auth/models"
-	"github.com/sovereignprivacy/gateway/pkg/auth/security"
+	"github.com/ContinuumSolutions/nonym/pkg/auth/config"
+	"github.com/ContinuumSolutions/nonym/pkg/auth/errors"
+	"github.com/ContinuumSolutions/nonym/pkg/auth/interfaces"
+	"github.com/ContinuumSolutions/nonym/pkg/auth/models"
+	"github.com/ContinuumSolutions/nonym/pkg/auth/security"
 )
 
 // authService implements the AuthService interface

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/sovereignprivacy/gateway/pkg/auth/errors"
-	"github.com/sovereignprivacy/gateway/pkg/auth/models"
+	"github.com/ContinuumSolutions/nonym/pkg/auth/errors"
+	"github.com/ContinuumSolutions/nonym/pkg/auth/models"
 )
 
 // validator implements the Validator interface

@@ -11,9 +11,9 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/sovereignprivacy/gateway/pkg/audit"
-	"github.com/sovereignprivacy/gateway/pkg/ner"
-	"github.com/sovereignprivacy/gateway/pkg/router"
+	"github.com/ContinuumSolutions/nonym/pkg/audit"
+	"github.com/ContinuumSolutions/nonym/pkg/ner"
+	"github.com/ContinuumSolutions/nonym/pkg/router"
 )
 
 func TestHandleProxy_HealthyRequest(t *testing.T) {

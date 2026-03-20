@@ -8,10 +8,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
-	"github.com/sovereignprivacy/gateway/pkg/auth/config"
-	"github.com/sovereignprivacy/gateway/pkg/auth/errors"
-	"github.com/sovereignprivacy/gateway/pkg/auth/interfaces"
-	"github.com/sovereignprivacy/gateway/pkg/auth/models"
+	"github.com/ContinuumSolutions/nonym/pkg/auth/config"
+	"github.com/ContinuumSolutions/nonym/pkg/auth/errors"
+	"github.com/ContinuumSolutions/nonym/pkg/auth/interfaces"
+	"github.com/ContinuumSolutions/nonym/pkg/auth/models"
 
 	_ "github.com/lib/pq"
 	_ "modernc.org/sqlite"

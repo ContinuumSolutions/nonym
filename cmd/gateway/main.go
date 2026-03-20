@@ -15,11 +15,11 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/joho/godotenv"
-	"github.com/sovereignprivacy/gateway/pkg/audit"
-	"github.com/sovereignprivacy/gateway/pkg/auth"
-	"github.com/sovereignprivacy/gateway/pkg/interceptor"
-	"github.com/sovereignprivacy/gateway/pkg/ner"
-	"github.com/sovereignprivacy/gateway/pkg/router"
+	"github.com/ContinuumSolutions/nonym/pkg/audit"
+	"github.com/ContinuumSolutions/nonym/pkg/auth"
+	"github.com/ContinuumSolutions/nonym/pkg/interceptor"
+	"github.com/ContinuumSolutions/nonym/pkg/ner"
+	"github.com/ContinuumSolutions/nonym/pkg/router"
 )
 
 // Config holds the application configuration
