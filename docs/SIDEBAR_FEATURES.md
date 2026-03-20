@@ -1,7 +1,7 @@
 # Sidebar Menu Features Implementation
 
 ## Overview
-This document describes the comprehensive sidebar menu implementation for the Sovereign Privacy Gateway dashboard, including new views, API endpoints, and security features.
+This document describes the comprehensive sidebar menu implementation for the Nonym dashboard, including new views, API endpoints, and security features.
 
 ## Frontend Implementation
 

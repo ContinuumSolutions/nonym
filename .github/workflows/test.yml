@@ -1,4 +1,4 @@
-# GitHub Actions Workflow for Sovereign Privacy Gateway Testing
+# GitHub Actions Workflow for Nonym Testing
 name: Test Suite
 
 on:

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This implementation delivers a professional, compact user interface with comprehensive Events API integration for the Sovereign Privacy Gateway. The design removes AI-generated aesthetics, eliminates excessive gradients, and uses professional icons instead of emojis.
+This implementation delivers a professional, compact user interface with comprehensive Events API integration for the Nonym. The design removes AI-generated aesthetics, eliminates excessive gradients, and uses professional icons instead of emojis.
 
 ## 🎨 **UI Improvements Implemented**
 

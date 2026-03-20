@@ -56,8 +56,8 @@ func main() {
 
 	rootCmd := &cobra.Command{
 		Use:   "admin",
-		Short: "Sovereign Privacy Gateway Admin CLI",
-		Long:  "Administrative tool for managing users and organizations in Sovereign Privacy Gateway",
+		Short: "Nonym Admin CLI",
+		Long:  "Administrative tool for managing users and organizations in Nonym",
 	}
 
 	rootCmd.PersistentFlags().BoolVarP(&interactive, "interactive", "i", false, "Interactive mode")

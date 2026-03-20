@@ -1,6 +1,6 @@
-# Comprehensive Testing Suite for Sovereign Privacy Gateway
+# Comprehensive Testing Suite for Nonym
 
-This document describes the comprehensive testing suite implemented for the Sovereign Privacy Gateway project.
+This document describes the comprehensive testing suite implemented for the Nonym project.
 
 ## Overview
 

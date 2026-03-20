@@ -1,8 +1,8 @@
-# Sovereign Privacy Gateway API Documentation
+# Nonym API Documentation
 
 ## Overview
 
-The Sovereign Privacy Gateway is a high-performance Privacy Air-Gap middleware that intercepts data between internal systems and external AI models. It acts as a transparent reverse proxy that detects and anonymizes PII in real-time, ensuring sensitive data never leaves your infrastructure.
+The Nonym is a high-performance Privacy Air-Gap middleware that intercepts data between internal systems and external AI models. It acts as a transparent reverse proxy that detects and anonymizes PII in real-time, ensuring sensitive data never leaves your infrastructure.
 
 ## Authentication
 

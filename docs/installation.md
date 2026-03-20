@@ -1,6 +1,6 @@
-# Sovereign Privacy Gateway - Installation Guide
+# Nonym - Installation Guide
 
-Complete installation and setup guide for the Sovereign Privacy Gateway with integrated monitoring.
+Complete installation and setup guide for the Nonym with integrated monitoring.
 
 ## Table of Contents
 
@@ -43,7 +43,7 @@ You'll need API keys from at least one AI provider:
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/sovereignprivacy/gateway.git
+git clone https://github.com/ContinuumSolutions/nonym.git
 cd gateway
 ```
 
@@ -575,7 +575,7 @@ If you encounter issues not covered in this guide:
 3. **Enable debug logging**: Set `LOG_LEVEL=debug` in `.env`
 4. **Test individual components**: Use the troubleshooting commands above
 5. **Consult monitoring**: Check `http://localhost/grafana/` for system metrics
-6. **GitHub Issues**: [Report issues](https://github.com/sovereignprivacy/gateway/issues)
+6. **GitHub Issues**: [Report issues](https://github.com/ContinuumSolutions/nonym/issues)
 
 For commercial support and licensing: licensing@sovereignprivacy.com
 

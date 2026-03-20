@@ -1,68 +1,122 @@
-Sovereign Privacy Gateway Commercial License
+# Business Source License 1.1
 
-Copyright (c) 2026 Sovereign Privacy Gateway Contributors
+## Parameters
 
-IMPORTANT: READ CAREFULLY BEFORE USING, DISTRIBUTING OR MODIFYING THIS SOFTWARE.
+| Parameter | Value |
+|---|---|
+| **Licensor** | Nonym (Continuum Solutions Limited) (nonym.io) |
+| **Licensed Work** | Nonym — the PII anonymization reverse proxy for AI workloads. The Licensed Work is (c) 2026 Nonym (Continuum Solutions Limited). |
+| **Additional Use Grant** | You may make production use of the Licensed Work, provided that you do not use the Licensed Work for a Competing Service. A "Competing Service" is a product or service that: (1) is offered to third parties as a managed service, API, hosted solution, or software-as-a-service, where the service provides PII detection, anonymization, redaction, or restoration functionality for AI model API calls, LLM API calls, or machine learning inference requests; OR (2) is a product or service that includes substantial portions of the Licensed Work and is distributed, sold, licensed, or otherwise made commercially available to third parties. For clarity, the following are explicitly permitted under this Additional Use Grant without a commercial license: (a) internal non-commercial evaluation, development, testing, and staging use; (b) non-commercial academic and research use; (c) production use by an organization solely to process that organization's own internal AI API traffic (i.e., not offering the functionality to third parties as a service or product). |
+| **Change Date** | Four (4) years from the date of each version's first public release. For the initial release, the Change Date is **March 20, 2030**. |
+| **Change License** | [Apache License, Version 2.0](https://www.apache.org/licenses/LICENSE-2.0) |
 
-This software and its documentation are licensed, not sold. By using, distributing or modifying this software, you agree to the terms and conditions set forth below.
+---
 
-1. GRANT OF LICENSE
+## Notice
 
-Subject to the terms and conditions of this License, Licensor hereby grants you a limited, non-exclusive, non-transferable, revocable license to use, modify, and distribute the Software solely for the purposes and under the conditions specified herein.
+Use of the Licensed Work is governed by the Business Source License 1.1 included below.
 
-2. PERMITTED USES
+On the Change Date, in accordance with this License, use of the Licensed Work will be governed by the Apache License, Version 2.0.
 
-You may:
-- Use the Software for personal, academic, and research purposes
-- Use the Software for internal business purposes within a single organization
-- Modify the Software for your own use
-- Distribute modified versions under the same license terms
+---
 
-3. COMMERCIAL RESTRICTIONS
+## License Text
 
-You may NOT without explicit written permission from the Licensor:
-- Use the Software to provide commercial services to third parties
-- Distribute the Software or derivative works for commercial purposes
-- Sublicense, sell, rent, or lease the Software
-- Use the Software in a production environment serving external customers
-- Remove or alter any proprietary notices, labels, or marks
+License text copyright (c) 2026 Continuum Solutions Limited, All Rights Reserved.
+"Business Source License" is a trademark of Continuum Solutions Limited.
 
-4. DISTRIBUTION CONDITIONS
+### Terms
 
-If you distribute the Software or derivative works, you must:
-- Include this complete license with all copies
-- Clearly mark any modifications you have made
-- Provide source code for any derivative works
-- Ensure recipients agree to these same license terms
+The Licensor hereby grants you the right to copy, modify, create derivative works, redistribute, and make non-production use of the Licensed Work. The Licensor may make an Additional Use Grant, above, permitting limited production use.
 
-5. COMMERCIAL LICENSING
+Effective on the Change Date, or the fourth anniversary of the first publicly available distribution of a specific version of the Licensed Work under this License, whichever comes first, the Licensor hereby grants you rights under the terms of the Change License, and the rights granted in the paragraph above terminate.
 
-For commercial use beyond the scope permitted above, including but not limited to:
-- SaaS offerings using this Software
-- Commercial redistribution
-- Integration into commercial products
-- Enterprise deployments serving external customers
+If your use of the Licensed Work does not comply with the requirements currently in effect as described in this License, you must purchase a commercial license from the Licensor, its affiliated entities, or authorized resellers, or you must refrain from using the Licensed Work.
 
-Please contact the Licensor for commercial licensing terms.
+All copies of the original and modified Licensed Work, and derivative works of the Licensed Work, are subject to this License. This License applies separately for each version of the Licensed Work and the Change Date may vary for each version of the Licensed Work released by Licensor.
 
-6. INTELLECTUAL PROPERTY
+You must conspicuously display this License on each original or modified copy of the Licensed Work. If you receive the Licensed Work in original or modified form from a third party, the terms and conditions set forth in this License apply to your use of that work.
 
-The Software contains proprietary and confidential information. All rights, title, and interest in and to the Software remain with the Licensor.
+Any use of the Licensed Work in violation of this License will automatically terminate your rights under this License for the current and all other versions of the Licensed Work.
 
-7. DISCLAIMER OF WARRANTIES
+This License does not grant you any right in any trademark or logo of Licensor or its affiliates (provided that you may use a trademark or logo of Licensor as expressly required by this License).
 
-THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
+TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE LICENSED WORK IS PROVIDED ON AN "AS IS" BASIS. LICENSOR HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS OR IMPLIED, INCLUDING (WITHOUT LIMITATION) WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND TITLE.
 
-8. LIMITATION OF LIABILITY
+### Covenants of Licensor
 
-IN NO EVENT SHALL THE LICENSOR BE LIABLE FOR ANY DAMAGES ARISING FROM THE USE OF THIS SOFTWARE, INCLUDING BUT NOT LIMITED TO DIRECT, INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES.
+In consideration of the right to use this License's text and the "Business Source License" name and trademark, Licensor covenants to Continuum Solutions, and to all other recipients of the Licensed Work to be provided by Licensor:
 
-9. TERMINATION
+1. To specify as the Change License the GPL Version 2.0 or any later version, or a license that is compatible with GPL Version 2.0 or a later version, where "compatible" means that software provided under the Change License can be included in a program with software provided under GPL Version 2.0 or a later version. Licensor may specify additional Change Licenses without limitation.
 
-This License is effective until terminated. Your rights under this License will terminate automatically if you fail to comply with any of its terms. Upon termination, you must destroy all copies of the Software.
+2. To either: (a) specify an additional grant of rights to use that does not impose any additional restriction on the right granted in this License, as the Additional Use Grant; or (b) insert the text "None".
 
-10. GOVERNING LAW
+3. To specify a Change Date.
 
-This License shall be governed by the laws of [Jurisdiction] without regard to conflict of law principles.
+4. Not to modify this License in any other way.
 
-For commercial licensing inquiries, contact: licensing@sovereignprivacy.com
+---
+
+## Frequently Asked Questions
+
+### Can I use Nonym for free?
+
+**Yes**, in the following cases:
+
+- **Evaluation and development**: You can run Nonym locally or in staging environments to evaluate, test, develop against, or contribute to the software at no cost.
+- **Academic and research use**: Non-commercial academic and research use is permitted.
+- **Internal production use**: You may use Nonym in production to anonymize your own organization's AI API traffic, provided you are not offering this functionality as a service or product to third parties.
+
+### When do I need a commercial license?
+
+You need a commercial license if you:
+
+- **Offer Nonym as a service**: You host, operate, or offer Nonym (or a substantial derivative) as a managed service, SaaS, API, or hosted product to third parties.
+- **Redistribute commercially**: You embed, bundle, sell, or distribute Nonym (or a substantial derivative) as part of a commercial product, appliance, or offering to third parties.
+- **Build a competing service**: You use substantial portions of the Licensed Work to build or operate a product or service that provides PII anonymization for AI/LLM API calls to third parties.
+
+### What counts as a "Competing Service"?
+
+A Competing Service is any product or service offered to third parties that provides PII detection, anonymization, redaction, or restoration for AI model or LLM API calls, and that uses substantial portions of the Licensed Work. If you are building an AI gateway, security product, or compliance tool that incorporates Nonym's PII processing capabilities and offer it to customers, that is a Competing Service.
+
+### Can I use Nonym inside my company's product that calls LLM APIs?
+
+**Yes**, if Nonym is used solely to protect your own company's API traffic, this is internal production use and is permitted under the Additional Use Grant. You do not need a commercial license.
+
+However, if your product *is* the PII anonymization layer (i.e., your customers are paying for the anonymization functionality powered by Nonym), you need a commercial license.
+
+### Can I fork or modify the code?
+
+**Yes**. You can copy, modify, and create derivative works. However, derivative works remain subject to this License, meaning the same restrictions on commercial redistribution and competing SaaS offerings apply.
+
+### Can I contribute to the project?
+
+**Yes**. We welcome community contributions under a Contributor License Agreement (CLA). By signing the CLA, you grant Nonym (Continuum Solutions Limited) the right to use, license, and sublicense your contribution under this License and under commercial licenses. This ensures contributions can be included in all editions of Nonym.
+
+### What happens after the Change Date?
+
+On the Change Date (four years after each version's release), that version converts to the Apache License 2.0. At that point, all restrictions on production and commercial use are removed for that version. Newer versions released after that date will have their own Change Date.
+
+### How do I get a commercial license?
+
+Contact **licensing@nonym.io** or visit **nonym.io/pricing** for commercial license options, including:
+
+- **Nonym Cloud Pro**: Managed cloud hosting with dashboard, analytics, and support.
+- **Commercial Self-Host License**: Run Nonym in your own infrastructure with a commercial production license.
+- **Enterprise License**: Custom terms, private VPC deployment, SSO/RBAC, SLA, and dedicated support.
+
+---
+
+## Summary Table
+
+| Use Case | License Required? |
+|---|---|
+| Local development and testing | No — free |
+| Staging and CI/CD pipelines | No — free |
+| Academic / non-commercial research | No — free |
+| Internal production (your own AI traffic) | No — free under Additional Use Grant |
+| Offering PII anonymization as a SaaS to customers | **Yes — commercial license required** |
+| Embedding Nonym in a commercial product | **Yes — commercial license required** |
+| Building a competing managed PII service | **Yes — commercial license required** |
+| Redistribution as part of a commercial offering | **Yes — commercial license required** |
+| Any use of a version past its Change Date | No — Apache 2.0 applies |

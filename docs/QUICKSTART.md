@@ -1,4 +1,4 @@
-# Quick Start Guide - Sovereign Privacy Gateway
+# Quick Start Guide - Nonym
 
 Get up and running with the Privacy Gateway in under 5 minutes - **everything accessible on port 80!**
 
@@ -29,7 +29,7 @@ Choose at least one provider and get an API key:
 
 ```bash
 # Clone repository
-git clone https://github.com/sovereignprivacy/gateway
+git clone https://github.com/ContinuumSolutions/nonym
 cd gateway
 
 # Run setup script

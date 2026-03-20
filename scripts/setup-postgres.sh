@@ -1,11 +1,11 @@
 #!/bin/bash
 set -e
 
-echo "🔧 Setting up Sovereign Privacy Gateway with PostgreSQL..."
+echo "🔧 Setting up Nonym with PostgreSQL..."
 
 # Update .env file with PostgreSQL configuration
 cat > .env << 'EOF'
-# Sovereign Privacy Gateway Configuration
+# Nonym Configuration
 
 # ==================== APPLICATION SETTINGS ====================
 GATEWAY_TARGET=development

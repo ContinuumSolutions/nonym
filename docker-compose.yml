@@ -44,6 +44,8 @@ services:
       context: .
       dockerfile: Dockerfile
       target: ${GATEWAY_TARGET:-development}
+    ports:
+      - "8000:8000"
     environment:
       - PORT=8000
       - LOG_LEVEL=${LOG_LEVEL:-info}

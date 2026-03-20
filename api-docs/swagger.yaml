@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: Sovereign Privacy Gateway API
+  title: Nonym API
   description: |
     A high-performance Privacy Air-Gap middleware that intercepts data between internal systems and external AI models.
     Acts as a transparent reverse proxy that detects and anonymizes PII in real-time, ensuring sensitive data never leaves your infrastructure.

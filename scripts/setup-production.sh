@@ -1,10 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
-# Sovereign Privacy Gateway - Production Setup Script
+# Nonym - Production Setup Script
 # This script sets up a production-ready deployment
 
-echo "🚀 Setting up Sovereign Privacy Gateway for Production"
+echo "🚀 Setting up Nonym for Production"
 echo "================================================="
 
 # Color codes for output
@@ -139,7 +139,7 @@ groups:
           severity: critical
         annotations:
           summary: "Service is down"
-          description: "Sovereign Privacy Gateway is not responding"
+          description: "Nonym is not responding"
 
       - alert: HighPIIDetection
         expr: rate(pii_detections_total[5m]) > 50

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# PostgreSQL Migration Script for Sovereign Privacy Gateway
+# PostgreSQL Migration Script for Nonym
 # This script connects to the PostgreSQL database and ensures all schema is up-to-date
 
 set -e  # Exit on any error
@@ -18,7 +18,7 @@ DB_NAME="${DB_NAME:-gateway}"
 DB_USER="${DB_USER:-gateway}"
 DB_PASSWORD="${DB_PASSWORD:-gateway_password}"
 
-echo -e "${BLUE}🗄️  Sovereign Privacy Gateway - PostgreSQL Migration${NC}"
+echo -e "${BLUE}🗄️  Nonym - PostgreSQL Migration${NC}"
 echo "=================================================="
 
 # Function to run psql commands
@@ -197,7 +197,7 @@ VALUES (
     '00000000-0000-0000-0000-000000000001',
     'Default Organization',
     'default',
-    'Default organization for the Sovereign Privacy Gateway'
+    'Default organization for the Nonym'
 ) ON CONFLICT (id) DO NOTHING;
 
 -- Insert default admin user if it doesn't exist
