@@ -7,7 +7,7 @@ import requests
 import json
 
 # Gateway URL
-gateway_url = "https://gateway.nonym.io.com/v1/chat/completions"
+gateway_url = "https://gateway.nonym.io/v1/chat/completions"
 
 # Test messages with different types of PII
 test_cases = [
@@ -82,9 +82,7 @@ for test in test_cases:
         response = requests.post(
             gateway_url,
             headers={
-                "Authorization": "Bearer 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",
-                # "Authorization": "Bearer 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",
-                "Content-Type": "application/json",
+                "Authorization": "Bearer OPENAI-KEY/ANTHROPIC",
                 "X-API-Key": "spg_9z5DN9x1ZTAWg5OVvpchLv0oFL9TxdYe",
                 "X-Strict-Mode": "true",  # Request strict mode for blocking behavior
                 "X-Block-Critical-PII": "true"  # Additional header to trigger blocking
@@ -171,7 +169,7 @@ print("- Or use environment variable: GATEWAY_STRICT_MODE=true")
 
 print("\n📈 To check audit logs and events:")
 print("curl -H 'X-API-Key: spg_9z5DN9x1ZTAWg5OVvpchLv0oFL9TxdYe' \\")
-print("     https://gateway.nonym.io.com/api/v1/protection-events?limit=10")
+print("     https://gateway.nonym.io/api/v1/protection-events?limit=10")
 
 print("\n🎯 Expected blocking triggers:")
 print("- API keys, private keys, certificates")
