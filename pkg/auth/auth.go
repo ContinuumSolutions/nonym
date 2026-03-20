@@ -435,7 +435,7 @@ func RegisterUser(req *SignupRequest) (*User, *Organization, error) {
 	// Step d: TODO later - Send email to user (create a function for future use)
 	// This will be implemented in SendWelcomeEmail function and called after transaction commit
 
-	log.Printf("New user registered: %s (ID: %s, Org: %s, Role: %s)",
+	log.Printf("New user registered: %s (ID: %d, Org: %d, Role: %s)",
 		user.Email, user.ID, user.OrganizationID, user.Role)
 
 	return user, organization, nil
@@ -482,7 +482,7 @@ func LoginUser(req *LoginRequest, clientIP, userAgent string) (*LoginResponse, e
 	updateLoginQuery := formatQuery("UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?")
 	db.Exec(updateLoginQuery, user.ID)
 
-	log.Printf("User logged in: %s (ID: %s, Org: %s)", user.Email, user.ID, user.OrganizationID)
+	log.Printf("User logged in: %s (ID: %d, Org: %d)", user.Email, user.ID, user.OrganizationID)
 
 	return &LoginResponse{
 		Token:        token,
@@ -561,7 +561,7 @@ func GetUserProfile(userID int) (*UserProfile, error) {
 	// Get organization details
 	organization, err := getOrganizationByID(user.OrganizationID)
 	if err != nil {
-		log.Printf("Warning: Failed to load organization for user %s: %v", userID, err)
+		log.Printf("Warning: Failed to load organization for user %d: %v", userID, err)
 		// Continue without organization data
 	} else {
 		user.Organization = organization

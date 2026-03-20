@@ -6,7 +6,8 @@
       "Bash(rmdir /workspaces/nonym/pkg/providers)",
       "Bash(rm /workspaces/nonym/pkg/auth/providers_handlers.go)",
       "Bash(go build:*)",
-      "Bash(xargs sed:*)"
+      "Bash(xargs sed:*)",
+      "Bash(go vet:*)"
     ]
   }
 }
