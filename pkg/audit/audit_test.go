@@ -19,6 +19,7 @@ func setupTestDB(t *testing.T) *sql.DB {
 	queries := []string{
 		`CREATE TABLE transactions (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			request_id TEXT,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			status TEXT NOT NULL,
 			provider TEXT NOT NULL,

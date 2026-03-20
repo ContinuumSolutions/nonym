@@ -96,13 +96,13 @@ func TestHandleProxy_PIIDetectionAndAnonymization(t *testing.T) {
 			t.Errorf("SSN should have been replaced with token")
 		}
 
-		// Return response with tokens (simulating AI response)
+		// Echo the anonymized content back so the gateway can de-anonymize it.
 		response := map[string]interface{}{
 			"choices": []map[string]interface{}{
 				{
 					"message": map[string]string{
 						"role":    "assistant",
-						"content": "I can help with your email {{EMAIL_12345}} and SSN {{SSN_67890}}.",
+						"content": "I can help with: " + content,
 					},
 				},
 			},
@@ -206,6 +206,23 @@ func TestHandleProxy_StrictModeBlocking(t *testing.T) {
 
 func TestHandleProxy_ContentTypeHandling(t *testing.T) {
 	setupTestServices()
+
+	// Mock upstream that accepts JSON and rejects other content types.
+	mockUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ct := r.Header.Get("Content-Type")
+		if !strings.HasPrefix(ct, "application/json") {
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"choices": []map[string]interface{}{
+				{"message": map[string]string{"role": "assistant", "content": "ok"}},
+			},
+		})
+	}))
+	defer mockUpstream.Close()
+	updateRouterForTesting(mockUpstream.URL)
 
 	testCases := []struct {
 		contentType string
@@ -330,12 +347,12 @@ func TestHandleStats(t *testing.T) {
 
 // Helper functions
 func setupTestServices() {
-	// Set up test environment variables
 	os.Setenv("OPENAI_API_KEY", "test-openai-key")
 	os.Setenv("ANTHROPIC_API_KEY", "test-anthropic-key")
 
 	ner.Initialize()
 	audit.Initialize(":memory:")
+	router.Reset()
 	router.Initialize(map[string]router.ProviderConfig{
 		"openai": {
 			BaseURL: "https://api.openai.com",
@@ -349,6 +366,7 @@ func setupTestServices() {
 }
 
 func updateRouterForTesting(mockURL string) {
+	router.Reset()
 	router.Initialize(map[string]router.ProviderConfig{
 		"openai": {
 			BaseURL: mockURL,

@@ -10,51 +10,13 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// setupTestDB creates an in-memory SQLite database for testing
+// setupTestDB creates an in-memory SQLite database for testing.
+// Tables are created by Initialize() via migrations, not here.
 func setupTestDB() (*sql.DB, error) {
 	testDB, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
 		return nil, err
 	}
-
-	// Create tables for testing
-	schema := `
-		CREATE TABLE organizations (
-			id TEXT PRIMARY KEY,
-			name TEXT NOT NULL,
-			slug TEXT UNIQUE NOT NULL,
-			description TEXT,
-			owner_id TEXT,
-			is_active BOOLEAN DEFAULT true,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-		);
-
-		CREATE TABLE users (
-			id TEXT PRIMARY KEY,
-			email TEXT UNIQUE NOT NULL,
-			password_hash TEXT NOT NULL,
-			first_name TEXT NOT NULL,
-			last_name TEXT NOT NULL,
-			role TEXT DEFAULT 'user',
-			organization_id TEXT NOT NULL,
-			is_active BOOLEAN DEFAULT true,
-			email_verified BOOLEAN DEFAULT false,
-			last_login DATETIME,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			FOREIGN KEY (organization_id) REFERENCES organizations (id) ON DELETE CASCADE
-		);
-
-		CREATE INDEX idx_users_email ON users(email);
-		CREATE INDEX idx_users_organization ON users(organization_id);
-		CREATE INDEX idx_organizations_slug ON organizations(slug);
-	`
-
-	if _, err := testDB.Exec(schema); err != nil {
-		return nil, err
-	}
-
 	return testDB, nil
 }
 
