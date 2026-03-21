@@ -36,6 +36,8 @@ tags:
     description: Health check, status, and documentation endpoints
   - name: Authentication
     description: User authentication and session management
+  - name: Two-Factor Authentication
+    description: TOTP-based 2FA setup, verification, and challenge (RFC 6238, compatible with Google Authenticator / Authy / 1Password)
   - name: Users
     description: User profile and management
   - name: API Keys
@@ -214,7 +216,12 @@ paths:
     post:
       tags: [Authentication]
       summary: User login
-      description: Authenticates a user and returns a JWT token
+      description: |
+        Authenticates a user and returns a JWT token.
+
+        **When 2FA is enabled** the response does not include a full session token.
+        Instead it returns `mfa_required: true` and a short-lived `mfa_token` (15 min).
+        Pass that token to `POST /api/v1/auth/2fa/challenge` to complete login.
       requestBody:
         required: true
         content:
@@ -223,11 +230,29 @@ paths:
               $ref: '#/components/schemas/LoginRequest'
       responses:
         '200':
-          description: Login successful
+          description: Login successful (or MFA challenge required)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/LoginResponse'
+              examples:
+                normal_login:
+                  summary: Standard login (no 2FA)
+                  value:
+                    token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    expires_at: "2026-03-17T10:30:00Z"
+                    user:
+                      id: 1
+                      email: "user@example.com"
+                    organization:
+                      id: 1
+                      name: "Acme"
+                mfa_challenge:
+                  summary: 2FA required — pass mfa_token to /auth/2fa/challenge
+                  value:
+                    mfa_required: true
+                    mfa_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    mfa_token_expires_at: "2026-03-16T12:15:00Z"
         '401':
           description: Invalid credentials
           content:
@@ -253,6 +278,275 @@ paths:
                   message:
                     type: string
                     example: Logged out successfully
+
+  # Two-Factor Authentication endpoints
+  /api/v1/auth/2fa/status:
+    get:
+      tags: [Two-Factor Authentication]
+      summary: Get 2FA status
+      description: Returns the current TOTP 2FA state for the authenticated user. Used by the Settings page on load.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current 2FA status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TOTPStatusResponse'
+              example:
+                enabled: true
+                verified_at: "2026-03-10T09:14:22Z"
+                backup_codes_remaining: 6
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/2fa/setup/begin:
+    post:
+      tags: [Two-Factor Authentication]
+      summary: Begin 2FA setup
+      description: |
+        Start the TOTP setup flow. Verifies the user's current password, generates a new TOTP
+        secret, stores it in `totp_setup_sessions`, and returns the secret + OTPAuth URI for
+        QR code rendering.
+
+        - Returns `409` if 2FA is already enabled.
+        - Any existing pending setup session for this user is replaced.
+        - Secret is 20-byte (160-bit), cryptographically random, Base32-encoded.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TOTPSetupBeginRequest'
+      responses:
+        '200':
+          description: Setup session created — render QR code from `otpauth_uri`
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TOTPSetupBeginResponse'
+              example:
+                session_id: "550e8400-e29b-41d4-a716-446655440000"
+                secret: "JBSWY3DPEHPK3PXP"
+                otpauth_uri: "otpauth://totp/Nonym:user@example.com?secret=JBSWY3DPEHPK3PXP&issuer=Nonym&algorithm=SHA1&digits=6&period=30"
+                expires_at: "2026-03-16T12:10:00Z"
+        '400':
+          description: Missing or invalid password field
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Wrong password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 2FA is already enabled for this user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/2fa/setup/verify:
+    post:
+      tags: [Two-Factor Authentication]
+      summary: Verify 2FA setup
+      description: |
+        Confirm the user has successfully configured their authenticator by submitting a valid
+        TOTP code for the pending setup session.
+
+        On success:
+        - Promotes the pending secret to `users.totp_secret` (encrypted at rest)
+        - Sets `totp_enabled = true`, `totp_verified_at = now()`
+        - Generates 8 backup codes (format `xxxx-xxxx`, bcrypt-hashed in DB)
+        - Deletes the setup session
+        - Returns the plaintext backup codes **once** — they are never shown again
+
+        Tolerates ±1 step (30 s) clock drift. Rate-limited to 5 attempts per session.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TOTPSetupVerifyRequest'
+      responses:
+        '200':
+          description: 2FA enabled — save these backup codes now, they are shown only once
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TOTPSetupVerifyResponse'
+              example:
+                backup_codes:
+                  - "a3bk-p7mw"
+                  - "r9cx-t4nh"
+                  - "q6jv-s2fy"
+                  - "w8nm-h5j3"
+                  - "k4ts-b7rp"
+                  - "m2wq-f8cx"
+                  - "n7hv-k3sq"
+                  - "j5pb-r6tn"
+        '400':
+          description: Invalid or expired `session_id`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: TOTP code is wrong or expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many attempts (5 per session)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/2fa:
+    delete:
+      tags: [Two-Factor Authentication]
+      summary: Disable 2FA
+      description: |
+        Disables TOTP 2FA for the current user. Requires password confirmation.
+
+        On success:
+        - Clears `totp_secret`, `totp_enabled`, `totp_verified_at`
+        - Deletes all backup codes for this user
+        - Deletes any pending setup sessions
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TOTPDisableRequest'
+      responses:
+        '204':
+          description: 2FA disabled successfully (no body)
+        '401':
+          description: Wrong password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 2FA is not enabled for this user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/2fa/backup-codes/regenerate:
+    post:
+      tags: [Two-Factor Authentication]
+      summary: Regenerate backup codes
+      description: |
+        Generates a fresh set of 8 backup codes (e.g. after the user has used most of them).
+        All previous backup codes are invalidated. Requires password confirmation.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TOTPRegenerateRequest'
+      responses:
+        '200':
+          description: New backup codes — save these now, shown only once
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TOTPRegenerateResponse'
+        '401':
+          description: Wrong password or not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 2FA is not enabled for this user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/2fa/challenge:
+    post:
+      tags: [Two-Factor Authentication]
+      summary: Complete MFA login challenge
+      description: |
+        Step 2 of the login flow when `mfa_required: true` was returned by `POST /api/v1/auth/login`.
+
+        Accepts either:
+        - A 6-digit TOTP code from the authenticator app
+        - A 9-character backup code in `xxxx-xxxx` format (the format is auto-detected)
+
+        On success returns the same full session response as a normal login.
+        Failed attempts are counted; after 5 failures the account is temporarily locked.
+
+        The `mfa_token` must be passed in the request body (not in the Authorization header).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TOTPChallengeRequest'
+      responses:
+        '200':
+          description: MFA verified — full session token returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Invalid or expired `mfa_token`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Wrong TOTP or backup code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many failed attempts; account temporarily locked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /api/v1/auth/me:
     get:
@@ -954,16 +1248,31 @@ components:
 
     LoginResponse:
       type: object
+      description: |
+        Returned by login and by the MFA challenge endpoint.
+        When `mfa_required` is true the token fields are absent; use `mfa_token` with `/auth/2fa/challenge`.
       properties:
         token:
           type: string
+          description: Full session JWT (absent when mfa_required is true)
         expires_at:
           type: string
           format: date-time
+          description: When the session token expires
         user:
-          $ref: '#/components/schemas/User'
+          $ref: '#/components/schemas/UserProfile'
         organization:
           $ref: '#/components/schemas/Organization'
+        mfa_required:
+          type: boolean
+          description: True when the account has 2FA enabled and a challenge is needed
+        mfa_token:
+          type: string
+          description: Short-lived JWT (15 min) to complete the MFA challenge
+        mfa_token_expires_at:
+          type: string
+          format: date-time
+          description: Expiry of the MFA challenge token
 
     User:
       type: object
@@ -1049,6 +1358,9 @@ components:
         email_verified:
           type: boolean
           description: Whether the user's email is verified
+        two_fa_enabled:
+          type: boolean
+          description: Whether TOTP two-factor authentication is active for this user
         created_at:
           type: string
           format: date-time
@@ -1383,6 +1695,120 @@ components:
         lastUpdate:
           type: string
           format: date-time
+
+    # Two-Factor Authentication schemas
+    TOTPSetupBeginRequest:
+      type: object
+      required: [password]
+      properties:
+        password:
+          type: string
+          description: User's current password (required to initiate setup)
+
+    TOTPSetupBeginResponse:
+      type: object
+      properties:
+        session_id:
+          type: string
+          format: uuid
+          description: Temporary setup session ID — pass to /setup/verify
+        secret:
+          type: string
+          description: Base32-encoded TOTP secret for manual entry in authenticator app
+          example: JBSWY3DPEHPK3PXP
+        otpauth_uri:
+          type: string
+          description: OTPAuth URI — pass to a QR code library to render the setup QR code
+          example: "otpauth://totp/Nonym:user@example.com?secret=JBSWY3DPEHPK3PXP&issuer=Nonym&algorithm=SHA1&digits=6&period=30"
+        expires_at:
+          type: string
+          format: date-time
+          description: When the setup session expires (10 minutes from creation)
+
+    TOTPSetupVerifyRequest:
+      type: object
+      required: [session_id, totp_code]
+      properties:
+        session_id:
+          type: string
+          format: uuid
+          description: Session ID returned by /setup/begin
+        totp_code:
+          type: string
+          description: 6-digit TOTP code from the authenticator app
+          example: "123456"
+
+    TOTPSetupVerifyResponse:
+      type: object
+      properties:
+        backup_codes:
+          type: array
+          description: 8 single-use backup codes — shown only once, store securely
+          items:
+            type: string
+          example:
+            - "a3bk-p7mw"
+            - "r9cx-t4nh"
+            - "q6jv-s2fy"
+            - "w8nm-h5j3"
+            - "k4ts-b7rp"
+            - "m2wq-f8cx"
+            - "n7hv-k3sq"
+            - "j5pb-r6tn"
+
+    TOTPDisableRequest:
+      type: object
+      required: [password]
+      properties:
+        password:
+          type: string
+          description: User's current password (required to disable 2FA)
+
+    TOTPStatusResponse:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Whether TOTP 2FA is currently active
+        verified_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When 2FA was first successfully verified (null if not enabled)
+        backup_codes_remaining:
+          type: integer
+          description: Number of unused backup codes remaining
+
+    TOTPRegenerateRequest:
+      type: object
+      required: [password]
+      properties:
+        password:
+          type: string
+          description: User's current password (required to regenerate backup codes)
+
+    TOTPRegenerateResponse:
+      type: object
+      properties:
+        backup_codes:
+          type: array
+          description: 8 fresh single-use backup codes — previous codes are invalidated
+          items:
+            type: string
+
+    TOTPChallengeRequest:
+      type: object
+      required: [mfa_token, totp_code]
+      properties:
+        mfa_token:
+          type: string
+          description: Short-lived MFA token received from the login response
+        totp_code:
+          type: string
+          description: |
+            Either a 6-digit TOTP code (e.g. `123456`) or a 9-character backup code
+            in `xxxx-xxxx` format (e.g. `a3bk-p7mw`). The type is auto-detected.
+          example: "123456"
 
     # Health schemas
     GatewayStatus:
