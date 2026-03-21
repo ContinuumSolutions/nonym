@@ -264,7 +264,7 @@ func ShouldBlock(redactionDetails []RedactionDetail) bool {
 
 	// Block if any high-sensitivity entities are detected
 	for _, detail := range redactionDetails {
-		if isHighSensitivity(detail.EntityType) && detail.Confidence > 0.8 {
+		if isHighSensitivity(detail.EntityType) && detail.Confidence > 0.7 {
 			return true
 		}
 	}
