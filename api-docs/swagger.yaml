@@ -2,8 +2,9 @@ openapi: 3.0.3
 info:
   title: Nonym API
   description: |
-    A high-performance Privacy Air-Gap middleware that intercepts data between internal systems and external AI models.
-    Acts as a transparent reverse proxy that detects and anonymizes PII in real-time, ensuring sensitive data never leaves your infrastructure.
+    **Stop leaking data to vendors.** Nonym is a high-performance Privacy Gateway that intercepts
+    all outbound traffic to AI providers and third-party monitoring tools (Sentry, Datadog, PostHog),
+    stripping PII before it ever leaves your infrastructure.
 
     ## Authentication
 
@@ -15,9 +16,14 @@ info:
 
     - **Real-time PII Detection**: Email, SSN, credit cards, API keys, phone numbers, IP addresses
     - **Smart Anonymization**: Context-preserving tokenization with secure de-anonymization
+    - **Vendor Protection**: Catalog of known monitoring vendors (Sentry, Datadog, PostHog) with setup wizard
+    - **Vendor Attribution**: Every proxied request is attributed to its originating vendor via `vendor_name`
+    - **Vendor Scanner**: Free-tier discovery tool that detects unprotected vendor SDK configurations
+    - **Compliance Reports**: On-demand GDPR / HIPAA / PCI-DSS reports with entity breakdown and exposure estimates
     - **Intelligent Routing**: Content-based routing (sensitive → local LLM, general → cloud AI)
     - **Strict Mode**: Block requests with high-sensitivity data entirely
     - **Real-time Dashboard**: Comprehensive monitoring via web interface
+    - **Published Benchmarks**: Sub-40 ms P99 gateway overhead — latency data available at `/api/v1/benchmarks`
   version: 1.0.0
   contact:
     name: Continuum Solutions
@@ -56,6 +62,12 @@ tags:
     description: Protection events and monitoring
   - name: Proxy
     description: AI provider proxy endpoints
+  - name: Vendors
+    description: Vendor catalog and setup wizard — discover and configure protection for Sentry, Datadog, PostHog, and other monitoring/analytics vendors
+  - name: Scanner
+    description: Free-tier vendor discovery — scan your environment for unprotected vendor SDK configurations
+  - name: Benchmarks
+    description: Published latency benchmarks showing Nonym's processing overhead
 
 paths:
   # Health endpoints
@@ -1149,6 +1161,408 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  # Compliance report endpoints
+  /api/v1/compliance/reports:
+    get:
+      tags: [Compliance]
+      summary: List available compliance reports
+      description: Returns metadata for the three available framework reports (GDPR, HIPAA, PCI-DSS) including their citation and endpoint URL.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Available report types
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reports:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ComplianceReportMeta'
+                  note:
+                    type: string
+              example:
+                reports:
+                  - framework: GDPR
+                    citation: "Art. 5(1)(c) · Data Minimisation"
+                    description: "Covers personal data processing for EU residents."
+                    endpoint: "/api/v1/compliance/reports/gdpr"
+                  - framework: HIPAA
+                    citation: "45 CFR § 164 · PHI Safeguards"
+                    description: "Covers Protected Health Information."
+                    endpoint: "/api/v1/compliance/reports/hipaa"
+                  - framework: PCI-DSS
+                    citation: "Req. 3.3 · Cardholder Data Protection"
+                    description: "Covers payment card data."
+                    endpoint: "/api/v1/compliance/reports/pci"
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/compliance/reports/{framework}:
+    get:
+      tags: [Compliance]
+      summary: Get compliance report
+      description: |
+        Generates a full downloadable compliance report for the specified framework.
+
+        **Supported framework values**: `gdpr`, `hipaa`, `pci` (case-insensitive; also accepts `pci-dss`)
+
+        The report includes:
+        - **Summary** — total/protected/blocked request counts and a compliance score (0–100)
+        - **Entity breakdown** — per-entity-type redaction counts relevant to this framework
+        - **Daily activity** — redaction counts per day for the selected period
+        - **Estimated exposure averted** — fine estimate using org's configured or default rates
+        - **Recommendations** — framework-specific guidance
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: framework
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [gdpr, hipaa, pci, pci-dss]
+          description: Compliance framework
+        - name: timeRange
+          in: query
+          schema:
+            type: string
+            enum: [7d, 30d, 90d]
+            default: 30d
+          description: Reporting period
+      responses:
+        '200':
+          description: Full compliance report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceReport'
+        '400':
+          description: Unknown framework
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Vendor catalog and setup wizard
+  /api/v1/vendors:
+    get:
+      tags: [Vendors]
+      summary: List vendor catalog
+      description: Returns the full catalog of supported monitoring/analytics vendors with their profiles, known ingest hosts, data types collected, and integration methods.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Vendor catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  vendors:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VendorProfile'
+                  total:
+                    type: integer
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/vendors/configured:
+    get:
+      tags: [Vendors]
+      summary: List configured vendor integrations
+      description: Returns the vendor integrations the organization has set up. Each entry identifies the vendor, the integration method, and its current status.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Configured vendor integrations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  integrations:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VendorIntegration'
+                  total:
+                    type: integer
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/vendors/setup:
+    post:
+      tags: [Vendors]
+      summary: Configure vendor integration (setup wizard)
+      description: |
+        Creates or updates a vendor integration for the organization (upsert).
+
+        Returns the saved integration record plus step-by-step `setup_instructions`
+        tailored to the chosen `method`:
+        - **proxy** — route vendor SDK traffic through the Nonym gateway
+        - **sdk_wrapper** — replace the vendor's SDK with the `@nonym/<vendor>` drop-in
+
+        Calling this endpoint a second time with the same `vendor_id` updates the method (idempotent).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VendorSetupRequest'
+            examples:
+              sentry_sdk:
+                summary: Protect Sentry via SDK wrapper
+                value:
+                  vendor_id: sentry
+                  method: sdk_wrapper
+              datadog_proxy:
+                summary: Protect Datadog via proxy
+                value:
+                  vendor_id: datadog
+                  method: proxy
+      responses:
+        '201':
+          description: Integration configured — follow setup_instructions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  integration:
+                    $ref: '#/components/schemas/VendorIntegration'
+                  setup_instructions:
+                    type: object
+                    description: Vendor- and method-specific step-by-step instructions
+        '400':
+          description: Unknown vendor_id, missing vendor_id, or unsupported method
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/vendors/{id}:
+    get:
+      tags: [Vendors]
+      summary: Get vendor profile
+      description: Returns the catalog profile for a single vendor by its ID (e.g. `sentry`, `datadog`, `posthog`).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Vendor ID (e.g. `sentry`, `datadog`, `posthog`, `mixpanel`, `newrelic`)
+          example: sentry
+      responses:
+        '200':
+          description: Vendor profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorProfile'
+        '404':
+          description: Vendor not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/vendors/configured/{vendor_id}:
+    delete:
+      tags: [Vendors]
+      summary: Remove vendor integration
+      description: Removes a previously configured vendor integration for the organization.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: vendor_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Vendor ID to remove (e.g. `sentry`)
+      responses:
+        '200':
+          description: Integration removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Vendor scanner
+  /api/v1/scanner:
+    post:
+      tags: [Scanner]
+      summary: Scan environment for unprotected vendors
+      description: |
+        Accepts a flat map of environment variables and/or config key-value pairs and
+        returns a finding for each known vendor whose fingerprint is detected.
+
+        Nothing is persisted server-side — the scan runs entirely on the submitted payload.
+
+        Each finding reports:
+        - Which vendor was detected and which key triggered it
+        - A masked version of the value (never logs raw secrets)
+        - Whether the vendor appears to already be routed through Nonym
+        - A risk level (`high` / `medium` / `low`)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScanRequest'
+            example:
+              env:
+                SENTRY_DSN: "https://abc123@o123456.ingest.sentry.io/789"
+                DD_API_KEY: "abc123def456"
+              config:
+                posthogKey: "phc_abc123"
+      responses:
+        '200':
+          description: Scan results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanResult'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/scanner/sentry:
+    get:
+      tags: [Scanner]
+      summary: Sentry scanner (free tier)
+      description: |
+        Validates a Sentry DSN and reports whether it is protected by Nonym.
+        Also returns the full vendor profile and step-by-step setup guides for both
+        the proxy and SDK wrapper integration methods.
+
+        The `dsn` parameter is optional — omit it to get the setup guide without a finding.
+      parameters:
+        - name: dsn
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Sentry DSN to inspect (e.g. `https://key@o123.ingest.sentry.io/456`)
+        - name: proxied
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Set to `true` if the DSN is already routed through Nonym
+      responses:
+        '200':
+          description: Sentry scan result and setup guide
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  vendor:
+                    $ref: '#/components/schemas/VendorProfile'
+                  finding:
+                    $ref: '#/components/schemas/ScanFinding'
+                    nullable: true
+                  setup_guide:
+                    type: object
+                    description: Step-by-step instructions for proxy and SDK wrapper methods
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Benchmarks
+  /api/v1/benchmarks:
+    get:
+      tags: [Benchmarks]
+      summary: Get published latency benchmarks
+      description: |
+        Returns pre-measured P50/P95/P99 latency benchmarks for the Nonym NER pipeline
+        and proxy layer, addressing latency concerns proactively.
+
+        **Key finding**: Nonym adds < 40 ms at P99. Upstream AI provider latency
+        (typically 300–2,000 ms) dominates end-to-end response time.
+
+        If transactions exist in the last hour, `live_stats` is populated with the
+        real average processing time observed in this deployment.
+
+        This endpoint is public — no authentication required.
+      responses:
+        '200':
+          description: Benchmark report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BenchmarkReport'
+              example:
+                generated_at: "2026-03-21T12:00:00Z"
+                environment: "4 vCPU / 8 GB RAM — Linux amd64"
+                go_version: "go1.22"
+                methodology: "Benchmarks measured using `go test -bench -benchmem`..."
+                results:
+                  - label: "NER scan — short prompt (< 500 tokens)"
+                    p50_ms: 3.2
+                    p95_ms: 7.8
+                    p99_ms: 12.4
+                    throughput: "> 3,000 req/s"
+                    description: "Regex-only path. Covers EMAIL, PHONE, SSN, CREDIT_CARD, IP_ADDRESS."
+
   # Documentation endpoints
   /api/docs:
     get:
@@ -1704,6 +2118,9 @@ components:
           type: string
           format: uuid
           description: User UUID
+        vendor_name:
+          type: string
+          description: Vendor attributed to this request (e.g. "sentry", "datadog")
 
     RedactionDetail:
       type: object
@@ -2097,3 +2514,301 @@ components:
           type: number
         error_rate:
           type: number
+
+    # Vendor catalog schemas
+    VendorProfile:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique vendor identifier (e.g. "sentry", "datadog")
+        name:
+          type: string
+          description: Human-readable vendor name
+        description:
+          type: string
+          description: Short description of what the vendor does
+        category:
+          type: string
+          description: Vendor category (e.g. "error-tracking", "apm")
+        known_hosts:
+          type: array
+          items:
+            type: string
+          description: Hostname patterns associated with this vendor
+        data_types:
+          type: array
+          items:
+            type: string
+          description: Types of data the vendor receives (e.g. "errors", "traces")
+        compliance_frameworks:
+          type: array
+          items:
+            type: string
+          description: Compliance frameworks this vendor is relevant to
+        integration_methods:
+          type: array
+          items:
+            type: string
+          description: Supported integration methods (e.g. "sdk", "http")
+        sdk_packages:
+          type: array
+          items:
+            type: string
+          description: Official SDK package names
+        nonym_sdk:
+          type: string
+          description: Drop-in Nonym SDK package that protects this vendor's traffic
+
+    VendorIntegration:
+      type: object
+      properties:
+        id:
+          type: integer
+        organization_id:
+          type: integer
+        vendor_id:
+          type: string
+        vendor_name:
+          type: string
+        method:
+          type: string
+          description: Integration method chosen (e.g. "sdk", "http")
+        status:
+          type: string
+          enum: [active, inactive]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    VendorSetupRequest:
+      type: object
+      required:
+        - vendor_id
+      properties:
+        vendor_id:
+          type: string
+          description: Vendor ID from the catalog (e.g. "sentry")
+        method:
+          type: string
+          description: Integration method (defaults to "sdk" if omitted)
+
+    # Scanner schemas
+    ScanRequest:
+      type: object
+      properties:
+        env:
+          type: object
+          additionalProperties:
+            type: string
+          description: Environment variable key-value pairs to scan
+        config:
+          type: object
+          additionalProperties:
+            type: string
+          description: Configuration key-value pairs to scan
+
+    ScanFinding:
+      type: object
+      properties:
+        vendor_id:
+          type: string
+          description: Vendor that matched (e.g. "sentry")
+        vendor_name:
+          type: string
+          description: Human-readable vendor name
+        indicator:
+          type: string
+          description: The env/config key that triggered the match
+        value:
+          type: string
+          description: Masked version of the detected value
+        protected:
+          type: boolean
+          description: Whether the value is already routed through Nonym
+        risk:
+          type: string
+          enum: [high, medium, low]
+          description: Risk level of the unprotected credential
+        description:
+          type: string
+          description: Human-readable explanation of the finding
+
+    ScanResult:
+      type: object
+      properties:
+        scanned_at:
+          type: string
+          format: date-time
+        total_vendors:
+          type: integer
+          description: Number of vendors checked in the catalog
+        findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScanFinding'
+        protected:
+          type: integer
+          description: Number of findings already protected by Nonym
+        unprotected:
+          type: integer
+          description: Number of findings NOT yet protected by Nonym
+        instructions:
+          type: object
+          additionalProperties:
+            type: string
+          description: Quick-start instructions keyed by vendor_id
+
+    # Compliance report schemas
+    EntityCount:
+      type: object
+      properties:
+        entity_type:
+          type: string
+          description: NER entity type (e.g. "PERSON", "EMAIL")
+        count:
+          type: integer
+
+    DailyCount:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        count:
+          type: integer
+
+    ReportSummary:
+      type: object
+      properties:
+        total_requests:
+          type: integer
+        protected_requests:
+          type: integer
+        blocked_requests:
+          type: integer
+        total_redactions:
+          type: integer
+        unique_entity_types:
+          type: integer
+        compliance_score:
+          type: number
+          description: Score in the range [0, 100] representing compliance posture
+
+    ComplianceReport:
+      type: object
+      properties:
+        framework:
+          type: string
+          description: Canonical framework name (GDPR, HIPAA, or PCI-DSS)
+        citation:
+          type: string
+          description: Relevant regulatory article or section reference
+        generated_at:
+          type: string
+          format: date-time
+        organization_id:
+          type: integer
+        time_range:
+          type: string
+          description: Time window label (7d, 30d, or 90d)
+        period_start:
+          type: string
+          format: date-time
+        period_end:
+          type: string
+          format: date-time
+        summary:
+          $ref: '#/components/schemas/ReportSummary'
+        entity_breakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/EntityCount'
+        daily_activity:
+          type: array
+          items:
+            $ref: '#/components/schemas/DailyCount'
+        estimated_exposure_averted:
+          type: integer
+          description: Estimated number of PII items prevented from reaching vendors
+        recommendations:
+          type: array
+          items:
+            type: string
+          description: Framework-specific compliance recommendations
+
+    ComplianceReportMeta:
+      type: object
+      description: Summary entry returned by the list endpoint
+      properties:
+        framework:
+          type: string
+        citation:
+          type: string
+        description:
+          type: string
+        endpoint:
+          type: string
+          description: URL path to fetch the full report for this framework
+
+    # Benchmark schemas
+    BenchmarkResult:
+      type: object
+      properties:
+        label:
+          type: string
+          description: Human-readable benchmark name
+        p50_ms:
+          type: number
+          description: Median latency in milliseconds
+        p95_ms:
+          type: number
+          description: 95th-percentile latency in milliseconds
+        p99_ms:
+          type: number
+          description: 99th-percentile latency in milliseconds
+        throughput:
+          type: string
+          description: Requests-per-second figure (e.g. "2 400 req/s")
+        description:
+          type: string
+          description: What this benchmark measures
+
+    LiveBenchmark:
+      type: object
+      properties:
+        sample_size:
+          type: integer
+          description: Number of transactions sampled
+        avg_processing_ms:
+          type: number
+          description: Average observed processing time in milliseconds
+        period:
+          type: string
+          description: Time window used for the live sample (e.g. "last 1 hour")
+
+    BenchmarkReport:
+      type: object
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        environment:
+          type: string
+          description: Runtime environment description
+        go_version:
+          type: string
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BenchmarkResult'
+        live_stats:
+          $ref: '#/components/schemas/LiveBenchmark'
+          nullable: true
+          description: Real-time stats from recent transactions (null if no data)
+        methodology:
+          type: string
+          description: Explanation of how benchmarks were produced
