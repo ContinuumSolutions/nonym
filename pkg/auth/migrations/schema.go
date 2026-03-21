@@ -322,6 +322,45 @@ func getPostgreSQLMigrations() []*Migration {
 				ALTER TABLE users DROP COLUMN IF EXISTS totp_enabled;
 			`,
 		},
+		{
+			Version:     8,
+			Name:        "compliance_frameworks",
+			Description: "Add compliance_frameworks to events; create compliance_fine_rates table",
+			UpSQL: `
+				-- Add compliance_frameworks column to events
+				ALTER TABLE events ADD COLUMN IF NOT EXISTS compliance_frameworks TEXT NOT NULL DEFAULT '[]';
+
+				-- GIN index for fast framework filtering
+				CREATE INDEX IF NOT EXISTS idx_events_compliance_frameworks
+					ON events USING GIN ((compliance_frameworks::jsonb));
+
+				-- Per-organization configurable fine rates
+				CREATE TABLE IF NOT EXISTS compliance_fine_rates (
+					id               TEXT PRIMARY KEY,
+					organization_id  INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+					framework        TEXT NOT NULL,
+					per_event_amount DOUBLE PRECISION NOT NULL,
+					currency         CHAR(3) NOT NULL,
+					updated_at       TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+					updated_by       INTEGER REFERENCES users(id),
+					UNIQUE (organization_id, framework)
+				);
+				CREATE INDEX IF NOT EXISTS idx_compliance_fine_rates_org ON compliance_fine_rates(organization_id);
+
+				-- Seed default rates for all existing organizations
+				INSERT INTO compliance_fine_rates (id, organization_id, framework, per_event_amount, currency)
+				SELECT 'cfr_' || o.id || '_' || fw.framework, o.id, fw.framework, fw.amount, fw.currency
+				FROM organizations o
+				CROSS JOIN (VALUES ('GDPR', 20000.0, 'EUR'), ('HIPAA', 15000.0, 'USD'), ('PCI-DSS', 5000.0, 'USD'))
+					AS fw(framework, amount, currency)
+				ON CONFLICT (organization_id, framework) DO NOTHING;
+			`,
+			DownSQL: `
+				DROP TABLE IF EXISTS compliance_fine_rates CASCADE;
+				DROP INDEX IF EXISTS idx_events_compliance_frameworks;
+				ALTER TABLE events DROP COLUMN IF EXISTS compliance_frameworks;
+			`,
+		},
 	}
 }
 
@@ -622,6 +661,36 @@ func getSQLiteMigrations() []*Migration {
 			DownSQL: `
 				DROP TABLE IF EXISTS totp_backup_codes;
 				DROP TABLE IF EXISTS totp_setup_sessions;
+			`,
+		},
+		{
+			Version:     8,
+			Name:        "compliance_frameworks",
+			Description: "Add compliance_frameworks to events; create compliance_fine_rates table",
+			UpSQL: `
+				ALTER TABLE events ADD COLUMN compliance_frameworks TEXT DEFAULT '[]';
+
+				CREATE TABLE IF NOT EXISTS compliance_fine_rates (
+					id               TEXT PRIMARY KEY,
+					organization_id  INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+					framework        TEXT NOT NULL,
+					per_event_amount REAL NOT NULL,
+					currency         TEXT NOT NULL,
+					updated_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+					updated_by       INTEGER REFERENCES users(id),
+					UNIQUE (organization_id, framework)
+				);
+				CREATE INDEX IF NOT EXISTS idx_compliance_fine_rates_org ON compliance_fine_rates(organization_id);
+
+				INSERT OR IGNORE INTO compliance_fine_rates (id, organization_id, framework, per_event_amount, currency)
+				SELECT 'cfr_' || o.id || '_' || fw.framework, o.id, fw.framework, fw.amount, fw.currency
+				FROM organizations o
+				JOIN (SELECT 'GDPR' AS framework, 20000.0 AS amount, 'EUR' AS currency
+				      UNION ALL SELECT 'HIPAA', 15000.0, 'USD'
+				      UNION ALL SELECT 'PCI-DSS', 5000.0, 'USD') AS fw;
+			`,
+			DownSQL: `
+				DROP TABLE IF EXISTS compliance_fine_rates;
 			`,
 		},
 	}

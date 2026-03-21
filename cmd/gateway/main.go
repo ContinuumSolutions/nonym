@@ -112,6 +112,11 @@ func initializeServices(config *Config) error {
 		return fmt.Errorf("failed to initialize events tables: %w", err)
 	}
 
+	// Initialize compliance tables
+	if err := audit.InitializeComplianceTables(); err != nil {
+		return fmt.Errorf("failed to initialize compliance tables: %w", err)
+	}
+
 	// Initialize router with provider configs
 
 	// Initialize authentication system
@@ -221,6 +226,10 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 	app.Post("/api/v1/auth/2fa/challenge", auth.HandleTOTPChallenge) // No auth — uses mfa_token
 	app.Delete("/api/v1/security/sessions/:id", authMiddleware, auth.HandleTerminateSession)
 	app.Put("/api/v1/security/settings", authMiddleware, auth.HandleUpdateSecuritySettings)
+
+	// Compliance settings
+	app.Get("/api/v1/settings/compliance", authMiddleware, audit.HandleGetComplianceSettings)
+	app.Put("/api/v1/settings/compliance", authMiddleware, audit.HandleUpdateComplianceSettings)
 
 	// Protection and analytics endpoints
 	app.Get("/api/v1/protection-events", authMiddleware, audit.HandleGetProtectionEvents)

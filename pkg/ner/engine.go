@@ -14,16 +14,21 @@ import (
 type EntityType string
 
 const (
-	EntityEmail       EntityType = "EMAIL"
-	EntityPhone       EntityType = "PHONE"
-	EntitySSN         EntityType = "SSN"
-	EntityCreditCard  EntityType = "CREDIT_CARD"
-	EntityIPAddress   EntityType = "IP_ADDRESS"
-	EntityPerson      EntityType = "PERSON"
-	EntityLocation    EntityType = "LOCATION"
+	EntityEmail        EntityType = "EMAIL"
+	EntityPhone        EntityType = "PHONE"
+	EntitySSN          EntityType = "SSN"
+	EntityCreditCard   EntityType = "CREDIT_CARD"
+	EntityCardCVV      EntityType = "CARD_CVV"
+	EntityIBAN         EntityType = "IBAN"
+	EntityIPAddress    EntityType = "IP_ADDRESS"
+	EntityPerson       EntityType = "PERSON"
+	EntityLocation     EntityType = "LOCATION" // legacy; prefer EntityAddress
+	EntityAddress      EntityType = "ADDRESS"
 	EntityOrganization EntityType = "ORGANIZATION"
-	EntityAPIKey      EntityType = "API_KEY"
-	EntityPassword    EntityType = "PASSWORD"
+	EntityDate         EntityType = "DATE"
+	EntityNIN          EntityType = "NIN"
+	EntityAPIKey       EntityType = "API_KEY"
+	EntityPassword     EntityType = "PASSWORD"
 )
 
 // RedactionDetail contains information about what was redacted
@@ -177,6 +182,9 @@ func (ne *NEREngine) processContent(content string) (string, []RedactionDetail, 
 			processedContent = processedContent[:start] + token + processedContent[end:]
 		}
 	}
+
+	// Post-processing: reclassify phone detections that are actually card PANs or CVVs.
+	redactionDetails = reclassifyCardPANs(processedContent, redactionDetails)
 
 	return processedContent, redactionDetails, nil
 }
@@ -340,6 +348,70 @@ func isHighSensitivity(entityType EntityType) bool {
 	}
 
 	return highSensitivityTypes[entityType]
+}
+
+// luhnCheck returns true when the digit string passes the Luhn algorithm.
+// The input should contain only ASCII digits.
+func luhnCheck(digits string) bool {
+	if len(digits) < 13 || len(digits) > 19 {
+		return false
+	}
+	sum := 0
+	for i, ch := range digits {
+		n := int(ch - '0')
+		// Double every second digit from the right (even position from right = odd index from right).
+		if (len(digits)-i)%2 == 0 {
+			n *= 2
+			if n > 9 {
+				n -= 9
+			}
+		}
+		sum += n
+	}
+	return sum%10 == 0
+}
+
+// reclassifyCardPANs performs a secondary pass over PHONE detections and
+// reclassifies them as CREDIT_CARD (via Luhn) or CARD_CVV (via context).
+// content is the original text used for CVV context lookup.
+func reclassifyCardPANs(content string, details []RedactionDetail) []RedactionDetail {
+	for i, d := range details {
+		if d.EntityType != EntityPhone {
+			continue
+		}
+
+		// Strip non-digit characters for numeric analysis.
+		stripped := strings.Map(func(r rune) rune {
+			if r >= '0' && r <= '9' {
+				return r
+			}
+			return -1
+		}, d.OriginalText)
+
+		if luhnCheck(stripped) {
+			details[i].EntityType = EntityCreditCard
+			details[i].Confidence = 0.95
+			continue
+		}
+
+		// CVV heuristic: 3–4 digits with "cvv"/"cvc"/"security code" nearby.
+		if len(stripped) >= 3 && len(stripped) <= 4 {
+			lo := d.StartIndex - 40
+			if lo < 0 {
+				lo = 0
+			}
+			hi := d.EndIndex + 40
+			if hi > len(content) {
+				hi = len(content)
+			}
+			ctx := strings.ToLower(content[lo:hi])
+			if strings.Contains(ctx, "cvv") || strings.Contains(ctx, "cvc") || strings.Contains(ctx, "security code") {
+				details[i].EntityType = EntityCardCVV
+				details[i].Confidence = 0.85
+			}
+		}
+	}
+	return details
 }
 
 // SetStrictMode enables or disables strict blocking mode

@@ -250,7 +250,10 @@ func TestHandleTOTPSetupVerify_Success(t *testing.T) {
 	verifyReq := httptest.NewRequest("POST", "/api/v1/auth/2fa/setup/verify",
 		jsonBody(map[string]string{"session_id": sessionID, "totp_code": code}))
 	verifyReq.Header.Set("Content-Type", "application/json")
-	verifyResp, _ := app.Test(verifyReq)
+	verifyResp, err := app.Test(verifyReq, -1) // -1 = no timeout; bcrypt-hashing 8 codes takes > 1s
+	if err != nil {
+		t.Fatalf("app.Test error: %v", err)
+	}
 
 	if verifyResp.StatusCode != 200 {
 		t.Fatalf("expected 200, got %d", verifyResp.StatusCode)

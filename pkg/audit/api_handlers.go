@@ -11,21 +11,22 @@ import (
 
 // ProtectionEvent represents a protection event for the frontend
 type ProtectionEvent struct {
-	ID                string                 `json:"id"`
-	Timestamp         time.Time              `json:"timestamp"`
-	Type              string                 `json:"type"`
-	Action            string                 `json:"action"`
-	Provider          string                 `json:"provider"`
-	Model             string                 `json:"model,omitempty"`
-	Status            string                 `json:"status"`
-	Protection        string                 `json:"protection"`
-	RedactionCount    int                    `json:"redaction_count"`
-	RedactionDetails  []RedactionDetail      `json:"redaction_details,omitempty"`
-	ProcessingTime    float64                `json:"processing_time"`
-	Severity          string                 `json:"severity"`
-	ClientIP          string                 `json:"client_ip,omitempty"`
-	UserAgent         string                 `json:"user_agent,omitempty"`
-	Metadata          map[string]interface{} `json:"metadata,omitempty"`
+	ID                   string                 `json:"id"`
+	Timestamp            time.Time              `json:"timestamp"`
+	Type                 string                 `json:"type"`
+	Action               string                 `json:"action"`
+	Provider             string                 `json:"provider"`
+	Model                string                 `json:"model,omitempty"`
+	Status               string                 `json:"status"`
+	Protection           string                 `json:"protection"`
+	RedactionCount       int                    `json:"redaction_count"`
+	RedactionDetails     []RedactionDetail      `json:"redaction_details,omitempty"`
+	ProcessingTime       float64                `json:"processing_time"`
+	Severity             string                 `json:"severity"`
+	ClientIP             string                 `json:"client_ip,omitempty"`
+	UserAgent            string                 `json:"user_agent,omitempty"`
+	Metadata             map[string]interface{} `json:"metadata,omitempty"`
+	ComplianceFrameworks []string               `json:"compliance_frameworks"`
 }
 
 // RedactionDetail represents a single redaction detail
@@ -92,6 +93,7 @@ func HandleGetProtectionEvents(c *fiber.Ctx) error {
 		Severity:       c.Query("severity"),
 		Status:         c.Query("status"),
 		UserID:         c.Query("user_id"),
+		Framework:      c.Query("framework"),
 	}
 
 	// Call the actual database query function
@@ -105,19 +107,24 @@ func HandleGetProtectionEvents(c *fiber.Ctx) error {
 	// Convert Event to ProtectionEvent format
 	protectionEvents := make([]ProtectionEvent, len(eventsResponse.Events))
 	for i, event := range eventsResponse.Events {
+		frameworks := event.ComplianceFrameworks
+		if frameworks == nil {
+			frameworks = []string{}
+		}
 		protectionEvents[i] = ProtectionEvent{
-			ID:             event.ID,
-			Timestamp:      event.Timestamp,
-			Type:           event.Type,
-			Action:         event.Action,
-			Provider:       event.Provider,
-			Model:          event.Model,
-			Status:         event.Status,
-			Protection:     event.PIIType,
-			RedactionCount: getInt(event.Metadata, "redaction_count"),
-			ProcessingTime: 0, // Not tracked in current event model
-			Severity:       event.Severity,
-			Metadata:       event.Metadata,
+			ID:                   event.ID,
+			Timestamp:            event.Timestamp,
+			Type:                 event.Type,
+			Action:               event.Action,
+			Provider:             event.Provider,
+			Model:                event.Model,
+			Status:               event.Status,
+			Protection:           event.PIIType,
+			RedactionCount:       getInt(event.Metadata, "redaction_count"),
+			ProcessingTime:       0, // Not tracked in current event model
+			Severity:             event.Severity,
+			Metadata:             event.Metadata,
+			ComplianceFrameworks: frameworks,
 		}
 
 		// Extract redaction details from metadata if available

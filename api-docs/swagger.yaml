@@ -48,6 +48,8 @@ tags:
     description: Team member management
   - name: Security
     description: Security settings and session management
+  - name: Compliance
+    description: Regulatory compliance framework coverage — per-event attribution (GDPR, HIPAA, PCI-DSS, SOC2) and configurable fine-rate estimates
   - name: Analytics
     description: Statistics and analytics
   - name: Protection
@@ -959,7 +961,11 @@ paths:
     get:
       tags: [Protection]
       summary: Get protection events
-      description: Returns protection events with filtering options
+      description: |
+        Returns protection events with filtering options. Each event now includes
+        `compliance_frameworks` — the set of regulatory frameworks (GDPR, HIPAA, PCI-DSS, SOC2)
+        that apply based on the entity types detected. Use the `framework` parameter to filter
+        events to a specific regulatory scope.
       security:
         - bearerAuth: []
       parameters:
@@ -986,6 +992,12 @@ paths:
           in: query
           schema:
             type: string
+        - name: framework
+          in: query
+          schema:
+            type: string
+            enum: [GDPR, HIPAA, PCI-DSS, SOC2]
+          description: Filter to events tagged with this compliance framework
         - name: timeRange
           in: query
           schema:
@@ -1013,6 +1025,129 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProtectionStatsResponse'
+
+  # Compliance endpoints
+  /api/v1/settings/compliance:
+    get:
+      tags: [Compliance]
+      summary: Get compliance fine rate configuration
+      description: |
+        Returns the organization's current per-event fine rate configuration for
+        GDPR, HIPAA, and PCI-DSS. Falls back to system defaults when the organization
+        has not configured custom rates.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current compliance fine rate settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceSettingsResponse'
+              example:
+                fine_rates:
+                  - framework: GDPR
+                    per_event_amount: 20000
+                    currency: EUR
+                  - framework: HIPAA
+                    per_event_amount: 15000
+                    currency: USD
+                  - framework: PCI-DSS
+                    per_event_amount: 5000
+                    currency: USD
+                disclaimer: "These estimates are for internal risk awareness only and do not constitute legal advice."
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags: [Compliance]
+      summary: Update compliance fine rate configuration
+      description: |
+        Updates per-event fine rate estimates. Requires `admin` or `owner` role.
+
+        Validates:
+        - `framework` is one of `GDPR`, `HIPAA`, `PCI-DSS`
+        - `per_event_amount` > 0
+        - `currency` is a known ISO 4217 code (EUR, USD, GBP, CAD, AUD)
+
+        Partial updates are supported — only send the frameworks you want to change.
+        Returns the full updated rate list.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComplianceSettingsUpdateRequest'
+            example:
+              fine_rates:
+                - framework: GDPR
+                  per_event_amount: 50000
+                  currency: EUR
+      responses:
+        '200':
+          description: Updated compliance settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceSettingsResponse'
+        '400':
+          description: Invalid framework, amount, or currency
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Admin role required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/dashboard/widgets/compliance-summary:
+    get:
+      tags: [Compliance]
+      summary: Compliance Shield widget data
+      description: |
+        Returns per-framework compliance coverage metrics for the authenticated
+        organization. Used by the Compliance Shield panel on the Protection page and
+        the main dashboard.
+
+        Aggregates events from the requested time range and returns:
+        - Event and redaction counts per framework
+        - Top detected entity types per framework
+        - Estimated fine exposure averted (using org's configured or default rates)
+        - Total exposure in USD (EUR rates converted at a fixed 1.08 rate)
+
+        SOC2 returns `null` for `estimated_exposure_averted` because SOC2 violations
+        carry no direct statutory fine — the frontend renders "Audit-ready / Compliant".
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: timeRange
+          in: query
+          schema:
+            type: string
+            enum: [1h, 24h, 7d, 30d]
+            default: 24h
+          description: Aggregation window
+      responses:
+        '200':
+          description: Compliance summary metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceSummaryResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   # Documentation endpoints
   /api/docs:
@@ -1662,6 +1797,15 @@ components:
           type: string
         metadata:
           type: object
+        compliance_frameworks:
+          type: array
+          description: |
+            Regulatory frameworks applicable to this event based on detected entity types.
+            Computed server-side at write time — do not re-derive client-side.
+          items:
+            type: string
+            enum: [GDPR, HIPAA, PCI-DSS, SOC2]
+          example: ["GDPR", "HIPAA", "SOC2"]
 
     ProtectionEventsResponse:
       type: object
@@ -1695,6 +1839,114 @@ components:
         lastUpdate:
           type: string
           format: date-time
+
+    # Compliance schemas
+    FineRate:
+      type: object
+      properties:
+        framework:
+          type: string
+          enum: [GDPR, HIPAA, PCI-DSS]
+          description: Regulatory framework name
+        per_event_amount:
+          type: number
+          description: Estimated fine exposure per event (in `currency`)
+          example: 20000
+        currency:
+          type: string
+          description: ISO 4217 currency code
+          example: EUR
+      required: [framework, per_event_amount, currency]
+
+    ComplianceSettingsResponse:
+      type: object
+      properties:
+        fine_rates:
+          type: array
+          items:
+            $ref: '#/components/schemas/FineRate'
+        disclaimer:
+          type: string
+          description: Legal disclaimer — always present
+          example: "These estimates are for internal risk awareness only and do not constitute legal advice."
+
+    ComplianceSettingsUpdateRequest:
+      type: object
+      properties:
+        fine_rates:
+          type: array
+          description: Partial list — only included frameworks are updated
+          items:
+            $ref: '#/components/schemas/FineRate'
+      required: [fine_rates]
+
+    ExposureEstimate:
+      type: object
+      nullable: true
+      description: Estimated fine exposure averted. Null for SOC2 (no statutory fine).
+      properties:
+        amount:
+          type: number
+          description: Total estimated exposure (events_protected × per_event_basis)
+          example: 640000
+        currency:
+          type: string
+          example: EUR
+        per_event_basis:
+          type: number
+          description: Per-event rate used for calculation
+          example: 20000
+        disclaimer:
+          type: string
+          enum: [estimate]
+          description: Always "estimate" — these are not legally binding figures
+
+    FrameworkSummary:
+      type: object
+      properties:
+        key:
+          type: string
+          enum: [GDPR, HIPAA, PCI-DSS, SOC2]
+        label:
+          type: string
+        events_protected:
+          type: integer
+          description: Number of distinct events tagged with this framework
+        redactions:
+          type: integer
+          description: Total redactions across events tagged with this framework
+        top_entity_types:
+          type: array
+          description: Up to 3 most-frequent entity types contributing to this framework
+          items:
+            type: string
+          example: ["PERSON", "EMAIL", "ADDRESS"]
+        citation:
+          type: string
+          description: Primary regulatory citation
+          example: "Art. 5(1)(c) · Data Minimisation"
+        estimated_exposure_averted:
+          $ref: '#/components/schemas/ExposureEstimate'
+
+    ComplianceSummaryResponse:
+      type: object
+      properties:
+        time_range:
+          type: string
+          enum: [1h, 24h, 7d, 30d]
+        generated_at:
+          type: string
+          format: date-time
+        frameworks:
+          type: array
+          items:
+            $ref: '#/components/schemas/FrameworkSummary'
+        total_estimated_exposure_averted_usd:
+          type: number
+          description: |
+            Sum of all non-null framework exposures converted to USD.
+            EUR amounts are converted at a fixed 1.08 rate.
+          example: 826200
 
     # Two-Factor Authentication schemas
     TOTPSetupBeginRequest:

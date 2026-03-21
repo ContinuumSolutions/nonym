@@ -47,6 +47,7 @@ func setupTestDB(t *testing.T) *sql.DB {
 			severity TEXT DEFAULT 'low',
 			status TEXT DEFAULT 'open',
 			description TEXT,
+			compliance_frameworks TEXT DEFAULT '[]',
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		)`,
 	}
