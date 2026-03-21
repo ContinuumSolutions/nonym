@@ -39,11 +39,12 @@ type RedactionDetail struct {
 
 // NEREngine handles Named Entity Recognition and anonymization
 type NEREngine struct {
-	patterns       map[EntityType]*regexp.Regexp
-	tokenMap       map[string]string
+	patterns        map[EntityType]*regexp.Regexp
+	tokenMap        map[string]string
 	reverseTokenMap map[string]string
-	mutex          sync.RWMutex
-	strictMode     bool
+	mutex           sync.RWMutex
+	strictMode      bool
+	useML           bool // when true, ML gRPC service is used for PERSON/LOCATION/ORG
 }
 
 var (
@@ -51,19 +52,36 @@ var (
 	initOnce     sync.Once
 )
 
-// Initialize sets up the NER engine with predefined patterns
+// Initialize sets up the NER engine with predefined patterns.
+// It also attempts to connect to the ML gRPC server if NER_GRPC_HOST is set.
 func Initialize() error {
 	var err error
 	initOnce.Do(func() {
 		globalEngine = &NEREngine{
-			patterns:       make(map[EntityType]*regexp.Regexp),
-			tokenMap:       make(map[string]string),
+			patterns:        make(map[EntityType]*regexp.Regexp),
+			tokenMap:        make(map[string]string),
 			reverseTokenMap: make(map[string]string),
-			strictMode:     false, // Default to anonymize mode
+			strictMode:      false,
 		}
 		err = globalEngine.loadPatterns()
+		if err != nil {
+			return
+		}
+		// Attempt ML gRPC init; failure is non-fatal — regex engine still works.
+		if grpcErr := InitGRPCClient(); grpcErr == nil {
+			globalEngine.useML = true
+		}
 	})
 	return err
+}
+
+// EnableML explicitly enables or disables the ML gRPC backend.
+func EnableML(enabled bool) {
+	if globalEngine != nil {
+		globalEngine.mutex.Lock()
+		globalEngine.useML = enabled
+		globalEngine.mutex.Unlock()
+	}
 }
 
 // loadPatterns initializes regex patterns for different entity types
@@ -118,7 +136,17 @@ func (ne *NEREngine) processContent(content string) (string, []RedactionDetail, 
 	ne.mutex.Lock()
 	defer ne.mutex.Unlock()
 
-	// Process each entity type
+	// --- ML-based NER (PERSON / LOCATION / ORGANIZATION) ---
+	if ne.useML && IsGRPCAvailable() {
+		mlDetails, mlContent, err := ne.processMLEntities(processedContent)
+		if err == nil {
+			redactionDetails = append(redactionDetails, mlDetails...)
+			processedContent = mlContent
+		}
+		// on error, fall through to regex-only for all entity types
+	}
+
+	// --- Regex-based NER ---
 	for entityType, pattern := range ne.patterns {
 		matches := pattern.FindAllStringSubmatchIndex(processedContent, -1)
 
@@ -132,14 +160,10 @@ func (ne *NEREngine) processContent(content string) (string, []RedactionDetail, 
 			start, end := match[0], match[1]
 			originalText := processedContent[start:end]
 
-			// Generate anonymized token
 			token := ne.generateToken(entityType)
-
-			// Store mapping for later restoration
 			ne.tokenMap[token] = originalText
 			ne.reverseTokenMap[originalText] = token
 
-			// Create redaction detail
 			detail := RedactionDetail{
 				EntityType:   entityType,
 				OriginalText: originalText,
@@ -150,13 +174,53 @@ func (ne *NEREngine) processContent(content string) (string, []RedactionDetail, 
 				Timestamp:    time.Now(),
 			}
 			redactionDetails = append(redactionDetails, detail)
-
-			// Replace in content
 			processedContent = processedContent[:start] + token + processedContent[end:]
 		}
 	}
 
 	return processedContent, redactionDetails, nil
+}
+
+// processMLEntities calls the GLiNER gRPC service and redacts entities in-place.
+// Spans are applied in reverse order so that earlier offsets remain valid.
+func (ne *NEREngine) processMLEntities(content string) ([]RedactionDetail, string, error) {
+	spans, err := AnnotateML(content, DefaultMLLabels, 0.5)
+	if err != nil {
+		return nil, content, err
+	}
+
+	// Sort spans in descending order of start position
+	for i := 0; i < len(spans); i++ {
+		for j := i + 1; j < len(spans); j++ {
+			if spans[j].Start > spans[i].Start {
+				spans[i], spans[j] = spans[j], spans[i]
+			}
+		}
+	}
+
+	var details []RedactionDetail
+	for _, span := range spans {
+		if span.Start < 0 || span.End > len(content) || span.Start >= span.End {
+			continue
+		}
+		originalText := content[span.Start:span.End]
+		entityType := mlLabelToEntityType(span.Label)
+		token := ne.generateToken(entityType)
+		ne.tokenMap[token] = originalText
+		ne.reverseTokenMap[originalText] = token
+
+		details = append(details, RedactionDetail{
+			EntityType:   entityType,
+			OriginalText: originalText,
+			RedactedText: token,
+			StartIndex:   span.Start,
+			EndIndex:     span.End,
+			Confidence:   span.Score,
+			Timestamp:    time.Now(),
+		})
+		content = content[:span.Start] + token + content[span.End:]
+	}
+	return details, content, nil
 }
 
 // DeAnonymizeContent restores original content from anonymized tokens

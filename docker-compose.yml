@@ -38,6 +38,27 @@ services:
     networks:
       - backend
 
+  # ── ML NER Service (GLiNER via gRPC) ───────────────────────────────────────
+  ner-ml:
+    build:
+      context: .
+      dockerfile: python-ner/Dockerfile
+    ports:
+      - "50051:50051"
+    environment:
+      - GLINER_MODEL=${GLINER_MODEL:-urchade/gliner_medium-v2.1}
+      - NER_GRPC_PORT=50051
+      - NER_MAX_WORKERS=${NER_MAX_WORKERS:-4}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import grpc; ch=grpc.insecure_channel('localhost:50051'); grpc.channel_ready_future(ch).result(timeout=5)\" && echo ok"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 120s
+    networks:
+      - backend
+
   # ── Privacy Gateway ────────────────────────────────────────────────────────
   gateway:
     build:
@@ -50,10 +71,6 @@ services:
       - PORT=8000
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - STRICT_MODE=${STRICT_MODE:-false}
-      # API Keys for AI providers
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       # Database
       - DB_HOST=postgres
       - DB_PORT=5432
@@ -67,6 +84,9 @@ services:
       # Redis
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      # ML NER gRPC backend
+      - NER_GRPC_HOST=ner-ml
+      - NER_GRPC_PORT=50051
     volumes:
       - gateway-data:/data
       - gateway-logs:/app/logs
@@ -81,6 +101,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      ner-ml:
         condition: service_healthy
     networks:
       - backend
