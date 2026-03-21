@@ -104,7 +104,8 @@ class NERServiceServicer(ner_pb2_grpc.NERServiceServicer):
 
 
 def serve():
-    model_name = os.environ.get("GLINER_MODEL", "urchade/gliner_medium-v2.1")
+    # model_name = os.environ.get("GLINER_MODEL", "urchade/gliner_medium-v2.1")
+    model_name = os.environ.get("GLINER_MODEL", "knowledgator/gliner-pii-base-v1.0")
     port = os.environ.get("NER_GRPC_PORT", "50051")
     max_workers = int(os.environ.get("NER_MAX_WORKERS", "4"))
 

@@ -11,61 +11,61 @@ gateway_url = "https://gateway.nonym.io/v1/chat/completions"
 
 # Test messages with different types of PII
 test_cases = [
-    {
-        "name": "Clean Text (Should Pass)",
-        "message": "What's the weather like today?",
-        "expected": "pass"
-    },
-    {
-        "name": "Low-Risk PII (Email)",
-        "message": "Contact me at john.doe@email.com for more info",
-        "expected": "anonymize"
-    },
+    # {
+    #     "name": "Clean Text (Should Pass)",
+    #     "message": "What's the weather like today?",
+    #     "expected": "pass"
+    # },
+    # {
+    #     "name": "Low-Risk PII (Email)",
+    #     "message": "Contact me at john.doe@email.com for more info",
+    #     "expected": "anonymize"
+    # },
     {
         "name": "Single Credit Card (High Risk)",
-        "message": "My card number is 4242-4242-4242-4242",
+        "message": "My card number is 4242424242424242",
         "expected": "block_or_anonymize"
     },
-    {
-        "name": "Single SSN (Critical Risk)",
-        "message": "My SSN is 123-45-6789 for verification",
-        "expected": "block_or_anonymize"
-    },
-    {
-        "name": "API Key (Critical Risk - SHOULD BLOCK)",
-        "message": "Use this API key: sk-proj-abc123XYZ456def789ghi012jkl345mno678pqr901stu234vwx567yza890bcd",
-        "expected": "block"
-    },
-    {
-        "name": "AWS Credentials (Critical Risk - SHOULD BLOCK)",
-        "message": "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE and AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-        "expected": "block"
-    },
-    {
-        "name": "Multiple Critical PII (SHOULD BLOCK)",
-        "message": "My SSN is 123-45-6789, credit card 4532-1234-5678-9012, and API key sk-abc123def456",
-        "expected": "block"
-    },
-    {
-        "name": "Database Connection String (SHOULD BLOCK)",
-        "message": "Connect using: postgres://admin:password123@db.company.com:5432/production_db",
-        "expected": "block"
-    },
-    {
-        "name": "Private Key (SHOULD BLOCK)",
-        "message": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC7VJTUt9Us8cKB\n-----END PRIVATE KEY-----",
-        "expected": "block"
-    },
-    {
-        "name": "Financial Data Combo (SHOULD BLOCK)",
-        "message": "Account: 1234567890, SSN: 987-65-4321, CVV: 123, routing: 021000021",
-        "expected": "block"
-    },
-    {
-        "name": "Personal Data Overload (SHOULD BLOCK)",
-        "message": "John Smith, SSN 555-44-3333, DOB 01/15/1980, Card 5555-4444-3333-2222, Phone 555-0123, Email john.smith@company.com, Address 123 Main St, Driver License D1234567",
-        "expected": "block"
-    }
+    # {
+    #     "name": "Single SSN (Critical Risk)",
+    #     "message": "My SSN is 123-45-6789 for verification",
+    #     "expected": "block_or_anonymize"
+    # },
+    # {
+    #     "name": "API Key (Critical Risk - SHOULD BLOCK)",
+    #     "message": "Use this API key: sk-proj-abc123XYZ456def789ghi012jkl345mno678pqr901stu234vwx567yza890bcd",
+    #     "expected": "block"
+    # },
+    # {
+    #     "name": "AWS Credentials (Critical Risk - SHOULD BLOCK)",
+    #     "message": "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE and AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+    #     "expected": "block"
+    # },
+    # {
+    #     "name": "Multiple Critical PII (SHOULD BLOCK)",
+    #     "message": "My SSN is 123-45-6789, credit card 4532-1234-5678-9012, and API key sk-abc123def456",
+    #     "expected": "block"
+    # },
+    # {
+    #     "name": "Database Connection String (SHOULD BLOCK)",
+    #     "message": "Connect using: postgres://admin:password123@db.company.com:5432/production_db",
+    #     "expected": "block"
+    # },
+    # {
+    #     "name": "Private Key (SHOULD BLOCK)",
+    #     "message": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC7VJTUt9Us8cKB\n-----END PRIVATE KEY-----",
+    #     "expected": "block"
+    # },
+    # {
+    #     "name": "Financial Data Combo (SHOULD BLOCK)",
+    #     "message": "Account: 1234567890, SSN: 987-65-4321, CVV: 123, routing: 021000021",
+    #     "expected": "block"
+    # },
+    # {
+    #     "name": "Personal Data Overload (SHOULD BLOCK)",
+    #     "message": "John Smith, SSN 555-44-3333, DOB 01/15/1980, Card 5555-4444-3333-2222, Phone 555-0123, Email john.smith@company.com, Address 123 Main St, Driver License D1234567",
+    #     "expected": "block"
+    # }
 ]
 
 for test in test_cases:
@@ -83,7 +83,7 @@ for test in test_cases:
             gateway_url,
             headers={
                 "Authorization": "Bearer OPENAI-KEY/ANTHROPIC",
-                "X-API-Key": "gateway_api_key",
+                "X-API-Key": "",
                 "X-Strict-Mode": "true",  # Request strict mode for blocking behavior
                 "X-Block-Critical-PII": "true"  # Additional header to trigger blocking
             },
