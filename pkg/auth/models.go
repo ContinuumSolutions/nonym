@@ -19,6 +19,10 @@ type User struct {
 	CreatedAt      time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at" db:"updated_at"`
 
+	// Login security fields
+	FailedLoginAttempts int        `json:"-" db:"failed_login_attempts"`
+	LockedUntil         *time.Time `json:"-" db:"locked_until"`
+
 	// TOTP / 2FA fields
 	TOTPEnabled    bool       `json:"-" db:"totp_enabled"`
 	TOTPSecret     *string    `json:"-" db:"totp_secret"`

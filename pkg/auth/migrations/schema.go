@@ -323,6 +323,35 @@ func getPostgreSQLMigrations() []*Migration {
 			`,
 		},
 		{
+			Version:     9,
+			Name:        "session_security",
+			Description: "Add failed_login_attempts and locked_until to users; vendor_name to transactions; vendor_integrations table",
+			UpSQL: `
+				ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INTEGER NOT NULL DEFAULT 0;
+				ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP WITH TIME ZONE;
+				ALTER TABLE transactions ADD COLUMN IF NOT EXISTS vendor_name VARCHAR(100) NOT NULL DEFAULT '';
+
+				CREATE TABLE IF NOT EXISTS vendor_integrations (
+					id              TEXT PRIMARY KEY,
+					organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+					vendor_id       TEXT NOT NULL,
+					vendor_name     TEXT NOT NULL,
+					method          TEXT NOT NULL DEFAULT 'proxy',
+					status          TEXT NOT NULL DEFAULT 'active',
+					created_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+					updated_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+					UNIQUE (organization_id, vendor_id)
+				);
+				CREATE INDEX IF NOT EXISTS idx_vendor_integrations_org ON vendor_integrations(organization_id);
+			`,
+			DownSQL: `
+				DROP TABLE IF EXISTS vendor_integrations CASCADE;
+				ALTER TABLE transactions DROP COLUMN IF EXISTS vendor_name;
+				ALTER TABLE users DROP COLUMN IF EXISTS locked_until;
+				ALTER TABLE users DROP COLUMN IF EXISTS failed_login_attempts;
+			`,
+		},
+		{
 			Version:     8,
 			Name:        "compliance_frameworks",
 			Description: "Add compliance_frameworks to events; create compliance_fine_rates table",
@@ -661,6 +690,32 @@ func getSQLiteMigrations() []*Migration {
 			DownSQL: `
 				DROP TABLE IF EXISTS totp_backup_codes;
 				DROP TABLE IF EXISTS totp_setup_sessions;
+			`,
+		},
+		{
+			Version:     9,
+			Name:        "session_security",
+			Description: "Add failed_login_attempts and locked_until to users; vendor_name to transactions; vendor_integrations table",
+			UpSQL: `
+				ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER NOT NULL DEFAULT 0;
+				ALTER TABLE users ADD COLUMN locked_until DATETIME;
+				ALTER TABLE transactions ADD COLUMN vendor_name TEXT NOT NULL DEFAULT '';
+
+				CREATE TABLE IF NOT EXISTS vendor_integrations (
+					id              TEXT PRIMARY KEY,
+					organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+					vendor_id       TEXT NOT NULL,
+					vendor_name     TEXT NOT NULL,
+					method          TEXT NOT NULL DEFAULT 'proxy',
+					status          TEXT NOT NULL DEFAULT 'active',
+					created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+					updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+					UNIQUE (organization_id, vendor_id)
+				);
+				CREATE INDEX IF NOT EXISTS idx_vendor_integrations_org ON vendor_integrations(organization_id);
+			`,
+			DownSQL: `
+				DROP TABLE IF EXISTS vendor_integrations;
 			`,
 		},
 		{

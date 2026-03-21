@@ -254,6 +254,15 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 	// Benchmarks
 	app.Get("/api/v1/benchmarks", audit.HandleGetBenchmarks)
 
+	// Events
+	app.Get("/api/v1/events", authMiddleware, audit.HandleGetEvents)
+	app.Get("/api/v1/events/:id", authMiddleware, audit.HandleGetEvent)
+	app.Patch("/api/v1/events/:id/status", authMiddleware, audit.HandleUpdateEventStatus)
+
+	// Webhooks
+	app.Post("/api/v1/webhooks", authMiddleware, audit.HandleCreateWebhook)
+	app.Get("/api/v1/webhooks", authMiddleware, audit.HandleGetWebhooks)
+
 	// Protection and analytics endpoints
 	app.Get("/api/v1/protection-events", authMiddleware, audit.HandleGetProtectionEvents)
 	app.Get("/api/v1/protection-stats", authMiddleware, audit.HandleGetProtectionStats)
