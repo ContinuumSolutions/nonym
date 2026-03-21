@@ -11,16 +11,16 @@ gateway_url = "https://gateway.nonym.io/v1/chat/completions"
 
 # Test messages with different types of PII
 test_cases = [
-    # {
-    #     "name": "Clean Text (Should Pass)",
-    #     "message": "What's the weather like today?",
-    #     "expected": "pass"
-    # },
-    # {
-    #     "name": "Low-Risk PII (Email)",
-    #     "message": "Contact me at john.doe@email.com for more info",
-    #     "expected": "anonymize"
-    # },
+    {
+        "name": "Clean Text (Should Pass)",
+        "message": "What's the weather like today?",
+        "expected": "pass"
+    },
+    {
+        "name": "Low-Risk PII (Email)",
+        "message": "Contact me at john.doe@email.com for more info",
+        "expected": "anonymize"
+    },
     {
         "name": "Single Credit Card (High Risk)",
         "message": "My card number is 4242-4242-4242-4242",
@@ -83,7 +83,7 @@ for test in test_cases:
             gateway_url,
             headers={
                 "Authorization": "Bearer OPENAI-KEY/ANTHROPIC",
-                "X-API-Key": "",
+                "X-API-Key": "gateway_api_key",
                 "X-Strict-Mode": "true",  # Request strict mode for blocking behavior
                 "X-Block-Critical-PII": "true"  # Additional header to trigger blocking
             },
