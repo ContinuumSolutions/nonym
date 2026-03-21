@@ -9,8 +9,14 @@ info:
     ## Authentication
 
     This API uses two authentication methods:
-    - **Bearer Token Authentication** for dashboard/management endpoints (obtained via login)
-    - **API Key Authentication** for proxy endpoints (using X-API-Key header)
+    - **Bearer Token** (`Authorization: Bearer <jwt>`) — dashboard and management endpoints (obtained via login)
+    - **Nonym API Key** (`X-API-Key: <nonym_key>`) — proxy endpoints
+
+    ## Provider keys
+
+    Nonym **never stores provider keys** (OpenAI, Anthropic, Datadog, etc.).
+    Pass your provider key in the `Authorization: Bearer <provider_key>` header of each proxy request.
+    Nonym forwards it unchanged to the upstream provider after stripping PII from the payload.
 
     ## Features
 
@@ -1463,10 +1469,10 @@ paths:
               $ref: '#/components/schemas/ScanRequest'
             example:
               env:
-                SENTRY_DSN: "https://abc123@o123456.ingest.sentry.io/789"
-                DD_API_KEY: "abc123def456"
+                SENTRY_DSN: "https://<key>@o<org>.ingest.sentry.io/<project>"
+                DD_API_KEY: "<your-datadog-key>"
               config:
-                posthogKey: "phc_abc123"
+                posthogKey: "<your-posthog-key>"
       responses:
         '200':
           description: Scan results
@@ -1617,9 +1623,40 @@ paths:
     post:
       tags: [Proxy]
       summary: Chat completions proxy
-      description: Proxy endpoint for OpenAI-compatible chat completions with PII protection
+      description: |
+        Drop-in replacement for OpenAI-compatible chat completions endpoints.
+        Nonym strips PII from the request before forwarding it to the upstream provider,
+        then returns the provider's response unchanged.
+
+        **Two keys, two headers — do not confuse them:**
+
+        | Header | Value | Purpose |
+        |--------|-------|---------|
+        | `X-API-Key` | Your Nonym API key | Authenticates your app with the Nonym gateway |
+        | `Authorization` | `Bearer <provider_key>` | Your provider key (OpenAI, Anthropic, etc.) — passed through as-is, never stored by Nonym |
+
+        Point your existing OpenAI SDK at the Nonym gateway URL and add `X-API-Key`.
+        No other changes are needed.
       security:
         - apiKeyAuth: []
+      parameters:
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+            example: "Bearer sk-..."
+          description: |
+            Your AI provider API key in `Bearer <key>` format.
+            Nonym forwards this header unchanged to the upstream provider.
+            It is never logged or stored.
+        - in: header
+          name: X-Nonym-Vendor
+          required: false
+          schema:
+            type: string
+            example: "openai"
+          description: Optional vendor tag for audit attribution (set automatically by `@nonym/*` SDKs).
       requestBody:
         required: true
         content:
@@ -1628,20 +1665,20 @@ paths:
               type: object
               description: OpenAI-compatible chat completion request
               example:
-                model: "gpt-3.5-turbo"
+                model: "gpt-4o"
                 messages:
                   - role: "user"
-                    content: "Hello, my email is john@example.com"
+                    content: "Summarise this support ticket for user John Smith."
       responses:
         '200':
-          description: Chat completion response (PII anonymized)
+          description: Provider response returned unchanged after PII has been stripped from the request.
           content:
             application/json:
               schema:
                 type: object
-                description: OpenAI-compatible response with anonymized content
+                description: OpenAI-compatible response
         '401':
-          description: API key required
+          description: Missing or invalid Nonym API key (`X-API-Key`)
           content:
             application/json:
               schema:
@@ -1651,9 +1688,18 @@ paths:
     post:
       tags: [Proxy]
       summary: Completions proxy
-      description: Proxy endpoint for text completions with PII protection
+      description: |
+        Legacy text completions proxy. Provider key is passed in `Authorization: Bearer <key>`;
+        Nonym API key in `X-API-Key`. See `/v1/chat/completions` for full header details.
       security:
         - apiKeyAuth: []
+      parameters:
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+          description: Provider API key (`Bearer <key>`). Forwarded unchanged, never stored.
       requestBody:
         required: true
         content:
@@ -1664,7 +1710,7 @@ paths:
         '200':
           description: Completion response
         '401':
-          description: API key required
+          description: Missing or invalid Nonym API key
           content:
             application/json:
               schema:
@@ -1674,9 +1720,18 @@ paths:
     post:
       tags: [Proxy]
       summary: Embeddings proxy
-      description: Proxy endpoint for embeddings with PII protection
+      description: |
+        Embeddings proxy. Provider key is passed in `Authorization: Bearer <key>`;
+        Nonym API key in `X-API-Key`. See `/v1/chat/completions` for full header details.
       security:
         - apiKeyAuth: []
+      parameters:
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+          description: Provider API key (`Bearer <key>`). Forwarded unchanged, never stored.
       requestBody:
         required: true
         content:
@@ -1687,7 +1742,7 @@ paths:
         '200':
           description: Embeddings response
         '401':
-          description: API key required
+          description: Missing or invalid Nonym API key
           content:
             application/json:
               schema:
@@ -1697,14 +1752,23 @@ paths:
     get:
       tags: [Proxy]
       summary: List models proxy
-      description: Proxy endpoint to list available models
+      description: |
+        Lists models available from the configured upstream provider.
+        Provider key in `Authorization: Bearer <key>`; Nonym API key in `X-API-Key`.
       security:
         - apiKeyAuth: []
+      parameters:
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+          description: Provider API key (`Bearer <key>`). Forwarded unchanged, never stored.
       responses:
         '200':
-          description: List of available models
+          description: List of available models from the upstream provider
         '401':
-          description: API key required
+          description: Missing or invalid Nonym API key
           content:
             application/json:
               schema:
@@ -1721,7 +1785,11 @@ components:
       type: apiKey
       in: header
       name: X-API-Key
-      description: API key for accessing proxy endpoints
+      description: |
+        Your **Nonym** API key — authenticates your application with the Nonym gateway.
+        This is NOT the provider key (OpenAI, Anthropic, etc.).
+        Provider keys are passed directly in the `Authorization` header of each request
+        and are forwarded unchanged to the upstream provider after PII is stripped.
 
   schemas:
     Error:
