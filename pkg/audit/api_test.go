@@ -201,8 +201,8 @@ func TestHandleGetProtectionEvents_API(t *testing.T) {
 
 	for _, data := range testEvents {
 		_, err := testDB.Exec(`
-			INSERT INTO events (id, type, pii_type, action, provider, severity, status, description)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			INSERT INTO events (id, type, pii_type, action, provider, severity, status, description, organization_id)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
 		`, data.id, data.eventType, data.piiType, data.action, data.provider, data.severity, data.status, data.description)
 		if err != nil {
 			t.Fatalf("Failed to insert test data: %v", err)

@@ -69,25 +69,29 @@ type StatisticsResponse struct {
 
 // HandleGetProtectionEvents handles GET /api/v1/protection-events
 func HandleGetProtectionEvents(c *fiber.Ctx) error {
-	// Parse query parameters
+	organizationID, ok := c.Locals("organization_id").(int)
+	if !ok || organizationID == 0 {
+		return c.Status(401).JSON(fiber.Map{
+			"error": "Authentication required",
+		})
+	}
+
 	limit := c.QueryInt("limit", 50)
 	offset := c.QueryInt("offset", 0)
-
-	// Limit max results
 	if limit > 200 {
 		limit = 200
 	}
 
-	// Create event filter from query parameters
 	filter := EventFilter{
-		Limit:    limit,
-		Offset:   offset,
-		Type:     c.Query("eventType"), // Map eventType to Type for consistency with frontend
-		PIIType:  c.Query("pii_type"),
-		Provider: c.Query("provider"),
-		Severity: c.Query("severity"),
-		Status:   c.Query("status"),
-		UserID:   c.Query("user_id"),
+		Limit:          limit,
+		Offset:         offset,
+		OrganizationID: organizationID,
+		Type:           c.Query("eventType"), // Map eventType to Type for consistency with frontend
+		PIIType:        c.Query("pii_type"),
+		Provider:       c.Query("provider"),
+		Severity:       c.Query("severity"),
+		Status:         c.Query("status"),
+		UserID:         c.Query("user_id"),
 	}
 
 	// Call the actual database query function

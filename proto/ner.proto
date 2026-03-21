@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package ner;
+
+option go_package = "github.com/ContinuumSolutions/nonym/pkg/ner/ner_pb";
+
+message AnnotateRequest {
+    string text = 1;
+    repeated string labels = 2;
+    float threshold = 3;
+}
+
+message Span {
+    int32 start = 1;
+    int32 end = 2;
+    string label = 3;
+    float score = 4;
+    string text = 5;
+}
+
+message AnnotateResponse {
+    string text = 1;
+    repeated string tokens = 2;
+    repeated Span spans = 3;
+}
+
+message BatchAnnotateRequest {
+    repeated string texts = 1;
+    repeated string labels = 2;
+    float threshold = 3;
+}
+
+message BatchAnnotateResponse {
+    repeated AnnotateResponse annotations = 1;
+}
+
+service NERService {
+    rpc Annotate(AnnotateRequest) returns (AnnotateResponse);
+    rpc BatchAnnotate(BatchAnnotateRequest) returns (BatchAnnotateResponse);
+}

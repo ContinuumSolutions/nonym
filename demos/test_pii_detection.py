@@ -83,7 +83,7 @@ for test in test_cases:
             gateway_url,
             headers={
                 "Authorization": "Bearer OPENAI-KEY/ANTHROPIC",
-                "X-API-Key": "spg_9z5DN9x1ZTAWg5OVvpchLv0oFL9TxdYe",
+                "X-API-Key": "gateway_api_key",
                 "X-Strict-Mode": "true",  # Request strict mode for blocking behavior
                 "X-Block-Critical-PII": "true"  # Additional header to trigger blocking
             },
@@ -168,7 +168,7 @@ print("- blocked_entities: ['ssn', 'credit_card', 'api_key', 'private_key']")
 print("- Or use environment variable: GATEWAY_STRICT_MODE=true")
 
 print("\n📈 To check audit logs and events:")
-print("curl -H 'X-API-Key: spg_9z5DN9x1ZTAWg5OVvpchLv0oFL9TxdYe' \\")
+print("curl -H 'X-API-Key: gateway_api_key' \\")
 print("     https://gateway.nonym.io/api/v1/protection-events?limit=10")
 
 print("\n🎯 Expected blocking triggers:")

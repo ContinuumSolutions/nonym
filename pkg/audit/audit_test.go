@@ -40,6 +40,7 @@ func setupTestDB(t *testing.T) *sql.DB {
 			action TEXT NOT NULL,
 			request_id TEXT,
 			user_id TEXT,
+			organization_id INTEGER NOT NULL DEFAULT 1,
 			provider TEXT,
 			model TEXT,
 			metadata TEXT DEFAULT '{}',
@@ -206,8 +207,8 @@ func TestGetEvents(t *testing.T) {
 
 	for _, data := range testData {
 		_, err := testDB.Exec(`
-			INSERT INTO events (id, type, pii_type, action, provider, severity, status, description)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			INSERT INTO events (id, type, pii_type, action, provider, severity, status, description, organization_id)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
 		`, data.id, data.eventType, data.piiType, data.action, data.provider, data.severity, data.status, data.description)
 		if err != nil {
 			t.Fatalf("Failed to insert test data: %v", err)
@@ -224,8 +225,9 @@ func TestGetEvents(t *testing.T) {
 		{
 			name: "Get all events",
 			filter: EventFilter{
-				Limit:  10,
-				Offset: 0,
+				Limit:          10,
+				Offset:         0,
+				OrganizationID: 1,
 			},
 			expectedCount: 4,
 			expectError:   false,
@@ -233,9 +235,10 @@ func TestGetEvents(t *testing.T) {
 		{
 			name: "Filter by type",
 			filter: EventFilter{
-				Limit:  10,
-				Offset: 0,
-				Type:   "pii_detected",
+				Limit:          10,
+				Offset:         0,
+				OrganizationID: 1,
+				Type:           "pii_detected",
 			},
 			expectedCount: 3,
 			expectError:   false,
@@ -243,9 +246,10 @@ func TestGetEvents(t *testing.T) {
 		{
 			name: "Filter by provider",
 			filter: EventFilter{
-				Limit:    10,
-				Offset:   0,
-				Provider: "openai",
+				Limit:          10,
+				Offset:         0,
+				OrganizationID: 1,
+				Provider:       "openai",
 			},
 			expectedCount: 2,
 			expectError:   false,
@@ -253,9 +257,10 @@ func TestGetEvents(t *testing.T) {
 		{
 			name: "Filter by severity",
 			filter: EventFilter{
-				Limit:    10,
-				Offset:   0,
-				Severity: "critical",
+				Limit:          10,
+				Offset:         0,
+				OrganizationID: 1,
+				Severity:       "critical",
 			},
 			expectedCount: 1,
 			expectError:   false,
@@ -263,9 +268,10 @@ func TestGetEvents(t *testing.T) {
 		{
 			name: "Filter by status",
 			filter: EventFilter{
-				Limit:  10,
-				Offset: 0,
-				Status: "resolved",
+				Limit:          10,
+				Offset:         0,
+				OrganizationID: 1,
+				Status:         "resolved",
 			},
 			expectedCount: 1,
 			expectError:   false,
@@ -273,8 +279,9 @@ func TestGetEvents(t *testing.T) {
 		{
 			name: "Limit and offset",
 			filter: EventFilter{
-				Limit:  2,
-				Offset: 1,
+				Limit:          2,
+				Offset:         1,
+				OrganizationID: 1,
 			},
 			expectedCount: 2,
 			expectError:   false,
@@ -469,14 +476,14 @@ func TestEventJSONParsing(t *testing.T) {
 	metadataJSON, _ := json.Marshal(metadata)
 
 	_, err := testDB.Exec(`
-		INSERT INTO events (id, type, action, metadata)
-		VALUES (?, ?, ?, ?)
+		INSERT INTO events (id, type, action, metadata, organization_id)
+		VALUES (?, ?, ?, ?, 1)
 	`, "evt_json_test", "pii_detected", "anonymized", string(metadataJSON))
 	if err != nil {
 		t.Fatalf("Failed to insert test data: %v", err)
 	}
 
-	response, err := GetEvents(EventFilter{Limit: 1, Offset: 0})
+	response, err := GetEvents(EventFilter{Limit: 1, Offset: 0, OrganizationID: 1})
 	if err != nil {
 		t.Fatalf("Failed to get events: %v", err)
 	}
