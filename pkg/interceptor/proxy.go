@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -102,6 +103,8 @@ func HandleProxy(c *fiber.Ctx) error {
 	if ner.ShouldBlock(redactionDetails) {
 		blockedRequests++
 		audit.LogTransaction(requestID, "blocked", "Content blocked due to sensitive data", 0, redactionDetails, organizationID, userID)
+		audit.LogEvent("request_blocked", primaryPIIType(redactionDetails), "blocked",
+			requestID, provider, "", strconv.Itoa(userID), organizationID, redactionDetails)
 		return c.Status(403).JSON(fiber.Map{
 			"error": "Request blocked due to sensitive content",
 			"policy": "strict_mode",
@@ -155,6 +158,12 @@ func HandleProxy(c *fiber.Ctx) error {
 
 	// Log transaction
 	audit.LogTransaction(requestID, "success", provider, resp.StatusCode, redactionDetails, organizationID, userID)
+
+	// Log a security event when PII was detected and anonymized
+	if len(redactionDetails) > 0 {
+		audit.LogEvent("pii_detected", primaryPIIType(redactionDetails), "anonymized",
+			requestID, provider, "", strconv.Itoa(userID), organizationID, redactionDetails)
+	}
 
 	// Copy response headers
 	for key, value := range proxyResponse.Headers {
@@ -273,4 +282,20 @@ func calculateSuccessRate() float64 {
 func calculateAvgProcessingTime() float64 {
 	// This would be calculated from audit logs
 	return 25.5 // Placeholder milliseconds
+}
+
+// primaryPIIType returns the highest-severity entity type found, or "multiple"
+// when several different types are present.
+func primaryPIIType(details []ner.RedactionDetail) string {
+	if len(details) == 0 {
+		return ""
+	}
+	seen := make(map[ner.EntityType]struct{})
+	for _, d := range details {
+		seen[d.EntityType] = struct{}{}
+	}
+	if len(seen) == 1 {
+		return strings.ToLower(string(details[0].EntityType))
+	}
+	return "multiple"
 }

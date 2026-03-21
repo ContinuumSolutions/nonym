@@ -12,33 +12,35 @@ import (
 
 // Event represents a protection event
 type Event struct {
-	ID          string                `json:"id" db:"id"`
-	Timestamp   time.Time             `json:"timestamp" db:"timestamp"`
-	Type        string                `json:"type" db:"type"` // pii_detected, request_blocked, provider_error, rate_limit_exceeded
-	PIIType     string                `json:"pii_type,omitempty" db:"pii_type"`
-	Action      string                `json:"action" db:"action"` // anonymized, blocked, detected
-	RequestID   string                `json:"request_id" db:"request_id"`
-	UserID      string                `json:"user_id,omitempty" db:"user_id"`
-	Provider    string                `json:"provider,omitempty" db:"provider"`
-	Model       string                `json:"model,omitempty" db:"model"`
-	Metadata    map[string]interface{} `json:"metadata,omitempty"`
-	Severity    string                `json:"severity" db:"severity"` // low, medium, high, critical
-	Status      string                `json:"status" db:"status"` // open, resolved, ignored
-	Description string                `json:"description,omitempty" db:"description"`
+	ID             string                 `json:"id" db:"id"`
+	Timestamp      time.Time              `json:"timestamp" db:"timestamp"`
+	Type           string                 `json:"type" db:"type"` // pii_detected, request_blocked, provider_error, rate_limit_exceeded
+	PIIType        string                 `json:"pii_type,omitempty" db:"pii_type"`
+	Action         string                 `json:"action" db:"action"` // anonymized, blocked, detected
+	RequestID      string                 `json:"request_id" db:"request_id"`
+	UserID         string                 `json:"user_id,omitempty" db:"user_id"`
+	OrganizationID int                    `json:"organization_id" db:"organization_id"`
+	Provider       string                 `json:"provider,omitempty" db:"provider"`
+	Model          string                 `json:"model,omitempty" db:"model"`
+	Metadata       map[string]interface{} `json:"metadata,omitempty"`
+	Severity       string                 `json:"severity" db:"severity"` // low, medium, high, critical
+	Status         string                 `json:"status" db:"status"`     // open, resolved, ignored
+	Description    string                 `json:"description,omitempty" db:"description"`
 }
 
 // EventFilter represents filtering options for events
 type EventFilter struct {
-	Limit       int       `json:"limit"`
-	Offset      int       `json:"offset"`
-	Type        string    `json:"type,omitempty"`
-	PIIType     string    `json:"pii_type,omitempty"`
-	Provider    string    `json:"provider,omitempty"`
-	Severity    string    `json:"severity,omitempty"`
-	Status      string    `json:"status,omitempty"`
-	StartTime   time.Time `json:"start_time,omitempty"`
-	EndTime     time.Time `json:"end_time,omitempty"`
-	UserID      string    `json:"user_id,omitempty"`
+	Limit          int       `json:"limit"`
+	Offset         int       `json:"offset"`
+	OrganizationID int       `json:"organization_id"`
+	Type           string    `json:"type,omitempty"`
+	PIIType        string    `json:"pii_type,omitempty"`
+	Provider       string    `json:"provider,omitempty"`
+	Severity       string    `json:"severity,omitempty"`
+	Status         string    `json:"status,omitempty"`
+	StartTime      time.Time `json:"start_time,omitempty"`
+	EndTime        time.Time `json:"end_time,omitempty"`
+	UserID         string    `json:"user_id,omitempty"`
 }
 
 // EventsResponse represents the response for events API
@@ -69,18 +71,20 @@ type WebhookRequest struct {
 	Secret string   `json:"secret,omitempty"`
 }
 
-// LogEvent creates and stores a new protection event
-func LogEvent(eventType, piiType, action, requestID, provider, model, userID string, redactionDetails []ner.RedactionDetail) *Event {
+// LogEvent creates and stores a new protection event.
+// organizationID scopes the event to the owning organization.
+func LogEvent(eventType, piiType, action, requestID, provider, model, userID string, organizationID int, redactionDetails []ner.RedactionDetail) *Event {
 	event := &Event{
-		ID:        fmt.Sprintf("evt_%d", time.Now().UnixNano()),
-		Timestamp: time.Now(),
-		Type:      eventType,
-		PIIType:   piiType,
-		Action:    action,
-		RequestID: requestID,
-		UserID:    userID,
-		Provider:  provider,
-		Model:     model,
+		ID:             fmt.Sprintf("evt_%d", time.Now().UnixNano()),
+		Timestamp:      time.Now(),
+		Type:           eventType,
+		PIIType:        piiType,
+		Action:         action,
+		RequestID:      requestID,
+		UserID:         userID,
+		OrganizationID: organizationID,
+		Provider:       provider,
+		Model:          model,
 		Metadata: map[string]interface{}{
 			"redaction_count":   len(redactionDetails),
 			"redaction_details": redactionDetails,
@@ -138,29 +142,29 @@ func storeEvent(event *Event) error {
 	metadataJSON, _ := json.Marshal(event.Metadata)
 
 	query := formatQuery(`INSERT INTO events (
-		id, timestamp, type, pii_type, action, request_id, user_id,
+		id, timestamp, type, pii_type, action, request_id, user_id, organization_id,
 		provider, model, metadata, severity, status, description
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 
 	_, err := db.Exec(query,
 		event.ID, event.Timestamp, event.Type, event.PIIType, event.Action,
-		event.RequestID, event.UserID, event.Provider, event.Model,
+		event.RequestID, event.UserID, event.OrganizationID, event.Provider, event.Model,
 		string(metadataJSON), event.Severity, event.Status, event.Description)
 
 	return err
 }
 
-// GetEvents retrieves events with filtering
+// GetEvents retrieves events with filtering, scoped to an organization.
 func GetEvents(filter EventFilter) (*EventsResponse, error) {
 	if db == nil {
 		return nil, fmt.Errorf("database not initialized")
 	}
 
-	// Build query with filters
+	// Build base query — organization_id is always required
 	query := `SELECT id, timestamp, type, pii_type, action, request_id, user_id,
-			  provider, model, metadata, severity, status, description
-			  FROM events WHERE 1=1`
-	args := []interface{}{}
+			  organization_id, provider, model, metadata, severity, status, description
+			  FROM events WHERE organization_id = ?`
+	args := []interface{}{filter.OrganizationID}
 
 	if filter.Type != "" {
 		query += " AND type = ?"
@@ -195,16 +199,17 @@ func GetEvents(filter EventFilter) (*EventsResponse, error) {
 		args = append(args, filter.EndTime)
 	}
 
-	// Count total for pagination
-	countQuery := formatQuery("SELECT COUNT(*) FROM (" + query + ")")
+	// Format the filter-only query for PostgreSQL before wrapping in COUNT(*)
+	filteredQuery := formatQuery(query)
+
+	// Count total matching rows for pagination
+	countQuery := "SELECT COUNT(*) FROM (" + filteredQuery + ") AS _count"
 	var total int64
 	db.QueryRow(countQuery, args...).Scan(&total)
 
-	// Add ordering and pagination
+	// Add ordering and pagination then format the full query
 	query += " ORDER BY timestamp DESC LIMIT ? OFFSET ?"
 	args = append(args, filter.Limit, filter.Offset)
-
-	// Format query for PostgreSQL parameter binding
 	query = formatQuery(query)
 
 	rows, err := db.Query(query, args...)
@@ -228,7 +233,7 @@ func GetEvents(filter EventFilter) (*EventsResponse, error) {
 		var description *string
 
 		err := rows.Scan(&event.ID, &event.Timestamp, &event.Type, &piiType,
-			&event.Action, &requestID, &userID, &provider,
+			&event.Action, &requestID, &userID, &event.OrganizationID, &provider,
 			&model, &metadataJSON, &event.Severity, &event.Status, &description)
 		if err != nil {
 			continue
@@ -272,23 +277,28 @@ func GetEvents(filter EventFilter) (*EventsResponse, error) {
 
 // HandleGetEvents handles GET /api/v1/events
 func HandleGetEvents(c *fiber.Ctx) error {
-	// Parse query parameters
-	filter := EventFilter{
-		Limit:    c.QueryInt("limit", 50),
-		Offset:   c.QueryInt("offset", 0),
-		Type:     c.Query("type"),
-		PIIType:  c.Query("pii_type"),
-		Provider: c.Query("provider"),
-		Severity: c.Query("severity"),
-		Status:   c.Query("status"),
+	organizationID, ok := c.Locals("organization_id").(int)
+	if !ok || organizationID == 0 {
+		return c.Status(401).JSON(fiber.Map{
+			"error": "Authentication required",
+		})
 	}
 
-	// Limit max results
+	filter := EventFilter{
+		Limit:          c.QueryInt("limit", 50),
+		Offset:         c.QueryInt("offset", 0),
+		OrganizationID: organizationID,
+		Type:           c.Query("type"),
+		PIIType:        c.Query("pii_type"),
+		Provider:       c.Query("provider"),
+		Severity:       c.Query("severity"),
+		Status:         c.Query("status"),
+	}
+
 	if filter.Limit > 200 {
 		filter.Limit = 200
 	}
 
-	// Parse time filters
 	if startTime := c.Query("start_time"); startTime != "" {
 		if t, err := time.Parse(time.RFC3339, startTime); err == nil {
 			filter.StartTime = t
@@ -297,15 +307,6 @@ func HandleGetEvents(c *fiber.Ctx) error {
 	if endTime := c.Query("end_time"); endTime != "" {
 		if t, err := time.Parse(time.RFC3339, endTime); err == nil {
 			filter.EndTime = t
-		}
-	}
-
-	// Get user ID from context if available
-	if user := c.Locals("user"); user != nil {
-		if u, ok := user.(map[string]interface{}); ok {
-			if userID, ok := u["id"].(string); ok {
-				filter.UserID = userID
-			}
 		}
 	}
 
@@ -501,6 +502,7 @@ func InitializeEventsTables() error {
 			action TEXT NOT NULL,
 			request_id TEXT,
 			user_id TEXT,
+			organization_id INTEGER NOT NULL DEFAULT 1,
 			provider TEXT,
 			model TEXT,
 			metadata TEXT DEFAULT '{}',
@@ -513,6 +515,7 @@ func InitializeEventsTables() error {
 		`CREATE INDEX IF NOT EXISTS idx_events_type ON events(type)`,
 		`CREATE INDEX IF NOT EXISTS idx_events_user_id ON events(user_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_events_severity ON events(severity)`,
+		`CREATE INDEX IF NOT EXISTS idx_events_organization_id ON events(organization_id)`,
 		`CREATE TABLE IF NOT EXISTS webhooks (
 			id TEXT PRIMARY KEY,
 			url TEXT NOT NULL,
@@ -521,9 +524,11 @@ func InitializeEventsTables() error {
 			status TEXT DEFAULT 'active',
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			last_trigger TIMESTAMP,
-			user_id TEXT NOT NULL
+			user_id TEXT NOT NULL,
+			organization_id INTEGER NOT NULL DEFAULT 1
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_webhooks_user_id ON webhooks(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_webhooks_organization_id ON webhooks(organization_id)`,
 	}
 
 	for _, query := range queries {

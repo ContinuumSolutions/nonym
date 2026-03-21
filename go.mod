@@ -11,6 +11,8 @@ require (
 	github.com/lib/pq v1.11.2
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/crypto v0.49.0
+	google.golang.org/grpc v1.79.3
+	google.golang.org/protobuf v1.36.11
 	modernc.org/sqlite v1.46.1
 )
 
@@ -34,10 +36,7 @@ require (
 	golang.org/x/net v0.51.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
-	golang.org/x/tools v0.42.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
-	google.golang.org/grpc v1.79.3 // indirect
-	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	modernc.org/libc v1.67.6 // indirect
 	modernc.org/mathutil v1.7.1 // indirect

@@ -17,7 +17,7 @@ ENV GLINER_MODEL=urchade/gliner_medium-v2.1
 ENV NER_GRPC_PORT=50051
 ENV NER_MAX_WORKERS=4
 
-# Pre-download model weights at build time so the container starts quickly
-RUN python3 -c "from gliner import GLiNER; GLiNER.from_pretrained('urchade/gliner_medium-v2.1')"
+# Model weights are downloaded on first start and cached in HF_HOME.
+# Mount a volume at /root/.cache/huggingface to persist across restarts.
 
 CMD ["python", "gliner_server.py"]

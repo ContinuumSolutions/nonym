@@ -1,4 +1,5 @@
-grpcio==1.59.3
-grpcio-tools==1.59.3
+grpcio==1.67.1
+grpcio-tools==1.67.1
+torch==2.4.1
 gliner==0.2.15
-torch==2.1.2
+numpy<2

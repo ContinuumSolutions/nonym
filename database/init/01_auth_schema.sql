@@ -95,6 +95,38 @@ CREATE TABLE transactions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Protection events table (PII detected, requests blocked, etc.)
+CREATE TABLE events (
+    id TEXT PRIMARY KEY,
+    timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    type VARCHAR(100) NOT NULL,
+    pii_type VARCHAR(100),
+    action VARCHAR(50) NOT NULL,
+    request_id VARCHAR(255),
+    user_id TEXT,
+    organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    provider VARCHAR(100),
+    model VARCHAR(100),
+    metadata JSONB DEFAULT '{}',
+    severity VARCHAR(20) DEFAULT 'low',
+    status VARCHAR(20) DEFAULT 'open',
+    description TEXT,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Webhooks table
+CREATE TABLE webhooks (
+    id TEXT PRIMARY KEY,
+    url TEXT NOT NULL,
+    events JSONB NOT NULL DEFAULT '[]',
+    secret TEXT,
+    status VARCHAR(20) DEFAULT 'active',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    last_trigger TIMESTAMP WITH TIME ZONE,
+    user_id TEXT NOT NULL,
+    organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE
+);
+
 -- Audit log table
 CREATE TABLE audit_logs (
     id SERIAL PRIMARY KEY,
@@ -125,6 +157,13 @@ CREATE INDEX idx_transactions_user_id ON transactions(user_id);
 CREATE INDEX idx_transactions_created_at ON transactions(created_at);
 CREATE INDEX idx_transactions_provider ON transactions(provider);
 CREATE INDEX idx_transactions_status ON transactions(status);
+CREATE INDEX idx_events_timestamp ON events(timestamp);
+CREATE INDEX idx_events_type ON events(type);
+CREATE INDEX idx_events_organization_id ON events(organization_id);
+CREATE INDEX idx_events_severity ON events(severity);
+CREATE INDEX idx_events_user_id ON events(user_id);
+CREATE INDEX idx_webhooks_organization_id ON webhooks(organization_id);
+CREATE INDEX idx_webhooks_user_id ON webhooks(user_id);
 CREATE INDEX idx_audit_logs_organization_id ON audit_logs(organization_id);
 CREATE INDEX idx_audit_logs_user_id ON audit_logs(user_id);
 CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at);
