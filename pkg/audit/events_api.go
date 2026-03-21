@@ -1,8 +1,15 @@
 package audit
 
 import (
+	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"strconv"
 	"time"
 
@@ -488,6 +495,109 @@ func HandleGetWebhooks(c *fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"webhooks": webhooks,
+	})
+}
+
+// HandleTestWebhook sends a dummy payload to the webhook URL so the caller
+// can verify their endpoint is reachable and correctly handles Nonym events.
+// POST /api/v1/webhooks/:id/test
+func HandleTestWebhook(c *fiber.Ctx) error {
+	webhookID := c.Params("id")
+	orgID, _ := c.Locals("organization_id").(int)
+
+	// Fetch the webhook (scoped to the caller's organisation)
+	var wh Webhook
+	var eventsJSON string
+	var lastTrigger sql.NullTime
+	row := db.QueryRow(formatQuery(`
+		SELECT id, url, events, secret, status, created_at, last_trigger, organization_id
+		FROM webhooks WHERE id = ? AND organization_id = ?
+	`), webhookID, orgID)
+	err := row.Scan(&wh.ID, &wh.URL, &eventsJSON, &wh.Secret,
+		&wh.Status, &wh.CreatedAt, &lastTrigger, &wh.OrganizationID)
+	if err == sql.ErrNoRows {
+		return c.Status(404).JSON(fiber.Map{"error": "Webhook not found"})
+	}
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": "Failed to fetch webhook"})
+	}
+	json.Unmarshal([]byte(eventsJSON), &wh.Events)
+
+	// Build a representative test payload that mirrors a real Nonym event.
+	testPayload := map[string]interface{}{
+		"id":        fmt.Sprintf("evt_test_%d", time.Now().UnixNano()),
+		"type":      "webhook.test",
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
+		"test":      true,
+		"event": map[string]interface{}{
+			"id":          fmt.Sprintf("evt_%d", time.Now().UnixNano()),
+			"type":        "pii_detected",
+			"pii_type":    "EMAIL",
+			"action":      "anonymized",
+			"severity":    "medium",
+			"provider":    "openai",
+			"description": "Test event — PII (email address) detected and redacted before reaching the vendor.",
+			"timestamp":   time.Now().UTC().Format(time.RFC3339),
+		},
+		"webhook": map[string]interface{}{
+			"id":     wh.ID,
+			"url":    wh.URL,
+			"events": wh.Events,
+		},
+	}
+
+	body, _ := json.Marshal(testPayload)
+
+	// Sign the payload with HMAC-SHA256 if a secret is configured.
+	sig := ""
+	if wh.Secret != "" {
+		mac := hmac.New(sha256.New, []byte(wh.Secret))
+		mac.Write(body)
+		sig = "sha256=" + hex.EncodeToString(mac.Sum(nil))
+	}
+
+	// Deliver the test payload.
+	req, err := http.NewRequest(http.MethodPost, wh.URL, bytes.NewReader(body))
+	if err != nil {
+		return c.Status(422).JSON(fiber.Map{
+			"success": false,
+			"error":   fmt.Sprintf("Invalid webhook URL: %v", err),
+		})
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "Nonym-Webhook/1.0")
+	req.Header.Set("X-Nonym-Event", "webhook.test")
+	req.Header.Set("X-Nonym-Webhook-ID", wh.ID)
+	req.Header.Set("X-Nonym-Delivery", fmt.Sprintf("del_test_%d", time.Now().UnixNano()))
+	if sig != "" {
+		req.Header.Set("X-Nonym-Signature-256", sig)
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return c.Status(200).JSON(fiber.Map{
+			"success":  false,
+			"error":    fmt.Sprintf("Delivery failed: %v", err),
+			"payload":  testPayload,
+		})
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+
+	// Update last_trigger timestamp on success.
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		db.Exec(formatQuery(`UPDATE webhooks SET last_trigger = ? WHERE id = ?`),
+			time.Now(), wh.ID)
+	}
+
+	return c.JSON(fiber.Map{
+		"success":     resp.StatusCode >= 200 && resp.StatusCode < 300,
+		"status_code": resp.StatusCode,
+		"response":    string(respBody),
+		"payload":     testPayload,
+		"signed":      sig != "",
 	})
 }
 

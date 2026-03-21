@@ -262,6 +262,7 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 	// Webhooks
 	app.Post("/api/v1/webhooks", authMiddleware, audit.HandleCreateWebhook)
 	app.Get("/api/v1/webhooks", authMiddleware, audit.HandleGetWebhooks)
+	app.Post("/api/v1/webhooks/:id/test", authMiddleware, audit.HandleTestWebhook)
 
 	// Protection and analytics endpoints
 	app.Get("/api/v1/protection-events", authMiddleware, audit.HandleGetProtectionEvents)
