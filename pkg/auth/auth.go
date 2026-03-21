@@ -168,16 +168,20 @@ func getUserByID(userID int) (*User, error) {
 	query := formatQuery(`
 		SELECT id, email, password_hash, first_name, last_name, role,
 		       organization_id, is_active, email_verified, last_login,
-		       created_at, updated_at
+		       created_at, updated_at,
+		       COALESCE(totp_enabled, false), totp_secret, totp_verified_at
 		FROM users
 		WHERE id = ? AND is_active = true
 	`)
 
 	var lastLogin sql.NullTime
+	var totpSecret sql.NullString
+	var totpVerifiedAt sql.NullTime
 	err := db.QueryRow(query, userID).Scan(
 		&user.ID, &user.Email, &user.PasswordHash, &user.FirstName,
 		&user.LastName, &user.Role, &user.OrganizationID, &user.IsActive,
 		&user.EmailVerified, &lastLogin, &user.CreatedAt, &user.UpdatedAt,
+		&user.TOTPEnabled, &totpSecret, &totpVerifiedAt,
 	)
 
 	if err != nil {
@@ -189,6 +193,12 @@ func getUserByID(userID int) (*User, error) {
 
 	if lastLogin.Valid {
 		user.LastLogin = &lastLogin.Time
+	}
+	if totpSecret.Valid {
+		user.TOTPSecret = &totpSecret.String
+	}
+	if totpVerifiedAt.Valid {
+		user.TOTPVerifiedAt = &totpVerifiedAt.Time
 	}
 
 	return user, nil
@@ -200,16 +210,20 @@ func getUserByEmail(email string) (*User, error) {
 	query := formatQuery(`
 		SELECT id, email, password_hash, first_name, last_name, role,
 		       organization_id, is_active, email_verified, last_login,
-		       created_at, updated_at
+		       created_at, updated_at,
+		       COALESCE(totp_enabled, false), totp_secret, totp_verified_at
 		FROM users
 		WHERE email = ? AND is_active = true
 	`)
 
 	var lastLogin sql.NullTime
+	var totpSecret sql.NullString
+	var totpVerifiedAt sql.NullTime
 	err := db.QueryRow(query, email).Scan(
 		&user.ID, &user.Email, &user.PasswordHash, &user.FirstName,
 		&user.LastName, &user.Role, &user.OrganizationID, &user.IsActive,
 		&user.EmailVerified, &lastLogin, &user.CreatedAt, &user.UpdatedAt,
+		&user.TOTPEnabled, &totpSecret, &totpVerifiedAt,
 	)
 
 	if err != nil {
@@ -221,6 +235,12 @@ func getUserByEmail(email string) (*User, error) {
 
 	if lastLogin.Valid {
 		user.LastLogin = &lastLogin.Time
+	}
+	if totpSecret.Valid {
+		user.TOTPSecret = &totpSecret.String
+	}
+	if totpVerifiedAt.Valid {
+		user.TOTPVerifiedAt = &totpVerifiedAt.Time
 	}
 
 	return user, nil
@@ -235,10 +255,18 @@ func getOrganizationByID(orgID int) (*Organization, error) {
 		WHERE id = ? AND is_active = true
 	`)
 
+	var ownerID sql.NullInt64
+	var description sql.NullString
 	err := db.QueryRow(query, orgID).Scan(
-		&org.ID, &org.Name, &org.Slug, &org.Description,
-		&org.OwnerID, &org.IsActive, &org.CreatedAt, &org.UpdatedAt,
+		&org.ID, &org.Name, &org.Slug, &description,
+		&ownerID, &org.IsActive, &org.CreatedAt, &org.UpdatedAt,
 	)
+	if ownerID.Valid {
+		org.OwnerID = int(ownerID.Int64)
+	}
+	if description.Valid {
+		org.Description = description.String
+	}
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -327,11 +355,19 @@ func RegisterUser(req *SignupRequest) (*User, *Organization, error) {
 		// Verify organization exists
 		orgQuery := formatQuery("SELECT id, name, slug, description, owner_id, is_active, created_at, updated_at FROM organizations WHERE id = ? AND is_active = true")
 		organization = &Organization{}
+		var orgOwnerID sql.NullInt64
+		var orgDescription sql.NullString
 		err = tx.QueryRow(orgQuery, *req.OrganizationID).Scan(
 			&organization.ID, &organization.Name, &organization.Slug,
-			&organization.Description, &organization.OwnerID, &organization.IsActive,
+			&orgDescription, &orgOwnerID, &organization.IsActive,
 			&organization.CreatedAt, &organization.UpdatedAt,
 		)
+		if orgOwnerID.Valid {
+			organization.OwnerID = int(orgOwnerID.Int64)
+		}
+		if orgDescription.Valid {
+			organization.Description = orgDescription.String
+		}
 		if err != nil {
 			return nil, nil, fmt.Errorf("invalid organization: %w", err)
 		}
@@ -461,6 +497,19 @@ func LoginUser(req *LoginRequest, clientIP, userAgent string) (*LoginResponse, e
 	// Verify password
 	if !verifyPassword(user.PasswordHash, req.Password) {
 		return nil, fmt.Errorf("invalid email or password")
+	}
+
+	// If 2FA is enabled, return an MFA challenge token instead of a full JWT
+	if user.TOTPEnabled {
+		mfaToken, mfaExpiresAt, err := generateMFAToken(user.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate MFA token: %w", err)
+		}
+		return &LoginResponse{
+			MFARequired:       true,
+			MFAToken:          mfaToken,
+			MFATokenExpiresAt: mfaExpiresAt,
+		}, nil
 	}
 
 	// Get user's organization

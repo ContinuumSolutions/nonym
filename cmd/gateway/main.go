@@ -211,6 +211,14 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 
 	// Security endpoints
 	app.Put("/api/v1/security/2fa", authMiddleware, auth.HandleUpdateTwoFactor)
+
+	// TOTP 2FA endpoints
+	app.Get("/api/v1/auth/2fa/status", authMiddleware, auth.HandleTOTPStatus)
+	app.Post("/api/v1/auth/2fa/setup/begin", authMiddleware, auth.HandleTOTPSetupBegin)
+	app.Post("/api/v1/auth/2fa/setup/verify", authMiddleware, auth.HandleTOTPSetupVerify)
+	app.Delete("/api/v1/auth/2fa", authMiddleware, auth.HandleTOTPDisable)
+	app.Post("/api/v1/auth/2fa/backup-codes/regenerate", authMiddleware, auth.HandleTOTPRegenerateBackupCodes)
+	app.Post("/api/v1/auth/2fa/challenge", auth.HandleTOTPChallenge) // No auth — uses mfa_token
 	app.Delete("/api/v1/security/sessions/:id", authMiddleware, auth.HandleTerminateSession)
 	app.Put("/api/v1/security/settings", authMiddleware, auth.HandleUpdateSecuritySettings)
 

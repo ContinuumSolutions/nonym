@@ -282,6 +282,46 @@ func getPostgreSQLMigrations() []*Migration {
 				DROP TABLE IF EXISTS transactions CASCADE;
 			`,
 		},
+		{
+			Version:     7,
+			Name:        "add_totp_2fa",
+			Description: "Add TOTP 2FA columns to users and create TOTP tables",
+			UpSQL: `
+				-- Add TOTP columns to users
+				ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN DEFAULT FALSE;
+				ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT;
+				ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_verified_at TIMESTAMP WITH TIME ZONE;
+
+				-- TOTP setup sessions (temporary, 10 min TTL)
+				CREATE TABLE IF NOT EXISTS totp_setup_sessions (
+					id TEXT PRIMARY KEY,
+					user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+					secret TEXT NOT NULL,
+					attempt_count INTEGER DEFAULT 0,
+					expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+					created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+				);
+				CREATE INDEX IF NOT EXISTS idx_totp_setup_sessions_user_id ON totp_setup_sessions(user_id);
+				CREATE INDEX IF NOT EXISTS idx_totp_setup_sessions_expires_at ON totp_setup_sessions(expires_at);
+
+				-- TOTP backup codes
+				CREATE TABLE IF NOT EXISTS totp_backup_codes (
+					id TEXT PRIMARY KEY,
+					user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+					code_hash TEXT NOT NULL,
+					used_at TIMESTAMP WITH TIME ZONE,
+					created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+				);
+				CREATE INDEX IF NOT EXISTS idx_totp_backup_codes_user_id ON totp_backup_codes(user_id);
+			`,
+			DownSQL: `
+				DROP TABLE IF EXISTS totp_backup_codes CASCADE;
+				DROP TABLE IF EXISTS totp_setup_sessions CASCADE;
+				ALTER TABLE users DROP COLUMN IF EXISTS totp_verified_at;
+				ALTER TABLE users DROP COLUMN IF EXISTS totp_secret;
+				ALTER TABLE users DROP COLUMN IF EXISTS totp_enabled;
+			`,
+		},
 	}
 }
 
@@ -548,6 +588,40 @@ func getSQLiteMigrations() []*Migration {
 			`,
 			DownSQL: `
 				DROP TABLE IF EXISTS transactions;
+			`,
+		},
+		{
+			Version:     7,
+			Name:        "add_totp_2fa",
+			Description: "Add TOTP 2FA columns to users and create TOTP tables",
+			UpSQL: `
+				ALTER TABLE users ADD COLUMN totp_enabled BOOLEAN DEFAULT FALSE;
+				ALTER TABLE users ADD COLUMN totp_secret TEXT;
+				ALTER TABLE users ADD COLUMN totp_verified_at DATETIME;
+
+				CREATE TABLE IF NOT EXISTS totp_setup_sessions (
+					id TEXT PRIMARY KEY,
+					user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+					secret TEXT NOT NULL,
+					attempt_count INTEGER DEFAULT 0,
+					expires_at DATETIME NOT NULL,
+					created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+				);
+				CREATE INDEX IF NOT EXISTS idx_totp_setup_sessions_user_id ON totp_setup_sessions(user_id);
+				CREATE INDEX IF NOT EXISTS idx_totp_setup_sessions_expires_at ON totp_setup_sessions(expires_at);
+
+				CREATE TABLE IF NOT EXISTS totp_backup_codes (
+					id TEXT PRIMARY KEY,
+					user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+					code_hash TEXT NOT NULL,
+					used_at DATETIME,
+					created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+				);
+				CREATE INDEX IF NOT EXISTS idx_totp_backup_codes_user_id ON totp_backup_codes(user_id);
+			`,
+			DownSQL: `
+				DROP TABLE IF EXISTS totp_backup_codes;
+				DROP TABLE IF EXISTS totp_setup_sessions;
 			`,
 		},
 	}
