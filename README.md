@@ -1,14 +1,18 @@
 # Nonym
 
-A high-performance Privacy Air-Gap middleware written in Go that intercepts data between internal systems and external AI models. The gateway uses Named Entity Recognition (NER) to detect and anonymize Personally Identifiable Information (PII) in real-time, ensuring sensitive data never leaves your infrastructure.
+**Stop leaking data to vendors.** Nonym is a high-performance Privacy Gateway that intercepts all outbound traffic to AI providers and third-party monitoring tools (Sentry, Datadog, PostHog), stripping PII before it ever leaves your infrastructure.
 
 ## Overview
 
+Every time your app sends an error report, an analytics event, or an AI prompt, it ships user data — names, emails, IP addresses, credit card numbers — straight to external vendors. Nonym sits in front of those vendors and redacts that data in real time.
+
 Nonym acts as a transparent reverse proxy that:
 - **Detects PII** using advanced pattern matching and NER algorithms
-- **Anonymizes data** with tokenization before sending to AI providers
+- **Anonymizes data** with tokenization before sending to AI providers or monitoring vendors
 - **De-anonymizes responses** to restore original context for users
 - **Routes intelligently** based on content sensitivity and provider capabilities
+- **Attributes every request** to its originating vendor (Sentry, Datadog, PostHog, etc.) for full audit trails
+- **Generates compliance reports** (GDPR, HIPAA, PCI-DSS) showing exactly what data was protected
 
 ## Architecture
 

@@ -117,6 +117,11 @@ func initializeServices(config *Config) error {
 		return fmt.Errorf("failed to initialize compliance tables: %w", err)
 	}
 
+	// Initialize vendor integration tables
+	if err := audit.InitializeVendorTables(); err != nil {
+		return fmt.Errorf("failed to initialize vendor tables: %w", err)
+	}
+
 	// Initialize router with provider configs
 
 	// Initialize authentication system
@@ -230,6 +235,24 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 	// Compliance settings
 	app.Get("/api/v1/settings/compliance", authMiddleware, audit.HandleGetComplianceSettings)
 	app.Put("/api/v1/settings/compliance", authMiddleware, audit.HandleUpdateComplianceSettings)
+
+	// Compliance reports (GDPR, HIPAA, PCI-DSS)
+	app.Get("/api/v1/compliance/reports", authMiddleware, audit.HandleListComplianceReports)
+	app.Get("/api/v1/compliance/reports/:framework", authMiddleware, audit.HandleGetComplianceReport)
+
+	// Vendor catalog and setup wizard
+	app.Get("/api/v1/vendors", authMiddleware, audit.HandleListVendors)
+	app.Get("/api/v1/vendors/configured", authMiddleware, audit.HandleGetConfiguredVendors)
+	app.Post("/api/v1/vendors/setup", authMiddleware, audit.HandleSetupVendor)
+	app.Get("/api/v1/vendors/:id", authMiddleware, audit.HandleGetVendor)
+	app.Delete("/api/v1/vendors/configured/:vendor_id", authMiddleware, audit.HandleRemoveVendor)
+
+	// Vendor scanner (free-tier discovery)
+	app.Post("/api/v1/scanner", authMiddleware, audit.HandleScanVendors)
+	app.Get("/api/v1/scanner/sentry", authMiddleware, audit.HandleScanSentry)
+
+	// Benchmarks
+	app.Get("/api/v1/benchmarks", audit.HandleGetBenchmarks)
 
 	// Protection and analytics endpoints
 	app.Get("/api/v1/protection-events", authMiddleware, audit.HandleGetProtectionEvents)

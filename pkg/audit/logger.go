@@ -21,6 +21,7 @@ type Transaction struct {
 	Timestamp        time.Time             `json:"timestamp" db:"timestamp"`
 	Status           string                `json:"status" db:"status"`
 	Provider         string                `json:"provider" db:"provider"`
+	VendorName       string                `json:"vendor_name,omitempty" db:"vendor_name"`
 	StatusCode       int                   `json:"status_code" db:"status_code"`
 	ProcessingTime   float64               `json:"processing_time" db:"processing_time"`
 	RedactionCount   int                   `json:"redaction_count" db:"redaction_count"`
@@ -152,6 +153,7 @@ func createTables() error {
 			method           TEXT NOT NULL DEFAULT '',
 			path             TEXT NOT NULL DEFAULT '',
 			provider         TEXT NOT NULL DEFAULT '',
+			vendor_name      TEXT DEFAULT '',
 			status           TEXT NOT NULL,
 			status_code      INTEGER DEFAULT 0,
 			redaction_count  INTEGER DEFAULT 0,
@@ -182,8 +184,10 @@ func createTables() error {
 	return nil
 }
 
-// LogTransaction records a transaction in the audit log with organization context
-func LogTransaction(id, status, provider string, statusCode int, redactionDetails []ner.RedactionDetail, organizationID, userID int) {
+// LogTransaction records a transaction in the audit log with organization context.
+// vendorName identifies the originating monitoring/analytics vendor (e.g. "sentry",
+// "datadog") as set by the X-Nonym-Vendor header; pass an empty string when unknown.
+func LogTransaction(id, status, provider, vendorName string, statusCode int, redactionDetails []ner.RedactionDetail, organizationID, userID int) {
 	if db == nil {
 		log.Printf("Warning: Database not initialized, skipping transaction log")
 		return
@@ -192,10 +196,10 @@ func LogTransaction(id, status, provider string, statusCode int, redactionDetail
 	redactionJSON, _ := json.Marshal(redactionDetails)
 
 	query := formatQuery(`INSERT INTO transactions (
-		request_id, method, path, provider, status, status_code, redaction_count, entities_detected, organization_id, user_id
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		request_id, method, path, provider, vendor_name, status, status_code, redaction_count, entities_detected, organization_id, user_id
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 
-	_, err := db.Exec(query, id, "POST", "/v1/chat/completions", provider, status, statusCode, len(redactionDetails), string(redactionJSON), organizationID, userID)
+	_, err := db.Exec(query, id, "POST", "/v1/chat/completions", provider, vendorName, status, statusCode, len(redactionDetails), string(redactionJSON), organizationID, userID)
 	if err != nil {
 		log.Printf("Failed to log transaction: %v", err)
 	}
@@ -206,6 +210,7 @@ func LogTransaction(id, status, provider string, statusCode int, redactionDetail
 		Timestamp:        time.Now(),
 		Status:           status,
 		Provider:         provider,
+		VendorName:       vendorName,
 		StatusCode:       statusCode,
 		RedactionCount:   len(redactionDetails),
 		RedactionDetails: redactionDetails,
@@ -220,7 +225,7 @@ func GetTransactions(limit, offset int, organizationID string) ([]Transaction, e
 		return nil, fmt.Errorf("database not initialized")
 	}
 
-	query := formatQuery(`SELECT COALESCE(request_id, CAST(id AS TEXT)), created_at, status, provider, status_code, processing_time_ms,
+	query := formatQuery(`SELECT COALESCE(request_id, CAST(id AS TEXT)), created_at, status, provider, COALESCE(vendor_name,''), status_code, processing_time_ms,
 			  redaction_count, entities_detected, ip_address, user_agent, organization_id, user_id
 			  FROM transactions WHERE organization_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`)
 
@@ -245,7 +250,7 @@ func GetTransactions(limit, offset int, organizationID string) ([]Transaction, e
 		var userAgent *string
 		var processingTime *float64
 
-		err := rows.Scan(&requestID, &t.Timestamp, &t.Status, &t.Provider, &t.StatusCode,
+		err := rows.Scan(&requestID, &t.Timestamp, &t.Status, &t.Provider, &t.VendorName, &t.StatusCode,
 			&processingTime, &t.RedactionCount, &entitiesDetectedJSON,
 			&clientIP, &userAgent, &t.OrganizationID, &t.UserID)
 		if err != nil {

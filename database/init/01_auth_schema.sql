@@ -81,6 +81,7 @@ CREATE TABLE transactions (
     method VARCHAR(10) NOT NULL,
     path TEXT NOT NULL,
     provider VARCHAR(100),
+    vendor_name VARCHAR(100) DEFAULT '',
     status VARCHAR(50) NOT NULL,
     status_code INTEGER,
     redaction_count INTEGER DEFAULT 0,
