@@ -57,14 +57,15 @@ type EventsResponse struct {
 
 // Webhook represents a webhook configuration
 type Webhook struct {
-	ID          string    `json:"id" db:"id"`
-	URL         string    `json:"url" db:"url"`
-	Events      []string  `json:"events" db:"events"`
-	Secret      string    `json:"secret,omitempty" db:"secret"`
-	Status      string    `json:"status" db:"status"` // active, disabled, failed
-	CreatedAt   time.Time `json:"created_at" db:"created_at"`
-	LastTrigger time.Time `json:"last_trigger,omitempty" db:"last_trigger"`
-	UserID      string    `json:"user_id" db:"user_id"`
+	ID             string    `json:"id" db:"id"`
+	URL            string    `json:"url" db:"url"`
+	Events         []string  `json:"events" db:"events"`
+	Secret         string    `json:"secret,omitempty" db:"secret"`
+	Status         string    `json:"status" db:"status"` // active, disabled, failed
+	CreatedAt      time.Time `json:"created_at" db:"created_at"`
+	LastTrigger    time.Time `json:"last_trigger,omitempty" db:"last_trigger"`
+	UserID         string    `json:"user_id" db:"user_id"`
+	OrganizationID int       `json:"organization_id" db:"organization_id"`
 }
 
 // WebhookRequest represents a webhook creation request
@@ -426,23 +427,26 @@ func HandleCreateWebhook(c *fiber.Ctx) error {
 		})
 	}
 
+	orgID, _ := c.Locals("organization_id").(int)
+
 	// Create webhook
 	webhook := &Webhook{
-		ID:        fmt.Sprintf("wh_%d", time.Now().UnixNano()),
-		URL:       req.URL,
-		Events:    req.Events,
-		Secret:    req.Secret,
-		Status:    "active",
-		CreatedAt: time.Now(),
-		UserID:    getUserIDFromContext(c),
+		ID:             fmt.Sprintf("wh_%d", time.Now().UnixNano()),
+		URL:            req.URL,
+		Events:         req.Events,
+		Secret:         req.Secret,
+		Status:         "active",
+		CreatedAt:      time.Now(),
+		UserID:         getUserIDFromContext(c),
+		OrganizationID: orgID,
 	}
 
 	// Store webhook
 	eventsJSON, _ := json.Marshal(webhook.Events)
-	query := formatQuery(`INSERT INTO webhooks (id, url, events, secret, status, created_at, user_id)
-			  VALUES (?, ?, ?, ?, ?, ?, ?)`)
+	query := formatQuery(`INSERT INTO webhooks (id, url, events, secret, status, created_at, user_id, organization_id)
+			  VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
 	_, err := db.Exec(query, webhook.ID, webhook.URL, string(eventsJSON),
-		webhook.Secret, webhook.Status, webhook.CreatedAt, webhook.UserID)
+		webhook.Secret, webhook.Status, webhook.CreatedAt, webhook.UserID, webhook.OrganizationID)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"error": "Failed to create webhook",
