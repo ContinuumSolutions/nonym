@@ -1,6 +1,8 @@
 package scanner
 
 import (
+	"log"
+
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -15,12 +17,14 @@ func HandleScannerOverview(c *fiber.Ctx) error {
 	// Count connected vendors.
 	connections, err := listVendorConnections(orgID, "connected")
 	if err != nil {
+		log.Printf("scanner: HandleScannerOverview listVendorConnections: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to fetch vendor connections"})
 	}
 
 	// Finding counts.
 	fc, err := findingCounts(orgID)
 	if err != nil {
+		log.Printf("scanner: HandleScannerOverview findingCounts: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to fetch finding counts"})
 	}
 
@@ -57,6 +61,7 @@ func HandleScannerFlows(c *fiber.Ctx) error {
 
 	connections, err := listVendorConnections(orgID, "")
 	if err != nil {
+		log.Printf("scanner: HandleScannerFlows: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to fetch vendor connections"})
 	}
 

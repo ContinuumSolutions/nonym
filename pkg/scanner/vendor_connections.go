@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"log"
 	"strings"
 	"time"
 
@@ -18,6 +19,7 @@ func HandleListVendorConnections(c *fiber.Ctx) error {
 	statusFilter := c.Query("status")
 	connections, err := listVendorConnections(orgID, statusFilter)
 	if err != nil {
+		log.Printf("scanner: HandleListVendorConnections: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to fetch vendor connections"})
 	}
 	for i := range connections {
@@ -87,6 +89,7 @@ func HandleCreateVendorConnection(c *fiber.Ctx) error {
 	}
 
 	if err := insertVendorConnection(vc); err != nil {
+		log.Printf("scanner: HandleCreateVendorConnection: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to create vendor connection"})
 	}
 
@@ -103,6 +106,7 @@ func HandleDeleteVendorConnection(c *fiber.Ctx) error {
 	}
 	id := c.Params("id")
 	if err := deleteVendorConnection(orgID, id); err != nil {
+		log.Printf("scanner: HandleDeleteVendorConnection: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to delete vendor connection"})
 	}
 	return c.SendStatus(204)
@@ -156,6 +160,7 @@ func HandleTriggerVendorScan(c *fiber.Ctx) error {
 
 	scan, err := startScan(orgID, []string{vc.Vendor}, []VendorConnection{*vc}, "manual")
 	if err != nil {
+		log.Printf("scanner: HandleTriggerVendorScan: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to start scan"})
 	}
 	return c.Status(202).JSON(fiber.Map{"scan_id": scan.ID})

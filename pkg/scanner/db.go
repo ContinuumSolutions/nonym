@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -176,10 +177,15 @@ func listVendorConnections(orgID int, statusFilter string) ([]VendorConnection, 
 			&connectedAt, &lastScanAt, &errMsg,
 			&vc.CreatedAt, &vc.UpdatedAt,
 		); err != nil {
+			log.Printf("scanner: listVendorConnections scan error: %v", err)
 			continue
 		}
-		json.Unmarshal([]byte(credRaw), &vc.Credentials)
-		json.Unmarshal([]byte(settRaw), &vc.Settings)
+		if err := json.Unmarshal([]byte(credRaw), &vc.Credentials); err != nil {
+			log.Printf("scanner: listVendorConnections credentials unmarshal error (id=%s): %v", vc.ID, err)
+		}
+		if err := json.Unmarshal([]byte(settRaw), &vc.Settings); err != nil {
+			log.Printf("scanner: listVendorConnections settings unmarshal error (id=%s): %v", vc.ID, err)
+		}
 		if connectedAt.Valid {
 			t := connectedAt.Time
 			vc.ConnectedAt = &t
@@ -216,8 +222,12 @@ func getVendorConnection(orgID int, id string) (*VendorConnection, error) {
 	); err != nil {
 		return nil, err
 	}
-	json.Unmarshal([]byte(credRaw), &vc.Credentials)
-	json.Unmarshal([]byte(settRaw), &vc.Settings)
+	if err := json.Unmarshal([]byte(credRaw), &vc.Credentials); err != nil {
+		log.Printf("scanner: getVendorConnection credentials unmarshal error (id=%s): %v", vc.ID, err)
+	}
+	if err := json.Unmarshal([]byte(settRaw), &vc.Settings); err != nil {
+		log.Printf("scanner: getVendorConnection settings unmarshal error (id=%s): %v", vc.ID, err)
+	}
 	if connectedAt.Valid {
 		t := connectedAt.Time
 		vc.ConnectedAt = &t
@@ -302,9 +312,12 @@ func scanRows(rows *sql.Rows) ([]Scan, error) {
 			&startedAt, &completedAt,
 			&s.FindingsCount, &errMsg, &s.TriggeredBy, &s.CreatedAt,
 		); err != nil {
+			log.Printf("scanner: scanRows scan error: %v", err)
 			continue
 		}
-		json.Unmarshal([]byte(vidsRaw), &s.VendorIDs)
+		if err := json.Unmarshal([]byte(vidsRaw), &s.VendorIDs); err != nil {
+			log.Printf("scanner: scanRows vendor_ids unmarshal error (id=%s): %v", s.ID, err)
+		}
 		if s.VendorIDs == nil {
 			s.VendorIDs = []string{}
 		}

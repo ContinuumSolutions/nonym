@@ -3,6 +3,7 @@ package scanner
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"log"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -17,6 +18,7 @@ func HandleListReports(c *fiber.Ctx) error {
 	}
 	reports, err := listReports(orgID)
 	if err != nil {
+		log.Printf("scanner: HandleListReports: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to fetch reports"})
 	}
 	return c.JSON(fiber.Map{"reports": reports, "total": len(reports)})
@@ -60,6 +62,7 @@ func HandleGenerateReport(c *fiber.Ctx) error {
 		CreatedAt: time.Now(),
 	}
 	if err := insertReport(report); err != nil {
+		log.Printf("scanner: HandleGenerateReport: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to create report"})
 	}
 

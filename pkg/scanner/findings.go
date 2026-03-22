@@ -1,6 +1,8 @@
 package scanner
 
 import (
+	"log"
+
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -30,6 +32,7 @@ func HandleListFindings(c *fiber.Ctx) error {
 
 	findings, err := listFindings(filter)
 	if err != nil {
+		log.Printf("scanner: HandleListFindings: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to fetch findings"})
 	}
 	return c.JSON(fiber.Map{"findings": findings, "total": len(findings)})
@@ -71,11 +74,13 @@ func HandlePatchFinding(c *fiber.Ctx) error {
 	}
 
 	if err := patchFinding(orgID, c.Params("id"), req.Status, nil); err != nil {
+		log.Printf("scanner: HandlePatchFinding patch: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to update finding"})
 	}
 
 	finding, err := getFinding(orgID, c.Params("id"))
 	if err != nil {
+		log.Printf("scanner: HandlePatchFinding get: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to retrieve updated finding"})
 	}
 	return c.JSON(finding)

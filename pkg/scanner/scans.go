@@ -3,6 +3,7 @@ package scanner
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -26,6 +27,7 @@ func HandleListScans(c *fiber.Ctx) error {
 
 	scans, err := listScans(orgID, limit, offset)
 	if err != nil {
+		log.Printf("scanner: HandleListScans: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to fetch scans"})
 	}
 	return c.JSON(fiber.Map{"scans": scans, "total": len(scans)})
@@ -47,6 +49,7 @@ func HandleCreateScan(c *fiber.Ctx) error {
 	// Fetch connected vendor connections.
 	connections, err := listVendorConnections(orgID, "connected")
 	if err != nil {
+		log.Printf("scanner: HandleCreateScan: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to fetch vendor connections"})
 	}
 
@@ -76,6 +79,7 @@ func HandleCreateScan(c *fiber.Ctx) error {
 
 	scan, err := startScan(orgID, vendorNames, connections, "manual")
 	if err != nil {
+		log.Printf("scanner: HandleCreateScan startScan: %v", err)
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to start scan"})
 	}
 	return c.Status(202).JSON(fiber.Map{"scan_id": scan.ID})
