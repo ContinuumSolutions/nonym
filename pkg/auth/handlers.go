@@ -80,6 +80,14 @@ func HandleLogin(c *fiber.Ctx) error {
 		})
 	}
 
+	if response.MFARequired {
+		return c.JSON(fiber.Map{
+			"mfa_required":         true,
+			"mfa_token":            response.MFAToken,
+			"mfa_token_expires_at": response.MFATokenExpiresAt,
+		})
+	}
+
 	return c.JSON(fiber.Map{
 		"message":      "Login successful",
 		"token":        response.Token,

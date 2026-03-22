@@ -19,6 +19,15 @@ type User struct {
 	CreatedAt      time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at" db:"updated_at"`
 
+	// Login security fields
+	FailedLoginAttempts int        `json:"-" db:"failed_login_attempts"`
+	LockedUntil         *time.Time `json:"-" db:"locked_until"`
+
+	// TOTP / 2FA fields
+	TOTPEnabled    bool       `json:"-" db:"totp_enabled"`
+	TOTPSecret     *string    `json:"-" db:"totp_secret"`
+	TOTPVerifiedAt *time.Time `json:"-" db:"totp_verified_at"`
+
 	// Relationship
 	Organization *Organization `json:"organization,omitempty" db:"-"`
 }
@@ -91,10 +100,15 @@ type LoginRequest struct {
 
 // LoginResponse represents a successful login response
 type LoginResponse struct {
-	Token        string        `json:"token"`
-	ExpiresAt    time.Time     `json:"expires_at"`
-	User         *UserProfile  `json:"user"`
-	Organization *Organization `json:"organization"`
+	// Normal login
+	Token        string        `json:"token,omitempty"`
+	ExpiresAt    time.Time     `json:"expires_at,omitempty"`
+	User         *UserProfile  `json:"user,omitempty"`
+	Organization *Organization `json:"organization,omitempty"`
+	// MFA challenge (when totp_enabled)
+	MFARequired       bool      `json:"mfa_required,omitempty"`
+	MFAToken          string    `json:"mfa_token,omitempty"`
+	MFATokenExpiresAt time.Time `json:"mfa_token_expires_at,omitempty"`
 }
 
 // UserProfile represents a user profile (subset of User for responses)
@@ -108,6 +122,7 @@ type UserProfile struct {
 	OrganizationID int           `json:"organization_id"`
 	IsActive       bool          `json:"is_active"`
 	EmailVerified  bool          `json:"email_verified"`
+	TwoFAEnabled   bool          `json:"two_fa_enabled"`
 	CreatedAt      time.Time     `json:"created_at"`
 	LastLogin      *time.Time    `json:"last_login,omitempty"`
 	Organization   *Organization `json:"organization,omitempty"`
@@ -139,6 +154,7 @@ func (u *User) ToProfile() *UserProfile {
 		OrganizationID: u.OrganizationID,
 		IsActive:       u.IsActive,
 		EmailVerified:  u.EmailVerified,
+		TwoFAEnabled:   u.TOTPEnabled,
 		CreatedAt:      u.CreatedAt,
 		LastLogin:      u.LastLogin,
 		Organization:   u.Organization,

@@ -1,0 +1,14 @@
+{
+  "name": "@nonym/sentry",
+  "version": "0.1.0",
+  "description": "Drop-in @sentry/node wrapper that strips PII via the Nonym privacy gateway before sending error events to sentry.io.",
+  "main": "index.js",
+  "keywords": ["sentry", "privacy", "pii", "gdpr", "nonym"],
+  "license": "MIT",
+  "peerDependencies": {
+    "@sentry/node": ">=7.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

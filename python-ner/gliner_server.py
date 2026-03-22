@@ -19,6 +19,7 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 # Default labels used when the client sends none
+# More about labels - https://huggingface.co/knowledgator/gliner-pii-edge-v1.0#comprehensive-pii-detection
 DEFAULT_LABELS = [
     "person",
     "location",
@@ -28,6 +29,20 @@ DEFAULT_LABELS = [
     "money",
     "phone number",
     "address",
+    "credit card",
+    "condition",                    # Medical conditions
+    "medical process",              # Medical procedures
+    "drug",                         # Drugs
+    "dose",                         # Dosage information
+    "blood type",                   # Blood types
+    "injury",                       # Injuries
+    "organization medical facility",# Healthcare facility names
+    "healthcare number",            # Healthcare numbers
+    "medical code",
+    "password",
+    "dob",                        # Date of birth
+    "gender",                     # Gender identifiers
+    "marital status"              
 ]
 
 
@@ -104,7 +119,9 @@ class NERServiceServicer(ner_pb2_grpc.NERServiceServicer):
 
 
 def serve():
-    model_name = os.environ.get("GLINER_MODEL", "urchade/gliner_medium-v2.1")
+    # Find more models here as per your use case - https://huggingface.co/knowledgator/gliner-pii-edge-v1.0
+    # model_name = os.environ.get("GLINER_MODEL", "urchade/gliner_medium-v2.1")
+    model_name = os.environ.get("GLINER_MODEL", "knowledgator/gliner-pii-base-v1.0")
     port = os.environ.get("NER_GRPC_PORT", "50051")
     max_workers = int(os.environ.get("NER_MAX_WORKERS", "4"))
 

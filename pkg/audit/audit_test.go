@@ -23,6 +23,7 @@ func setupTestDB(t *testing.T) *sql.DB {
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			status TEXT NOT NULL,
 			provider TEXT NOT NULL,
+			vendor_name TEXT DEFAULT '',
 			status_code INTEGER DEFAULT 0,
 			processing_time_ms REAL DEFAULT 0,
 			redaction_count INTEGER DEFAULT 0,
@@ -47,6 +48,7 @@ func setupTestDB(t *testing.T) *sql.DB {
 			severity TEXT DEFAULT 'low',
 			status TEXT DEFAULT 'open',
 			description TEXT,
+			compliance_frameworks TEXT DEFAULT '[]',
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		)`,
 	}

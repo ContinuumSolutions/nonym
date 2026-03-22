@@ -1,5 +1,5 @@
 grpcio==1.67.1
 grpcio-tools==1.67.1
 torch==2.4.1
-gliner==0.2.15
+gliner==0.2.26
 numpy<2

@@ -282,6 +282,114 @@ func getPostgreSQLMigrations() []*Migration {
 				DROP TABLE IF EXISTS transactions CASCADE;
 			`,
 		},
+		{
+			Version:     7,
+			Name:        "add_totp_2fa",
+			Description: "Add TOTP 2FA columns to users and create TOTP tables",
+			UpSQL: `
+				-- Add TOTP columns to users
+				ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN DEFAULT FALSE;
+				ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT;
+				ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_verified_at TIMESTAMP WITH TIME ZONE;
+
+				-- TOTP setup sessions (temporary, 10 min TTL)
+				CREATE TABLE IF NOT EXISTS totp_setup_sessions (
+					id TEXT PRIMARY KEY,
+					user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+					secret TEXT NOT NULL,
+					attempt_count INTEGER DEFAULT 0,
+					expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+					created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+				);
+				CREATE INDEX IF NOT EXISTS idx_totp_setup_sessions_user_id ON totp_setup_sessions(user_id);
+				CREATE INDEX IF NOT EXISTS idx_totp_setup_sessions_expires_at ON totp_setup_sessions(expires_at);
+
+				-- TOTP backup codes
+				CREATE TABLE IF NOT EXISTS totp_backup_codes (
+					id TEXT PRIMARY KEY,
+					user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+					code_hash TEXT NOT NULL,
+					used_at TIMESTAMP WITH TIME ZONE,
+					created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+				);
+				CREATE INDEX IF NOT EXISTS idx_totp_backup_codes_user_id ON totp_backup_codes(user_id);
+			`,
+			DownSQL: `
+				DROP TABLE IF EXISTS totp_backup_codes CASCADE;
+				DROP TABLE IF EXISTS totp_setup_sessions CASCADE;
+				ALTER TABLE users DROP COLUMN IF EXISTS totp_verified_at;
+				ALTER TABLE users DROP COLUMN IF EXISTS totp_secret;
+				ALTER TABLE users DROP COLUMN IF EXISTS totp_enabled;
+			`,
+		},
+		{
+			Version:     9,
+			Name:        "session_security",
+			Description: "Add failed_login_attempts and locked_until to users; vendor_name to transactions; vendor_integrations table",
+			UpSQL: `
+				ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INTEGER NOT NULL DEFAULT 0;
+				ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP WITH TIME ZONE;
+				ALTER TABLE transactions ADD COLUMN IF NOT EXISTS vendor_name VARCHAR(100) NOT NULL DEFAULT '';
+
+				CREATE TABLE IF NOT EXISTS vendor_integrations (
+					id              TEXT PRIMARY KEY,
+					organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+					vendor_id       TEXT NOT NULL,
+					vendor_name     TEXT NOT NULL,
+					method          TEXT NOT NULL DEFAULT 'proxy',
+					status          TEXT NOT NULL DEFAULT 'active',
+					created_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+					updated_at      TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+					UNIQUE (organization_id, vendor_id)
+				);
+				CREATE INDEX IF NOT EXISTS idx_vendor_integrations_org ON vendor_integrations(organization_id);
+			`,
+			DownSQL: `
+				DROP TABLE IF EXISTS vendor_integrations CASCADE;
+				ALTER TABLE transactions DROP COLUMN IF EXISTS vendor_name;
+				ALTER TABLE users DROP COLUMN IF EXISTS locked_until;
+				ALTER TABLE users DROP COLUMN IF EXISTS failed_login_attempts;
+			`,
+		},
+		{
+			Version:     8,
+			Name:        "compliance_frameworks",
+			Description: "Add compliance_frameworks to events; create compliance_fine_rates table",
+			UpSQL: `
+				-- Add compliance_frameworks column to events
+				ALTER TABLE events ADD COLUMN IF NOT EXISTS compliance_frameworks TEXT NOT NULL DEFAULT '[]';
+
+				-- GIN index for fast framework filtering
+				CREATE INDEX IF NOT EXISTS idx_events_compliance_frameworks
+					ON events USING GIN ((compliance_frameworks::jsonb));
+
+				-- Per-organization configurable fine rates
+				CREATE TABLE IF NOT EXISTS compliance_fine_rates (
+					id               TEXT PRIMARY KEY,
+					organization_id  INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+					framework        TEXT NOT NULL,
+					per_event_amount DOUBLE PRECISION NOT NULL,
+					currency         CHAR(3) NOT NULL,
+					updated_at       TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+					updated_by       INTEGER REFERENCES users(id),
+					UNIQUE (organization_id, framework)
+				);
+				CREATE INDEX IF NOT EXISTS idx_compliance_fine_rates_org ON compliance_fine_rates(organization_id);
+
+				-- Seed default rates for all existing organizations
+				INSERT INTO compliance_fine_rates (id, organization_id, framework, per_event_amount, currency)
+				SELECT 'cfr_' || o.id || '_' || fw.framework, o.id, fw.framework, fw.amount, fw.currency
+				FROM organizations o
+				CROSS JOIN (VALUES ('GDPR', 20000.0, 'EUR'), ('HIPAA', 15000.0, 'USD'), ('PCI-DSS', 5000.0, 'USD'))
+					AS fw(framework, amount, currency)
+				ON CONFLICT (organization_id, framework) DO NOTHING;
+			`,
+			DownSQL: `
+				DROP TABLE IF EXISTS compliance_fine_rates CASCADE;
+				DROP INDEX IF EXISTS idx_events_compliance_frameworks;
+				ALTER TABLE events DROP COLUMN IF EXISTS compliance_frameworks;
+			`,
+		},
 	}
 }
 
@@ -548,6 +656,96 @@ func getSQLiteMigrations() []*Migration {
 			`,
 			DownSQL: `
 				DROP TABLE IF EXISTS transactions;
+			`,
+		},
+		{
+			Version:     7,
+			Name:        "add_totp_2fa",
+			Description: "Add TOTP 2FA columns to users and create TOTP tables",
+			UpSQL: `
+				ALTER TABLE users ADD COLUMN totp_enabled BOOLEAN DEFAULT FALSE;
+				ALTER TABLE users ADD COLUMN totp_secret TEXT;
+				ALTER TABLE users ADD COLUMN totp_verified_at DATETIME;
+
+				CREATE TABLE IF NOT EXISTS totp_setup_sessions (
+					id TEXT PRIMARY KEY,
+					user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+					secret TEXT NOT NULL,
+					attempt_count INTEGER DEFAULT 0,
+					expires_at DATETIME NOT NULL,
+					created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+				);
+				CREATE INDEX IF NOT EXISTS idx_totp_setup_sessions_user_id ON totp_setup_sessions(user_id);
+				CREATE INDEX IF NOT EXISTS idx_totp_setup_sessions_expires_at ON totp_setup_sessions(expires_at);
+
+				CREATE TABLE IF NOT EXISTS totp_backup_codes (
+					id TEXT PRIMARY KEY,
+					user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+					code_hash TEXT NOT NULL,
+					used_at DATETIME,
+					created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+				);
+				CREATE INDEX IF NOT EXISTS idx_totp_backup_codes_user_id ON totp_backup_codes(user_id);
+			`,
+			DownSQL: `
+				DROP TABLE IF EXISTS totp_backup_codes;
+				DROP TABLE IF EXISTS totp_setup_sessions;
+			`,
+		},
+		{
+			Version:     9,
+			Name:        "session_security",
+			Description: "Add failed_login_attempts and locked_until to users; vendor_name to transactions; vendor_integrations table",
+			UpSQL: `
+				ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER NOT NULL DEFAULT 0;
+				ALTER TABLE users ADD COLUMN locked_until DATETIME;
+				ALTER TABLE transactions ADD COLUMN vendor_name TEXT NOT NULL DEFAULT '';
+
+				CREATE TABLE IF NOT EXISTS vendor_integrations (
+					id              TEXT PRIMARY KEY,
+					organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+					vendor_id       TEXT NOT NULL,
+					vendor_name     TEXT NOT NULL,
+					method          TEXT NOT NULL DEFAULT 'proxy',
+					status          TEXT NOT NULL DEFAULT 'active',
+					created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+					updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+					UNIQUE (organization_id, vendor_id)
+				);
+				CREATE INDEX IF NOT EXISTS idx_vendor_integrations_org ON vendor_integrations(organization_id);
+			`,
+			DownSQL: `
+				DROP TABLE IF EXISTS vendor_integrations;
+			`,
+		},
+		{
+			Version:     8,
+			Name:        "compliance_frameworks",
+			Description: "Add compliance_frameworks to events; create compliance_fine_rates table",
+			UpSQL: `
+				ALTER TABLE events ADD COLUMN compliance_frameworks TEXT DEFAULT '[]';
+
+				CREATE TABLE IF NOT EXISTS compliance_fine_rates (
+					id               TEXT PRIMARY KEY,
+					organization_id  INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+					framework        TEXT NOT NULL,
+					per_event_amount REAL NOT NULL,
+					currency         TEXT NOT NULL,
+					updated_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+					updated_by       INTEGER REFERENCES users(id),
+					UNIQUE (organization_id, framework)
+				);
+				CREATE INDEX IF NOT EXISTS idx_compliance_fine_rates_org ON compliance_fine_rates(organization_id);
+
+				INSERT OR IGNORE INTO compliance_fine_rates (id, organization_id, framework, per_event_amount, currency)
+				SELECT 'cfr_' || o.id || '_' || fw.framework, o.id, fw.framework, fw.amount, fw.currency
+				FROM organizations o
+				JOIN (SELECT 'GDPR' AS framework, 20000.0 AS amount, 'EUR' AS currency
+				      UNION ALL SELECT 'HIPAA', 15000.0, 'USD'
+				      UNION ALL SELECT 'PCI-DSS', 5000.0, 'USD') AS fw;
+			`,
+			DownSQL: `
+				DROP TABLE IF EXISTS compliance_fine_rates;
 			`,
 		},
 	}
