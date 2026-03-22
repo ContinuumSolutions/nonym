@@ -16,9 +16,14 @@ var (
 
 // Initialize wires the scanner package to the shared database connection.
 // Call this after audit.Initialize() and pass audit.GetDatabase().
+// For PostgreSQL the tables are created by database/migrations/003_v2_scanner.sql;
+// for SQLite (dev/test) they are created inline.
 func Initialize(sharedDB *sql.DB, postgres bool) error {
 	db = sharedDB
 	isPostgres = postgres
+	if postgres {
+		return nil // tables created via migration file
+	}
 	return createTables()
 }
 
