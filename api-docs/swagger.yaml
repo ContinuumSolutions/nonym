@@ -86,6 +86,12 @@ tags:
     description: Individual PII findings produced by scan jobs
   - name: Reports
     description: Compliance reports (GDPR, SOC2, HIPAA, Custom) generated from scan findings
+  - name: Events
+    description: Protection events — PII detections, blocked requests, and other gateway activity
+  - name: Webhooks
+    description: Webhook subscriptions — receive real-time event notifications via HTTP POST
+  - name: Dashboard
+    description: Dashboard layout and per-widget data used by the web UI
   - name: Benchmarks
     description: Published latency benchmarks showing Nonym's processing overhead
 
@@ -1142,7 +1148,7 @@ paths:
 
   /api/v1/dashboard/widgets/compliance-summary:
     get:
-      tags: [Compliance]
+      tags: [Dashboard, Compliance]
       summary: Compliance Shield widget data
       description: |
         Returns per-framework compliance coverage metrics for the authenticated
@@ -1176,6 +1182,373 @@ paths:
                 $ref: '#/components/schemas/ComplianceSummaryResponse'
         '401':
           description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/dashboard/layout:
+    get:
+      tags: [Dashboard]
+      summary: Get dashboard layout
+      description: |
+        Returns the full widget configuration for the dashboard — widget IDs, types, titles,
+        data endpoint URLs, refresh intervals, and grid placement metadata. Fetch this once on
+        load, then poll each widget's `endpoint` independently at its `refresh_interval_seconds`.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Dashboard layout
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardLayoutResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/dashboard/widgets/{widget_id}:
+    get:
+      tags: [Dashboard]
+      summary: Get widget data
+      description: |
+        Returns live data for a specific dashboard widget. Each widget type returns a
+        different response shape (see schema). All widgets are scoped to the authenticated org.
+
+        | `widget_id` | Type | Response shape |
+        |---|---|---|
+        | `stat-total-requests` | `stat_card` | `StatCardData` |
+        | `stat-pii-protected` | `stat_card` | `StatCardData` |
+        | `stat-blocked-requests` | `stat_card` | `StatCardData` |
+        | `stat-avg-latency` | `stat_card` | `StatCardData` |
+        | `success-rate` | `success_rate` | `SuccessRateData` |
+        | `protection-summary` | `protection_summary` | `ProtectionSummaryData` |
+        | `gateway-status` | `gateway_status` | `GatewayStatusData` |
+        | `top-providers` | `top_providers` | `TopProvidersData` |
+        | `recent-activity` | `activity_chart` | `ActivityChartData` |
+        | `live-stats` | `live_stats` | `LiveStatsData` |
+        | `compliance-summary` | `compliance_summary` | `ComplianceSummaryResponse` |
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: widget_id
+          in: path
+          required: true
+          schema:
+            type: string
+            enum:
+              - stat-total-requests
+              - stat-pii-protected
+              - stat-blocked-requests
+              - stat-avg-latency
+              - success-rate
+              - protection-summary
+              - gateway-status
+              - top-providers
+              - recent-activity
+              - live-stats
+              - compliance-summary
+      responses:
+        '200':
+          description: Widget data (shape varies by widget_id — see description table)
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Widget not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ── Events & Webhooks ────────────────────────────────────────────────────────
+
+  /api/v1/events:
+    get:
+      tags: [Events]
+      summary: List protection events
+      description: |
+        Returns paginated protection events for the org with optional filters.
+        Events are created whenever the gateway detects PII, blocks a request, or encounters a provider error.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pii_detected, request_blocked, provider_error, rate_limit_exceeded]
+        - name: pii_type
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by PII type (e.g. `EMAIL`, `PHONE`, `SSN`)
+        - name: provider
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by provider slug (e.g. `openai`, `sentry`)
+        - name: severity
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [low, medium, high, critical]
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [open, resolved, ignored]
+        - name: framework
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter to events tagged with a compliance framework (e.g. `GDPR`)
+        - name: start_time
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: end_time
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Events list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventsResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/events/{id}:
+    get:
+      tags: [Events]
+      summary: Get event
+      description: Returns a single protection event by ID.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Event details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/events/{id}/status:
+    patch:
+      tags: [Events]
+      summary: Update event status
+      description: Changes the status of an event to `open`, `resolved`, or `ignored`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [open, resolved, ignored]
+            example:
+              status: resolved
+      responses:
+        '200':
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Event status updated successfully
+        '400':
+          description: Invalid status value
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/webhooks:
+    get:
+      tags: [Webhooks]
+      summary: List webhooks
+      description: Returns all webhook configurations for the authenticated user.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Webhooks list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  webhooks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Webhook'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags: [Webhooks]
+      summary: Create webhook
+      description: |
+        Registers a new webhook endpoint. Nonym will POST a signed JSON payload to `url`
+        whenever any of the subscribed `events` occur.
+
+        **Payload signing:** if `secret` is provided, each delivery includes an
+        `X-Nonym-Signature-256: sha256=<hex>` header — HMAC-SHA256 of the raw request body
+        using the secret as the key. Verify this header to ensure the request is genuine.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookRequest'
+            example:
+              url: https://your-server.com/nonym-webhook
+              events: [pii_detected, request_blocked]
+              secret: my-signing-secret
+      responses:
+        '201':
+          description: Webhook created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Webhook'
+        '400':
+          description: Missing URL or events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/webhooks/{id}/test:
+    post:
+      tags: [Webhooks]
+      summary: Test webhook
+      description: |
+        Sends a representative `webhook.test` payload to the webhook URL to verify that
+        the endpoint is reachable and correctly handles Nonym deliveries.
+
+        The test payload includes an `X-Nonym-Signature-256` header if the webhook has a
+        secret configured. Returns the HTTP status code and first 4 KB of the response body
+        from the target endpoint.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Delivery result (success or failure — HTTP 200 either way)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookTestResult'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Webhook not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Invalid webhook URL
           content:
             application/json:
               schema:
@@ -4018,3 +4391,366 @@ components:
           type: string
           enum: [high, medium, low]
           description: Highest risk level among findings on this edge
+
+    # ── Events & Webhooks schemas ─────────────────────────────────────────────
+
+    Event:
+      type: object
+      properties:
+        id:
+          type: string
+          example: evt_1711234567890
+        timestamp:
+          type: string
+          format: date-time
+        type:
+          type: string
+          enum: [pii_detected, request_blocked, provider_error, rate_limit_exceeded]
+        pii_type:
+          type: string
+          description: Type of PII involved (e.g. `EMAIL`, `PHONE`, `SSN`)
+          nullable: true
+        action:
+          type: string
+          enum: [anonymized, blocked, detected]
+        request_id:
+          type: string
+        user_id:
+          type: string
+          nullable: true
+        organization_id:
+          type: integer
+        provider:
+          type: string
+          nullable: true
+          description: Upstream provider slug (e.g. `openai`, `sentry`)
+        model:
+          type: string
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+          nullable: true
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        status:
+          type: string
+          enum: [open, resolved, ignored]
+        description:
+          type: string
+          nullable: true
+        compliance_frameworks:
+          type: array
+          items:
+            type: string
+          description: Compliance frameworks this event is attributed to (e.g. `["GDPR", "HIPAA"]`)
+
+    EventsResponse:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/Event'
+        total:
+          type: integer
+          format: int64
+        has_more:
+          type: boolean
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    Webhook:
+      type: object
+      properties:
+        id:
+          type: string
+          example: wh_1711234567890
+        url:
+          type: string
+          format: uri
+          example: https://your-server.com/nonym-webhook
+        events:
+          type: array
+          items:
+            type: string
+          description: Event types this webhook subscribes to
+          example: [pii_detected, request_blocked]
+        secret:
+          type: string
+          description: HMAC-SHA256 signing secret (omitted from GET responses for security)
+          nullable: true
+        status:
+          type: string
+          enum: [active, disabled, failed]
+        created_at:
+          type: string
+          format: date-time
+        last_trigger:
+          type: string
+          format: date-time
+          nullable: true
+        user_id:
+          type: string
+        organization_id:
+          type: integer
+
+    WebhookRequest:
+      type: object
+      required: [url, events]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: HTTPS endpoint that will receive POST deliveries
+        events:
+          type: array
+          items:
+            type: string
+            enum: [pii_detected, request_blocked, provider_error, rate_limit_exceeded]
+          description: Event types to subscribe to
+        secret:
+          type: string
+          description: Optional HMAC-SHA256 signing secret for verifying deliveries
+
+    WebhookTestResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        status_code:
+          type: integer
+          description: HTTP status code returned by the target endpoint
+          nullable: true
+        response_body:
+          type: string
+          description: First 4 KB of the response body from the target endpoint
+          nullable: true
+        error:
+          type: string
+          description: Error message if delivery failed (network error, timeout, etc.)
+          nullable: true
+        payload:
+          type: object
+          description: The test payload that was delivered
+
+    # ── Dashboard schemas ─────────────────────────────────────────────────────
+
+    DashboardLayoutResponse:
+      type: object
+      properties:
+        widgets:
+          type: array
+          items:
+            $ref: '#/components/schemas/WidgetConfig'
+
+    WidgetConfig:
+      type: object
+      properties:
+        id:
+          type: string
+          example: stat-total-requests
+        type:
+          type: string
+          example: stat_card
+        title:
+          type: string
+        subtitle:
+          type: string
+          nullable: true
+        endpoint:
+          type: string
+          description: URL to fetch data for this widget
+          example: /api/v1/dashboard/widgets/stat-total-requests
+        refresh_interval_seconds:
+          type: integer
+          description: How often the UI should poll this widget's endpoint
+        grid:
+          $ref: '#/components/schemas/GridPlacement'
+        display:
+          $ref: '#/components/schemas/DisplayOptions'
+
+    GridPlacement:
+      type: object
+      properties:
+        row:
+          type: integer
+        col_span:
+          type: integer
+          description: Number of 12-column grid columns to span
+        order:
+          type: integer
+          description: Render order within the row
+
+    DisplayOptions:
+      type: object
+      properties:
+        color_scheme:
+          type: string
+          enum: [blue, green, red, purple]
+        icon:
+          type: string
+          nullable: true
+        value_format:
+          type: string
+          enum: [number, percent, duration_ms]
+        threshold_warning:
+          type: number
+          nullable: true
+        threshold_critical:
+          type: number
+          nullable: true
+
+    StatCardData:
+      type: object
+      properties:
+        value:
+          type: number
+        unit:
+          type: string
+          nullable: true
+        delta:
+          type: number
+          description: Change vs the previous equivalent period
+        delta_period:
+          type: string
+          example: vs last 24h
+
+    SuccessRateData:
+      type: object
+      properties:
+        success_rate:
+          type: number
+          format: float
+          description: Percentage of requests processed without error (0–100)
+        redacted_requests:
+          type: integer
+          format: int64
+        total_requests:
+          type: integer
+          format: int64
+
+    ProtectionSummaryData:
+      type: object
+      properties:
+        rows:
+          type: array
+          items:
+            type: object
+            properties:
+              key:
+                type: string
+              label:
+                type: string
+              value:
+                description: Numeric or string summary value
+              color:
+                type: string
+
+    GatewayStatusData:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        uptime:
+          type: integer
+          format: int64
+          description: Seconds since process start
+        components:
+          type: array
+          items:
+            type: object
+            properties:
+              key:
+                type: string
+              name:
+                type: string
+              status:
+                type: string
+              provider:
+                type: boolean
+        memory_usage:
+          type: object
+          properties:
+            heap:
+              type: integer
+              format: int64
+              description: Heap memory in bytes
+            stack:
+              type: integer
+              format: int64
+            total:
+              type: integer
+              format: int64
+
+    TopProvidersData:
+      type: object
+      properties:
+        providers:
+          type: array
+          items:
+            type: object
+            properties:
+              provider:
+                type: string
+              label:
+                type: string
+              requests:
+                type: integer
+                format: int64
+              percent:
+                type: number
+                format: float
+              color:
+                type: string
+
+    ActivityChartData:
+      type: object
+      properties:
+        period_label:
+          type: string
+          example: Last 24 hours
+        points:
+          type: array
+          items:
+            type: object
+            properties:
+              timestamp:
+                type: string
+                format: date-time
+              count:
+                type: integer
+                format: int64
+
+    LiveStatsData:
+      type: object
+      properties:
+        rows:
+          type: array
+          items:
+            type: object
+            properties:
+              key:
+                type: string
+              label:
+                type: string
+              value:
+                type: number
+              format:
+                type: string
+                enum: [number, percent, duration_ms]
+              color_rule:
+                type: object
+                nullable: true
+                properties:
+                  threshold_warning:
+                    type: number
+                  threshold_critical:
+                    type: number
+                  direction:
+                    type: string
+                    enum: [higher_is_worse, lower_is_worse]
