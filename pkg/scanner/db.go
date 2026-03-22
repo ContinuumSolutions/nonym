@@ -17,14 +17,10 @@ var (
 
 // Initialize wires the scanner package to the shared database connection.
 // Call this after audit.Initialize() and pass audit.GetDatabase().
-// For PostgreSQL the tables are created by database/migrations/003_v2_scanner.sql;
-// for SQLite (dev/test) they are created inline.
+// Tables are created automatically for both PostgreSQL and SQLite.
 func Initialize(sharedDB *sql.DB, postgres bool) error {
 	db = sharedDB
 	isPostgres = postgres
-	if postgres {
-		return nil // tables created via migration file
-	}
 	return createTables()
 }
 
@@ -47,8 +43,12 @@ func formatQuery(query string) string {
 }
 
 func createTables() error {
+	ts := "DATETIME"
+	if isPostgres {
+		ts = "TIMESTAMPTZ"
+	}
 	stmts := []string{
-		`CREATE TABLE IF NOT EXISTS vendor_connections (
+		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS vendor_connections (
 			id            TEXT PRIMARY KEY,
 			org_id        INTEGER NOT NULL,
 			vendor        TEXT NOT NULL,
@@ -57,26 +57,26 @@ func createTables() error {
 			auth_type     TEXT NOT NULL DEFAULT 'api_key',
 			credentials   TEXT NOT NULL DEFAULT '{}',
 			settings      TEXT NOT NULL DEFAULT '{}',
-			connected_at  DATETIME,
-			last_scan_at  DATETIME,
+			connected_at  %s,
+			last_scan_at  %s,
 			error_message TEXT,
-			created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			created_at    %s NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at    %s NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			UNIQUE(org_id, vendor)
-		)`,
-		`CREATE TABLE IF NOT EXISTS scans (
+		)`, ts, ts, ts, ts),
+		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS scans (
 			id             TEXT PRIMARY KEY,
 			org_id         INTEGER NOT NULL,
 			vendor_ids     TEXT NOT NULL DEFAULT '[]',
 			status         TEXT NOT NULL DEFAULT 'pending',
-			started_at     DATETIME,
-			completed_at   DATETIME,
+			started_at     %s,
+			completed_at   %s,
 			findings_count INTEGER NOT NULL DEFAULT 0,
 			error_message  TEXT,
 			triggered_by   TEXT NOT NULL DEFAULT 'manual',
-			created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-		)`,
-		`CREATE TABLE IF NOT EXISTS findings (
+			created_at     %s NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`, ts, ts, ts),
+		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS findings (
 			id                   TEXT PRIMARY KEY,
 			org_id               INTEGER NOT NULL,
 			scan_id              TEXT NOT NULL,
@@ -93,13 +93,13 @@ func createTables() error {
 			status               TEXT NOT NULL DEFAULT 'open',
 			compliance_impact    TEXT NOT NULL DEFAULT '[]',
 			fixes                TEXT NOT NULL DEFAULT '[]',
-			first_seen_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			last_seen_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-			resolved_at          DATETIME,
+			first_seen_at        %s NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			last_seen_at         %s NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			resolved_at          %s,
 			resolved_by          INTEGER,
-			created_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-		)`,
-		`CREATE TABLE IF NOT EXISTS reports (
+			created_at           %s NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`, ts, ts, ts, ts),
+		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS reports (
 			id           TEXT PRIMARY KEY,
 			org_id       INTEGER NOT NULL,
 			framework    TEXT NOT NULL,
@@ -108,10 +108,10 @@ func createTables() error {
 			status       TEXT NOT NULL DEFAULT 'pending',
 			file_url     TEXT,
 			share_token  TEXT UNIQUE,
-			generated_at DATETIME,
-			expires_at   DATETIME,
-			created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-		)`,
+			generated_at %s,
+			expires_at   %s,
+			created_at   %s NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)`, ts, ts, ts),
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {
