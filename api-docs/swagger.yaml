@@ -72,6 +72,14 @@ tags:
     description: Vendor catalog and setup wizard — discover and configure protection for Sentry, Datadog, PostHog, and other monitoring/analytics vendors
   - name: Scanner
     description: Free-tier vendor discovery — scan your environment for unprotected vendor SDK configurations
+  - name: Vendor Connections
+    description: Authenticated connections to external SaaS APIs (Sentry, Datadog, Mixpanel, Stripe, …) used by the V2 scanner
+  - name: Scans
+    description: Scan jobs that run PII detection across all connected vendor APIs
+  - name: Findings
+    description: Individual PII findings produced by scan jobs
+  - name: Reports
+    description: Compliance reports (GDPR, SOC2, HIPAA, Custom) generated from scan findings
   - name: Benchmarks
     description: Published latency benchmarks showing Nonym's processing overhead
 
@@ -1533,6 +1541,785 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  # ── Scanner V2: overview & flows ────────────────────────────────────────────
+
+  /api/v1/scanner/overview:
+    get:
+      tags: [Scanner]
+      summary: Scanner overview
+      description: Returns a high-level summary of the org's scanner state — connected vendor count, finding counts by risk level, an overall risk score (0–100), per-framework compliance snapshot, and the timestamp of the last completed scan.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Scanner overview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScannerOverview'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/scanner/flows:
+    get:
+      tags: [Scanner]
+      summary: Data-flow graph
+      description: Returns nodes (your application + each vendor connection) and edges (data flows with finding counts and risk levels) for rendering a data-flow diagram.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Data-flow graph
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nodes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FlowNode'
+                  edges:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FlowEdge'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ── Vendor Connections ────────────────────────────────────────────────────────
+
+  /api/v1/vendor-connections/test:
+    post:
+      tags: [Vendor Connections]
+      summary: Test credentials inline
+      description: |
+        Validates vendor credentials without requiring an existing connection record.
+        Use this when the user is entering credentials for the first time (e.g. in a setup form)
+        before calling `POST /api/v1/vendor-connections` to save them.
+
+        No data is persisted — the test runs entirely in memory.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vendor, credentials]
+              properties:
+                vendor:
+                  type: string
+                  example: sentry
+                auth_type:
+                  type: string
+                  enum: [api_key, oauth]
+                  default: api_key
+                credentials:
+                  type: object
+                  additionalProperties: true
+            example:
+              vendor: sentry
+              auth_type: api_key
+              credentials:
+                token: sntrys_xxxxxxxxxxxx
+      responses:
+        '200':
+          description: Test result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionResult'
+        '400':
+          description: Missing vendor or credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/vendor-connections:
+    get:
+      tags: [Vendor Connections]
+      summary: List vendor connections
+      description: Returns all vendor connections for the authenticated organisation. Credential values are masked in the response.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [connected, disconnected, error, scanning]
+          description: Filter by connection status
+      responses:
+        '200':
+          description: List of vendor connections
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  connections:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VendorConnection'
+                  total:
+                    type: integer
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags: [Vendor Connections]
+      summary: Create vendor connection
+      description: Adds a new vendor connection for the org. Credentials are stored encrypted and never returned in plain text.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VendorConnectionCreateRequest'
+            example:
+              vendor: sentry
+              auth_type: api_key
+              credentials:
+                token: sntrys_xxxxxxxxxxxx
+              display_name: Sentry Production
+      responses:
+        '201':
+          description: Vendor connection created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorConnection'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/vendor-connections/{id}:
+    delete:
+      tags: [Vendor Connections]
+      summary: Delete vendor connection
+      description: Permanently removes a vendor connection and its stored credentials.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Deleted successfully
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/vendor-connections/{id}/test:
+    post:
+      tags: [Vendor Connections]
+      summary: Test vendor connection
+      description: Validates the stored credentials against the vendor and updates the connection status to `connected` or `error`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Test result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionResult'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Vendor connection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/vendor-connections/{id}/scan:
+    post:
+      tags: [Vendor Connections]
+      summary: Trigger scan for a single vendor
+      description: Creates and starts a scan scoped to this vendor connection. Returns the new scan ID immediately; use `GET /api/v1/scans/{id}/status` to stream progress.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '202':
+          description: Scan started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  scan_id:
+                    type: string
+                    format: uuid
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Vendor connection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ── Scans ────────────────────────────────────────────────────────────────────
+
+  /api/v1/scans:
+    get:
+      tags: [Scans]
+      summary: List scans
+      description: Returns paginated scan history for the org, newest first.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: List of scans
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  scans:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Scan'
+                  total:
+                    type: integer
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags: [Scans]
+      summary: Start a new scan
+      description: |
+        Creates and immediately starts a scan across all connected vendors (or a specified subset).
+        Returns `202 Accepted` with the scan ID. Stream real-time progress via `GET /api/v1/scans/{id}/status`.
+
+        When `vendor_ids` is provided the scan runs against those specific connections **regardless of their current status** (useful for scanning a newly added connection before it has been tested). When `vendor_ids` is omitted only `connected` vendors are included.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                vendor_ids:
+                  type: array
+                  items:
+                    type: string
+                  description: Vendor connection UUIDs or vendor name slugs (e.g. `"sentry"`) to scan. When provided, runs against these connections regardless of status. Omit to scan all `connected` vendors.
+            example:
+              vendor_ids: []
+      responses:
+        '202':
+          description: Scan started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  scan_id:
+                    type: string
+                    format: uuid
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: No connected vendors available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/scans/{id}:
+    get:
+      tags: [Scans]
+      summary: Get scan
+      description: Returns the full state of a single scan job.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Scan details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Scan'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Scan not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/scans/{id}/status:
+    get:
+      tags: [Scans]
+      summary: Stream scan progress (SSE)
+      description: |
+        Returns a Server-Sent Events stream of scan progress events.
+
+        Event types:
+        - `progress` — phase and percentage update (`{"event":"progress","phase":"fetching","vendor":"sentry","percent":20}`)
+        - `finding` — a new finding was persisted (`{"event":"finding","finding_id":"...","vendor":"sentry","risk_level":"high"}`)
+        - `done` — scan completed (`{"event":"done","findings_count":3,"scan_id":"..."}`)
+        - `error` — scan failed (`{"event":"error","message":"...","scan_id":"..."}`)
+
+        If the scan is already complete when the request arrives the terminal event is sent immediately and the stream closes.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: SSE event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Scan not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ── Findings ──────────────────────────────────────────────────────────────────
+
+  /api/v1/findings:
+    get:
+      tags: [Findings]
+      summary: List findings
+      description: Returns paginated findings for the org with optional filters.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: vendor
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by vendor name (e.g. `sentry`)
+        - name: risk_level
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [high, medium, low]
+        - name: data_type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [email, phone, name, ip_address, api_key, token, financial, health]
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [open, resolved, suppressed]
+          description: Defaults to returning all statuses
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: List of findings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  findings:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Finding'
+                  total:
+                    type: integer
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/findings/{id}:
+    get:
+      tags: [Findings]
+      summary: Get finding
+      description: Returns a single finding by ID.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Finding details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Finding'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Finding not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    patch:
+      tags: [Findings]
+      summary: Update finding status
+      description: Changes the status of a finding to `open`, `resolved`, or `suppressed`. Setting `resolved` records the resolved_at timestamp.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [open, resolved, suppressed]
+            example:
+              status: resolved
+      responses:
+        '200':
+          description: Updated finding
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Finding'
+        '400':
+          description: Invalid status value
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ── Reports ───────────────────────────────────────────────────────────────────
+
+  /api/v1/reports:
+    get:
+      tags: [Reports]
+      summary: List scanner reports
+      description: Returns all generated compliance reports for the org, newest first.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of reports
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reports:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ScannerReport'
+                  total:
+                    type: integer
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/reports/generate:
+    post:
+      tags: [Reports]
+      summary: Generate a compliance report
+      description: |
+        Creates a report record and queues async generation. Returns `202 Accepted` immediately.
+        Poll `GET /api/v1/reports/{id}` until `status` is `done`, then download via `GET /api/v1/reports/{id}/download`.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [framework, time_range]
+              properties:
+                framework:
+                  type: string
+                  enum: [GDPR, SOC2, HIPAA, Custom]
+                time_range:
+                  type: string
+                  description: Human-readable or ISO range (e.g. `last_30_days`, `2026-01-01/2026-03-31`)
+                options:
+                  type: object
+                  description: Framework-specific generation options
+            example:
+              framework: GDPR
+              time_range: last_30_days
+      responses:
+        '202':
+          description: Report generation started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  report_id:
+                    type: string
+                    format: uuid
+        '400':
+          description: Validation error (invalid framework or missing time_range)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/reports/{id}:
+    get:
+      tags: [Reports]
+      summary: Get report
+      description: Returns the current state of a report. Poll this endpoint until `status` is `done` or `failed`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Report details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScannerReport'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Report not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/reports/{id}/download:
+    get:
+      tags: [Reports]
+      summary: Download report file
+      description: Redirects (`302`) to the signed download URL for the generated report file. Returns `422` if the report is not yet ready.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '302':
+          description: Redirect to download URL
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Report not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Report not ready for download
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/reports/share/{token}:
+    get:
+      tags: [Reports]
+      summary: Get shared report (public)
+      description: Returns a report by its share token. No authentication required. Returns `410 Gone` if the share link has expired.
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Shared report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScannerReport'
+        '404':
+          description: Report not found or share link invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '410':
+          description: Share link has expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   # Benchmarks
   /api/v1/benchmarks:
     get:
@@ -2880,3 +3667,344 @@ components:
         methodology:
           type: string
           description: Explanation of how benchmarks were produced
+
+    # ── V2 Scanner schemas ────────────────────────────────────────────────────
+
+    VendorConnection:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        org_id:
+          type: integer
+        vendor:
+          type: string
+          example: sentry
+        display_name:
+          type: string
+          example: Sentry Production
+        status:
+          type: string
+          enum: [connected, disconnected, error, scanning]
+        auth_type:
+          type: string
+          enum: [api_key, oauth]
+        credentials:
+          type: object
+          description: Credential values are masked (e.g. `sk_****xxxx`) — never returned in plain text
+          additionalProperties: true
+        settings:
+          type: object
+          additionalProperties: true
+        connected_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_scan_at:
+          type: string
+          format: date-time
+          nullable: true
+        error_message:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    VendorConnectionCreateRequest:
+      type: object
+      required: [vendor, credentials]
+      properties:
+        vendor:
+          type: string
+          description: Vendor slug (e.g. `sentry`, `datadog`, `mixpanel`, `stripe`)
+          example: sentry
+        auth_type:
+          type: string
+          enum: [api_key, oauth]
+          default: api_key
+        credentials:
+          type: object
+          description: Vendor-specific credential fields
+          additionalProperties: true
+        settings:
+          type: object
+          additionalProperties: true
+        display_name:
+          type: string
+          description: Human-readable label. Defaults to capitalised vendor name.
+
+    ConnectionResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+          description: Human-readable outcome message
+        events_accessible:
+          type: integer
+          nullable: true
+          description: Number of events accessible via the credentials (vendor-specific)
+
+    Scan:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        org_id:
+          type: integer
+        vendor_ids:
+          type: array
+          items:
+            type: string
+          description: Vendor names included in this scan
+        status:
+          type: string
+          enum: [pending, running, done, failed]
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        findings_count:
+          type: integer
+        error_message:
+          type: string
+          nullable: true
+        triggered_by:
+          type: string
+          enum: [manual, scheduled, onboarding]
+        created_at:
+          type: string
+          format: date-time
+
+    Finding:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        org_id:
+          type: integer
+        scan_id:
+          type: string
+          format: uuid
+        vendor_connection_id:
+          type: string
+          format: uuid
+        vendor:
+          type: string
+          example: sentry
+        data_type:
+          type: string
+          enum: [email, phone, name, ip_address, api_key, token, financial, health]
+        risk_level:
+          type: string
+          enum: [high, medium, low]
+        title:
+          type: string
+        description:
+          type: string
+        location:
+          type: string
+          nullable: true
+          description: Field path or source location where the data was found
+        endpoint:
+          type: string
+          nullable: true
+          description: API endpoint or URL associated with the finding
+        occurrences:
+          type: integer
+          description: Number of times this finding has been observed
+        sample_masked:
+          type: string
+          nullable: true
+          description: Masked sample of the detected value
+        status:
+          type: string
+          enum: [open, resolved, suppressed]
+        compliance_impact:
+          type: array
+          items:
+            $ref: '#/components/schemas/ComplianceImpact'
+        fixes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Fix'
+        first_seen_at:
+          type: string
+          format: date-time
+        last_seen_at:
+          type: string
+          format: date-time
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+        resolved_by:
+          type: integer
+          nullable: true
+          description: User ID who resolved the finding
+        created_at:
+          type: string
+          format: date-time
+
+    ComplianceImpact:
+      type: object
+      properties:
+        framework:
+          type: string
+          enum: [GDPR, SOC2, HIPAA]
+        article:
+          type: string
+          description: Relevant article or control reference
+        risk_level:
+          type: string
+          enum: [high, medium, low]
+
+    Fix:
+      type: object
+      properties:
+        language:
+          type: string
+          description: Programming language for the code snippet
+          example: go
+        code:
+          type: string
+          description: Code snippet showing how to remediate the finding
+        description:
+          type: string
+          description: Plain-English description of the fix
+
+    ScannerReport:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        org_id:
+          type: integer
+        framework:
+          type: string
+          enum: [GDPR, SOC2, HIPAA, Custom]
+        time_range:
+          type: string
+          example: last_30_days
+        options:
+          type: object
+          additionalProperties: true
+        status:
+          type: string
+          enum: [pending, generating, done, failed]
+        file_url:
+          type: string
+          nullable: true
+          description: URL of the generated report file (populated when status is `done`)
+        share_token:
+          type: string
+          nullable: true
+          description: Token for the public share link
+        generated_at:
+          type: string
+          format: date-time
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the share link expires (30 days after generation)
+        created_at:
+          type: string
+          format: date-time
+
+    FindingCounts:
+      type: object
+      properties:
+        high:
+          type: integer
+        medium:
+          type: integer
+        low:
+          type: integer
+        total:
+          type: integer
+
+    FrameworkStatus:
+      type: object
+      properties:
+        violations:
+          type: integer
+          description: Number of open findings that impact this framework
+        status:
+          type: string
+          enum: [ok, warning, critical]
+          description: "`ok` = 0 violations, `warning` = 1–5, `critical` = 6+"
+
+    ComplianceSnapshot:
+      type: object
+      properties:
+        gdpr:
+          $ref: '#/components/schemas/FrameworkStatus'
+        soc2:
+          $ref: '#/components/schemas/FrameworkStatus'
+        hipaa:
+          $ref: '#/components/schemas/FrameworkStatus'
+
+    ScannerOverview:
+      type: object
+      properties:
+        vendors_connected:
+          type: integer
+          description: Number of vendor connections with status `connected`
+        findings:
+          $ref: '#/components/schemas/FindingCounts'
+        risk_score:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Overall risk score derived from open finding counts
+        compliance:
+          $ref: '#/components/schemas/ComplianceSnapshot'
+        last_scan_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Completion time of the most recent scan
+
+    FlowNode:
+      type: object
+      properties:
+        id:
+          type: string
+          description: "`app` for the user's application node, UUID for vendor nodes"
+        label:
+          type: string
+        type:
+          type: string
+          enum: [app, vendor]
+
+    FlowEdge:
+      type: object
+      properties:
+        from:
+          type: string
+          description: Source node ID
+        to:
+          type: string
+          description: Destination node ID
+        findings_count:
+          type: integer
+          description: Number of open findings on this data-flow edge
+        risk_level:
+          type: string
+          enum: [high, medium, low]
+          description: Highest risk level among findings on this edge

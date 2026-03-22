@@ -265,6 +265,7 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 	// Note: /api/v1/vendors remains the existing vendor catalog / SDK-integration system.
 	app.Get("/api/v1/vendor-connections", authMiddleware, scanner.HandleListVendorConnections)
 	app.Post("/api/v1/vendor-connections", authMiddleware, scanner.HandleCreateVendorConnection)
+	app.Post("/api/v1/vendor-connections/test", authMiddleware, scanner.HandleTestCredentials)
 	app.Delete("/api/v1/vendor-connections/:id", authMiddleware, scanner.HandleDeleteVendorConnection)
 	app.Post("/api/v1/vendor-connections/:id/test", authMiddleware, scanner.HandleTestVendorConnection)
 	app.Post("/api/v1/vendor-connections/:id/scan", authMiddleware, scanner.HandleTriggerVendorScan)

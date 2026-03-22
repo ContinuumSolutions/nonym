@@ -46,26 +46,32 @@ func HandleCreateScan(c *fiber.Ctx) error {
 	}
 	_ = c.BodyParser(&req)
 
-	// Fetch connected vendor connections.
-	connections, err := listVendorConnections(orgID, "connected")
-	if err != nil {
-		log.Printf("scanner: HandleCreateScan: %v", err)
-		return c.Status(500).JSON(fiber.Map{"error": "Failed to fetch vendor connections"})
-	}
+	var connections []VendorConnection
+	var err error
 
-	// Filter to requested vendor IDs if provided.
 	if len(req.VendorIDs) > 0 {
+		// Specific vendors requested — fetch all and filter by ID or name regardless of status.
+		all, fetchErr := listVendorConnections(orgID, "")
+		if fetchErr != nil {
+			log.Printf("scanner: HandleCreateScan: %v", fetchErr)
+			return c.Status(500).JSON(fiber.Map{"error": "Failed to fetch vendor connections"})
+		}
 		wanted := map[string]bool{}
 		for _, id := range req.VendorIDs {
 			wanted[id] = true
 		}
-		filtered := []VendorConnection{}
-		for _, vc := range connections {
+		for _, vc := range all {
 			if wanted[vc.ID] || wanted[vc.Vendor] {
-				filtered = append(filtered, vc)
+				connections = append(connections, vc)
 			}
 		}
-		connections = filtered
+	} else {
+		// No filter — run against all connected vendors.
+		connections, err = listVendorConnections(orgID, "connected")
+		if err != nil {
+			log.Printf("scanner: HandleCreateScan: %v", err)
+			return c.Status(500).JSON(fiber.Map{"error": "Failed to fetch vendor connections"})
+		}
 	}
 
 	if len(connections) == 0 {

@@ -112,6 +112,38 @@ func HandleDeleteVendorConnection(c *fiber.Ctx) error {
 	return c.SendStatus(204)
 }
 
+// HandleTestCredentials tests credentials inline without requiring an existing connection.
+// POST /api/v1/vendor-connections/test
+func HandleTestCredentials(c *fiber.Ctx) error {
+	_, ok := c.Locals("organization_id").(int)
+	if !ok {
+		return c.Status(401).JSON(fiber.Map{"error": "Authentication required"})
+	}
+
+	var req struct {
+		Vendor      string                 `json:"vendor"`
+		AuthType    string                 `json:"auth_type"`
+		Credentials map[string]interface{} `json:"credentials"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
+	}
+	if req.Vendor == "" {
+		return c.Status(400).JSON(fiber.Map{"error": "vendor is required"})
+	}
+	if len(req.Credentials) == 0 {
+		return c.Status(400).JSON(fiber.Map{"error": "credentials are required"})
+	}
+
+	vc := &VendorConnection{
+		Vendor:      req.Vendor,
+		AuthType:    req.AuthType,
+		Credentials: req.Credentials,
+	}
+	result := testConnection(vc)
+	return c.JSON(result)
+}
+
 // HandleTestVendorConnection tests the credentials for a vendor connection.
 // POST /api/v1/vendor-connections/:id/test
 func HandleTestVendorConnection(c *fiber.Ctx) error {
