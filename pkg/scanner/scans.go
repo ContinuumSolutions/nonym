@@ -237,24 +237,31 @@ func runScan(scan *Scan, connections []VendorConnection, events chan<- sseEvent)
 }
 
 // scanVendor fetches events from a vendor, detects PII, and persists findings.
-// In Phase 1, it operates on sample/test data from vendor credentials.
-// Replace with real HTTP client calls per connector in Phase 2.
+// If a real Connector is registered for the vendor it is used; otherwise the
+// scan falls back to inspecting the stored credential/settings values.
 func scanVendor(scan *Scan, vc *VendorConnection) ([]Finding, error) {
-	// Build normalised events from stored credentials/settings context.
-	// This is a Phase-1 placeholder: in production, each vendor connector
-	// calls the vendor API and returns real events.
-	sampleTexts := extractSampleTexts(vc)
+	var events []NormalizedEvent
+	var err error
+
+	if c := connectorFor(vc.Vendor); c != nil {
+		events, err = c.FetchEvents(vc)
+		if err != nil {
+			return nil, fmt.Errorf("%s connector: %w", vc.Vendor, err)
+		}
+		log.Printf("scanner: %s connector returned %d events", vc.Vendor, len(events))
+	} else {
+		events = credentialEvents(vc)
+		log.Printf("scanner: no connector for %q — scanning stored credentials (%d fields)", vc.Vendor, len(events))
+	}
 
 	var findings []Finding
-	for _, event := range sampleTexts {
+	for _, event := range events {
 		detections := Detect(event.Text)
 		for _, d := range detections {
-			// Deduplication: check for existing open finding with same signature.
 			existingID, err := deduplicateFinding(scan.OrgID, vc.Vendor, d.DataType, event.Source, event.Metadata["endpoint"])
 			if err != nil || existingID != "" {
-				continue // already counted
+				continue
 			}
-
 			f := buildFinding(scan, vc, event, d)
 			if err := insertFinding(&f); err == nil {
 				findings = append(findings, f)
@@ -264,9 +271,9 @@ func scanVendor(scan *Scan, vc *VendorConnection) ([]Finding, error) {
 	return findings, nil
 }
 
-// extractSampleTexts builds NormalizedEvents from the vendor connection's stored context.
-// This stub is replaced by real connector calls in Phase 2.
-func extractSampleTexts(vc *VendorConnection) []NormalizedEvent {
+// credentialEvents is the fallback scanner: it scans the stored credential and
+// settings field values for PII rather than calling any external API.
+func credentialEvents(vc *VendorConnection) []NormalizedEvent {
 	var events []NormalizedEvent
 	for k, v := range vc.Credentials {
 		if s, ok := v.(string); ok {

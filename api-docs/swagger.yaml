@@ -71,7 +71,13 @@ tags:
   - name: Vendors
     description: Vendor catalog and setup wizard — discover and configure protection for Sentry, Datadog, PostHog, and other monitoring/analytics vendors
   - name: Scanner
-    description: Free-tier vendor discovery — scan your environment for unprotected vendor SDK configurations
+    description: |
+      Vendor PII scanner. For vendors with a registered connector (currently **Sentry**) the scan
+      calls the vendor API directly — fetching real error events, breadcrumbs, user context, tags,
+      and exception payloads — and runs PII detection over that live data.
+
+      For vendors without a connector the scan falls back to running PII detection over the
+      stored credential and settings field values.
   - name: Vendor Connections
     description: Authenticated connections to external SaaS APIs (Sentry, Datadog, Mixpanel, Stripe, …) used by the V2 scanner
   - name: Scans
@@ -1871,6 +1877,10 @@ paths:
         Returns `202 Accepted` with the scan ID. Stream real-time progress via `GET /api/v1/scans/{id}/status`.
 
         When `vendor_ids` is provided the scan runs against those specific connections **regardless of their current status** (useful for scanning a newly added connection before it has been tested). When `vendor_ids` is omitted only `connected` vendors are included.
+
+        **Per-vendor behaviour:**
+        - **Sentry** — calls the Sentry API (`/api/0/organizations/`, `/projects/`, `/events/`). Fetches up to 500 real error events across all accessible projects and scans each event's message, user context (email, IP, username), tags, extra fields, breadcrumbs, and exception values for PII.
+        - **All other vendors** — falls back to running PII detection over the stored credential and settings field values until a dedicated connector is added.
       security:
         - bearerAuth: []
       requestBody:
