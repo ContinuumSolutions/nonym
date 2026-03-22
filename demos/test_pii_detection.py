@@ -106,7 +106,7 @@ for test in test_cases:
                         print("✅ Clean request passed through")
                 else:
                     print("⚠️  Unexpected response format")
-            except:
+            except Exception:
                 print(f"📝 Response: {response.text[:150]}...")
         elif response.status_code == 401:
             print("✅ Request reached provider (expected 401 with test key)")
@@ -116,7 +116,7 @@ for test in test_cases:
                 error_response = response.json()
                 if 'error' in error_response:
                     print(f"   Reason: {error_response['error']}")
-            except:
+            except Exception:
                 print(f"   Response: {response.text}")
         elif response.status_code == 400:
             print("⚠️  Bad request - possible PII validation error")
