@@ -465,3 +465,8 @@ func broadcastTransaction(transaction *Transaction) {
 func GetDatabase() *sql.DB {
 	return db
 }
+
+// IsPostgres reports whether the audit system is using PostgreSQL.
+func IsPostgres() bool {
+	return isPostgres
+}

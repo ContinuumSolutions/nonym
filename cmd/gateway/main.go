@@ -20,6 +20,7 @@ import (
 	"github.com/ContinuumSolutions/nonym/pkg/interceptor"
 	"github.com/ContinuumSolutions/nonym/pkg/ner"
 	"github.com/ContinuumSolutions/nonym/pkg/router"
+	"github.com/ContinuumSolutions/nonym/pkg/scanner"
 )
 
 // Config holds the application configuration
@@ -130,6 +131,11 @@ func initializeServices(config *Config) error {
 	}
 	if err := router.Initialize(config.Providers); err != nil {
 		return fmt.Errorf("failed to initialize router: %w", err)
+	}
+
+	// Initialize V2 scanner (shares the audit DB connection).
+	if err := scanner.Initialize(audit.GetDatabase(), audit.IsPostgres()); err != nil {
+		return fmt.Errorf("failed to initialize scanner: %w", err)
 	}
 
 	return nil
@@ -253,6 +259,37 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 
 	// Benchmarks
 	app.Get("/api/v1/benchmarks", audit.HandleGetBenchmarks)
+
+	// ── V2 Scanner endpoints ─────────────────────────────────────────────────
+	// Vendor connections (authenticated external API connections for scanning).
+	// Note: /api/v1/vendors remains the existing vendor catalog / SDK-integration system.
+	app.Get("/api/v1/vendor-connections", authMiddleware, scanner.HandleListVendorConnections)
+	app.Post("/api/v1/vendor-connections", authMiddleware, scanner.HandleCreateVendorConnection)
+	app.Delete("/api/v1/vendor-connections/:id", authMiddleware, scanner.HandleDeleteVendorConnection)
+	app.Post("/api/v1/vendor-connections/:id/test", authMiddleware, scanner.HandleTestVendorConnection)
+	app.Post("/api/v1/vendor-connections/:id/scan", authMiddleware, scanner.HandleTriggerVendorScan)
+
+	// Scans
+	app.Get("/api/v1/scans", authMiddleware, scanner.HandleListScans)
+	app.Post("/api/v1/scans", authMiddleware, scanner.HandleCreateScan)
+	app.Get("/api/v1/scans/:id", authMiddleware, scanner.HandleGetScan)
+	app.Get("/api/v1/scans/:id/status", authMiddleware, scanner.HandleScanStatus)
+
+	// Findings
+	app.Get("/api/v1/findings", authMiddleware, scanner.HandleListFindings)
+	app.Get("/api/v1/findings/:id", authMiddleware, scanner.HandleGetFinding)
+	app.Patch("/api/v1/findings/:id", authMiddleware, scanner.HandlePatchFinding)
+
+	// Reports
+	app.Get("/api/v1/reports", authMiddleware, scanner.HandleListReports)
+	app.Post("/api/v1/reports/generate", authMiddleware, scanner.HandleGenerateReport)
+	app.Get("/api/v1/reports/share/:token", scanner.HandleGetSharedReport) // public — no auth
+	app.Get("/api/v1/reports/:id", authMiddleware, scanner.HandleGetReport)
+	app.Get("/api/v1/reports/:id/download", authMiddleware, scanner.HandleDownloadReport)
+
+	// Scanner overview and data flows (additive to existing /api/v1/scanner routes)
+	app.Get("/api/v1/scanner/overview", authMiddleware, scanner.HandleScannerOverview)
+	app.Get("/api/v1/scanner/flows", authMiddleware, scanner.HandleScannerFlows)
 
 	// Events
 	app.Get("/api/v1/events", authMiddleware, audit.HandleGetEvents)
