@@ -4106,9 +4106,9 @@ components:
         vendor:
           type: string
           description: |
-            Vendor slug. Proxy vendors (`openai`, `anthropic`) are auto-connected and
-            require no credentials — Nonym reads from its own proxy transaction log.
-            All other vendors require `credentials`.
+            Vendor slug for a third-party monitoring or analytics service (e.g. `sentry`, `datadog`).
+            AI proxy providers such as `openai` and `anthropic` are managed via the AI proxy
+            configuration and cannot be added as scanner vendor connections.
           example: sentry
         auth_type:
           type: string
@@ -4116,7 +4116,7 @@ components:
           default: api_key
         credentials:
           type: object
-          description: Vendor-specific credential fields. Not required for proxy vendors (`openai`, `anthropic`).
+          description: Vendor-specific credential fields required to authenticate with the vendor API.
           additionalProperties: true
         settings:
           type: object

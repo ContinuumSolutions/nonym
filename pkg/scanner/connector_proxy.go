@@ -9,20 +9,17 @@ import (
 
 // proxyVendors is the set of vendor slugs that are served via Nonym's own proxy.
 // Their scan data comes from the transactions table, not from an external API call.
+// These vendors are handled on the AI proxy side and are not available as scanner
+// vendor connections.
 var proxyVendors = map[string]bool{
 	"openai":    true,
 	"anthropic": true,
 }
 
-// IsProxyVendor reports whether a vendor slug is served via the Nonym proxy.
+// IsProxyVendor reports whether a vendor slug is an AI proxy vendor.
+// Proxy vendors cannot be added as scanner vendor connections.
 func IsProxyVendor(vendor string) bool {
 	return proxyVendors[vendor]
-}
-
-func init() {
-	for vendor := range proxyVendors {
-		Register(&proxyConnector{vendor: vendor})
-	}
 }
 
 // ── Connector ─────────────────────────────────────────────────────────────────
@@ -98,8 +95,8 @@ func (p *proxyConnector) FetchEvents(vc *VendorConnection) ([]NormalizedEvent, e
 				Source:   fmt.Sprintf("proxy.request.%s", e.EntityType),
 				Text:     e.OriginalText,
 				Metadata: map[string]string{
-					"endpoint":   path,
-					"tx_id":      txID,
+					"endpoint":    path,
+					"tx_id":       txID,
 					"entity_type": e.EntityType,
 				},
 				PreDetected: []Detection{det},
