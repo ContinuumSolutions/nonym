@@ -149,6 +149,10 @@ type NormalizedEvent struct {
 	Text       string
 	Metadata   map[string]string
 	RawPayload []byte
+
+	// PreDetected carries results already identified by an upstream engine (e.g.
+	// the proxy NER). When non-nil, Detect() is skipped and these are used directly.
+	PreDetected []Detection
 }
 
 // marshalJSON is a helper for serialising slices to JSON strings for SQLite.

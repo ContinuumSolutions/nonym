@@ -74,18 +74,28 @@ func HandleCreateVendorConnection(c *fiber.Ctx) error {
 		req.Settings = map[string]interface{}{}
 	}
 
+	// Proxy vendors (openai, anthropic) are always reachable via Nonym's own
+	// proxy — no external credential test needed; mark connected immediately.
+	initialStatus := "disconnected"
+	if IsProxyVendor(req.Vendor) {
+		initialStatus = "connected"
+	}
+
 	now := time.Now()
 	vc := &VendorConnection{
 		ID:          newID(),
 		OrgID:       orgID,
 		Vendor:      req.Vendor,
 		DisplayName: displayName,
-		Status:      "disconnected",
+		Status:      initialStatus,
 		AuthType:    req.AuthType,
 		Credentials: req.Credentials,
 		Settings:    req.Settings,
 		CreatedAt:   now,
 		UpdatedAt:   now,
+	}
+	if initialStatus == "connected" {
+		vc.ConnectedAt = &now
 	}
 
 	if err := insertVendorConnection(vc); err != nil {
@@ -208,9 +218,17 @@ type ConnectionResult struct {
 }
 
 // testConnection validates credentials against the vendor.
-// For now it performs basic credential format validation.
-// Replace per-vendor with real HTTP calls as connectors mature.
+// Proxy vendors (openai, anthropic) are always connected via Nonym's own proxy.
+// Other vendors perform credential format validation.
 func testConnection(vc *VendorConnection) ConnectionResult {
+	if IsProxyVendor(vc.Vendor) {
+		return ConnectionResult{
+			Success: true,
+			Message: strings.ToUpper(vc.Vendor[:1]) + vc.Vendor[1:] +
+				" is connected via the Nonym proxy — no separate credentials required.",
+		}
+	}
+
 	switch vc.Vendor {
 	case "sentry":
 		token, _ := vc.Credentials["token"].(string)

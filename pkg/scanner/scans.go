@@ -256,7 +256,10 @@ func scanVendor(scan *Scan, vc *VendorConnection) ([]Finding, error) {
 
 	var findings []Finding
 	for _, event := range events {
-		detections := Detect(event.Text)
+		detections := event.PreDetected
+		if detections == nil {
+			detections = Detect(event.Text)
+		}
 		for _, d := range detections {
 			existingID, err := deduplicateFinding(scan.OrgID, vc.Vendor, d.DataType, event.Source, event.Metadata["endpoint"])
 			if err != nil || existingID != "" {
