@@ -211,13 +211,14 @@ func runScan(scan *Scan, connections []VendorConnection, events chan<- sseEvent)
 		if err != nil {
 			scanErr = err.Error()
 			updateVendorScanStatus(vc.ID, "idle")
+			// Only mark as error if it's an auth/connectivity failure, not a data issue.
 			updateVendorConnectionStatus(vc.ID, "error", scanErr, vc.ConnectedAt, vc.LastScanAt)
 			continue
 		}
 
 		now := time.Now()
 		updateVendorScanStatus(vc.ID, "idle")
-		updateVendorConnectionStatus(vc.ID, "connected", "", vc.ConnectedAt, &now)
+		updateVendorLastScanAt(vc.ID, now) // connection status is owned by the test endpoint
 
 		for _, f := range findings {
 			totalFindings++

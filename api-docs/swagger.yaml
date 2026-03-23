@@ -2015,11 +2015,32 @@ paths:
                 api_token: sntryu_xxxxxxxxxxxx
       responses:
         '200':
-          description: Test result
+          description: Test result — includes `connection` with updated status when a saved record exists
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ConnectionResult'
+              example:
+                success: true
+                message: "Connected — 1 organization(s) accessible"
+                events_accessible: 1
+                connection:
+                  id: "c8dcf5f3-9aad-431f-9f51-6cfdf5e9f452"
+                  org_id: 2
+                  vendor: "sentry"
+                  display_name: "Sentry"
+                  status: "connected"
+                  scan_status: "idle"
+                  auth_type: "api_key"
+                  credentials:
+                    api_token: "sntryu*****...7f16"
+                    org_slug: "********"
+                  settings:
+                    scan_frequency: "daily"
+                  connected_at: "2026-03-23T16:20:00Z"
+                  last_scan_at: null
+                  created_at: "2026-03-23T16:16:47.068Z"
+                  updated_at: "2026-03-23T16:20:00Z"
         '400':
           description: Missing vendor or credentials
           content:
@@ -2147,7 +2168,7 @@ paths:
             format: uuid
       responses:
         '200':
-          description: Test result
+          description: Test result — always includes `connection` with updated status
           content:
             application/json:
               schema:
@@ -4160,6 +4181,15 @@ components:
           description: |
             Vendor-specific count returned on a successful test.
             For **Sentry** this is the number of organizations accessible with the token.
+        connection:
+          allOf:
+            - $ref: '#/components/schemas/VendorConnection'
+          nullable: true
+          description: |
+            The updated vendor connection record after the test, with credentials masked.
+            Present only when a saved connection record exists for this org + vendor.
+            Use this object to update local state — `status` will be `connected` on success
+            or `error` on failure.
 
     Scan:
       type: object

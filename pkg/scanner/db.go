@@ -320,6 +320,17 @@ func updateVendorScanStatus(id, scanStatus string) error {
 	return err
 }
 
+// updateVendorLastScanAt records when a scan last completed without touching connection status.
+func updateVendorLastScanAt(id string, t time.Time) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec(formatQuery(`
+		UPDATE vendor_connections SET last_scan_at = ?, updated_at = ? WHERE id = ?
+	`), t, time.Now(), id)
+	return err
+}
+
 // ── scans ─────────────────────────────────────────────────────────────────────
 
 func insertScan(s *Scan) error {

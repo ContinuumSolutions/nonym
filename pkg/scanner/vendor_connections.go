@@ -150,15 +150,22 @@ func HandleTestCredentials(c *fiber.Ctx) error {
 	}
 	result := testConnection(vc)
 
-	// If a connection for this org+vendor already exists, update its status so
-	// the frontend immediately reflects the test outcome without a separate call.
+	// If a connection for this org+vendor already exists, update its status and
+	// return the refreshed connection object so the frontend needs no extra call.
 	if existing, err := getVendorConnectionByVendor(orgID, req.Vendor); err == nil {
 		if result.Success {
 			now := time.Now()
 			updateVendorConnectionStatus(existing.ID, "connected", "", &now, existing.LastScanAt)
+			existing.Status = "connected"
+			existing.ConnectedAt = &now
+			existing.ErrorMessage = ""
 		} else {
 			updateVendorConnectionStatus(existing.ID, "error", result.Message, existing.ConnectedAt, existing.LastScanAt)
+			existing.Status = "error"
+			existing.ErrorMessage = result.Message
 		}
+		maskCredentials(existing)
+		result.Connection = existing
 	}
 
 	return c.JSON(result)
@@ -180,18 +187,19 @@ func HandleTestVendorConnection(c *fiber.Ctx) error {
 
 	result := testConnection(vc)
 
-	// Update status based on test result.
-	newStatus := "disconnected"
-	errMsg := ""
 	if result.Success {
-		newStatus = "connected"
 		now := time.Now()
-		updateVendorConnectionStatus(id, newStatus, "", &now, vc.LastScanAt)
+		updateVendorConnectionStatus(id, "connected", "", &now, vc.LastScanAt)
+		vc.Status = "connected"
+		vc.ConnectedAt = &now
+		vc.ErrorMessage = ""
 	} else {
-		errMsg = result.Message
-		updateVendorConnectionStatus(id, "error", errMsg, vc.ConnectedAt, vc.LastScanAt)
+		updateVendorConnectionStatus(id, "error", result.Message, vc.ConnectedAt, vc.LastScanAt)
+		vc.Status = "error"
+		vc.ErrorMessage = result.Message
 	}
-	_ = newStatus
+	maskCredentials(vc)
+	result.Connection = vc
 
 	return c.JSON(result)
 }
@@ -222,9 +230,10 @@ func HandleTriggerVendorScan(c *fiber.Ctx) error {
 
 // ConnectionResult is the response for vendor connection tests.
 type ConnectionResult struct {
-	Success          bool   `json:"success"`
-	Message          string `json:"message"`
-	EventsAccessible *int   `json:"events_accessible,omitempty"`
+	Success          bool              `json:"success"`
+	Message          string            `json:"message"`
+	EventsAccessible *int              `json:"events_accessible,omitempty"`
+	Connection       *VendorConnection `json:"connection,omitempty"`
 }
 
 // testConnection validates credentials against the vendor.
