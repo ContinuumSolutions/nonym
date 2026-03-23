@@ -268,7 +268,7 @@ func (s *sentryConnector) normalise(orgSlug, projectSlug string, events []sentry
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 func (s *sentryConnector) token(vc *VendorConnection) string {
-	for _, key := range []string{"token", "api_key", "auth_token"} {
+	for _, key := range []string{"token", "api_token", "api_key", "auth_token"} {
 		if v, ok := vc.Credentials[key].(string); ok && v != "" {
 			return v
 		}

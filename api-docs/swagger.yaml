@@ -2009,7 +2009,7 @@ paths:
               vendor: sentry
               auth_type: api_key
               credentials:
-                token: sntrys_xxxxxxxxxxxx
+                api_token: sntryu_xxxxxxxxxxxx
       responses:
         '200':
           description: Test result
@@ -2081,7 +2081,8 @@ paths:
               vendor: sentry
               auth_type: api_key
               credentials:
-                token: sntrys_xxxxxxxxxxxx
+                api_token: sntryu_xxxxxxxxxxxx
+                org_slug: my-org
               display_name: Sentry Production
       responses:
         '201':
@@ -4125,7 +4126,9 @@ components:
             Vendor-specific credential fields required to authenticate with the vendor API.
 
             **Sentry** — create an Auth Token at *Sentry → Settings → Account → API → Auth Tokens*
-            with scopes `org:read`, `project:read`, and `event:read`. Pass it as `{"token": "<your-token>"}`.
+            with scopes `org:read`, `project:read`, and `event:read`.
+            Pass it as `{"api_token": "<your-token>"}`. Optionally include `"org_slug"` to tag the connection.
+            Accepted key names: `api_token`, `token`, `api_key`, `auth_token`.
 
             **Datadog** — provide `{"api_key": "...", "app_key": "..."}`.
 

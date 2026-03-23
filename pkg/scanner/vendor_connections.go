@@ -218,12 +218,12 @@ type ConnectionResult struct {
 func testConnection(vc *VendorConnection) ConnectionResult {
 	switch vc.Vendor {
 	case "sentry":
-		token, _ := vc.Credentials["token"].(string)
-		if token == "" {
-			token, _ = vc.Credentials["api_key"].(string)
-		}
-		if token == "" {
-			token, _ = vc.Credentials["auth_token"].(string)
+		var token string
+		for _, key := range []string{"token", "api_token", "api_key", "auth_token"} {
+			if v, _ := vc.Credentials[key].(string); v != "" {
+				token = v
+				break
+			}
 		}
 		if len(token) < 8 {
 			return ConnectionResult{Success: false, Message: "Sentry auth token is missing or too short"}
