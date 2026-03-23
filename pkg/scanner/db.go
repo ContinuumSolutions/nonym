@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -54,6 +55,7 @@ func createTables() error {
 			vendor        TEXT NOT NULL,
 			display_name  TEXT NOT NULL DEFAULT '',
 			status        TEXT NOT NULL DEFAULT 'disconnected',
+			scan_status   TEXT NOT NULL DEFAULT 'idle',
 			auth_type     TEXT NOT NULL DEFAULT 'api_key',
 			credentials   TEXT NOT NULL DEFAULT '{}',
 			settings      TEXT NOT NULL DEFAULT '{}',
@@ -64,6 +66,8 @@ func createTables() error {
 			updated_at    %s NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			UNIQUE(org_id, vendor)
 		)`, ts, ts, ts, ts),
+		// Migration: add scan_status to existing tables (ignore error if column already exists).
+		`ALTER TABLE vendor_connections ADD COLUMN scan_status TEXT NOT NULL DEFAULT 'idle'`,
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS scans (
 			id             TEXT PRIMARY KEY,
 			org_id         INTEGER NOT NULL,
@@ -115,11 +119,17 @@ func createTables() error {
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {
+			// Ignore "column already exists" errors from ALTER TABLE migrations.
+			msg := err.Error()
+			if strings.Contains(msg, "duplicate column") || strings.Contains(msg, "already exists") || strings.Contains(msg, "duplicate column name") {
+				continue
+			}
 			return fmt.Errorf("scanner createTables: %w", err)
 		}
 	}
 	return nil
 }
+
 
 // newID generates a UUID string.
 func newID() string {
@@ -131,25 +141,29 @@ func newID() string {
 func insertVendorConnection(vc *VendorConnection) error {
 	credJSON := marshalJSON(vc.Credentials)
 	settJSON := marshalJSON(vc.Settings)
+	if vc.ScanStatus == "" {
+		vc.ScanStatus = "idle"
+	}
 	_, err := db.Exec(formatQuery(`
 		INSERT INTO vendor_connections
-			(id, org_id, vendor, display_name, status, auth_type, credentials, settings, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			(id, org_id, vendor, display_name, status, scan_status, auth_type, credentials, settings, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(org_id, vendor) DO UPDATE SET
 			display_name=EXCLUDED.display_name,
 			status=EXCLUDED.status,
+			scan_status=EXCLUDED.scan_status,
 			auth_type=EXCLUDED.auth_type,
 			credentials=EXCLUDED.credentials,
 			settings=EXCLUDED.settings,
 			updated_at=EXCLUDED.updated_at
 	`),
-		vc.ID, vc.OrgID, vc.Vendor, vc.DisplayName, vc.Status,
+		vc.ID, vc.OrgID, vc.Vendor, vc.DisplayName, vc.Status, vc.ScanStatus,
 		vc.AuthType, credJSON, settJSON, vc.CreatedAt, vc.UpdatedAt)
 	return err
 }
 
 func listVendorConnections(orgID int, statusFilter string) ([]VendorConnection, error) {
-	q := `SELECT id, org_id, vendor, display_name, status, auth_type, credentials, settings,
+	q := `SELECT id, org_id, vendor, display_name, status, scan_status, auth_type, credentials, settings,
 	             connected_at, last_scan_at, error_message, created_at, updated_at
 	      FROM vendor_connections WHERE org_id = ?`
 	args := []interface{}{orgID}
@@ -172,7 +186,7 @@ func listVendorConnections(orgID int, statusFilter string) ([]VendorConnection, 
 		var connectedAt, lastScanAt sql.NullTime
 		var errMsg sql.NullString
 		if err := rows.Scan(
-			&vc.ID, &vc.OrgID, &vc.Vendor, &vc.DisplayName, &vc.Status,
+			&vc.ID, &vc.OrgID, &vc.Vendor, &vc.DisplayName, &vc.Status, &vc.ScanStatus,
 			&vc.AuthType, &credRaw, &settRaw,
 			&connectedAt, &lastScanAt, &errMsg,
 			&vc.CreatedAt, &vc.UpdatedAt,
@@ -205,7 +219,7 @@ func listVendorConnections(orgID int, statusFilter string) ([]VendorConnection, 
 
 func getVendorConnection(orgID int, id string) (*VendorConnection, error) {
 	row := db.QueryRow(formatQuery(`
-		SELECT id, org_id, vendor, display_name, status, auth_type, credentials, settings,
+		SELECT id, org_id, vendor, display_name, status, scan_status, auth_type, credentials, settings,
 		       connected_at, last_scan_at, error_message, created_at, updated_at
 		FROM vendor_connections WHERE id = ? AND org_id = ?
 	`), id, orgID)
@@ -215,7 +229,7 @@ func getVendorConnection(orgID int, id string) (*VendorConnection, error) {
 	var connectedAt, lastScanAt sql.NullTime
 	var errMsg sql.NullString
 	if err := row.Scan(
-		&vc.ID, &vc.OrgID, &vc.Vendor, &vc.DisplayName, &vc.Status,
+		&vc.ID, &vc.OrgID, &vc.Vendor, &vc.DisplayName, &vc.Status, &vc.ScanStatus,
 		&vc.AuthType, &credRaw, &settRaw,
 		&connectedAt, &lastScanAt, &errMsg,
 		&vc.CreatedAt, &vc.UpdatedAt,
@@ -255,6 +269,16 @@ func updateVendorConnectionStatus(id, status, errMsg string, connectedAt, lastSc
 		SET status = ?, error_message = ?, connected_at = ?, last_scan_at = ?, updated_at = ?
 		WHERE id = ?
 	`), status, errMsg, connectedAt, lastScanAt, time.Now(), id)
+	return err
+}
+
+func updateVendorScanStatus(id, scanStatus string) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec(formatQuery(`
+		UPDATE vendor_connections SET scan_status = ?, updated_at = ? WHERE id = ?
+	`), scanStatus, time.Now(), id)
 	return err
 }
 

@@ -7,19 +7,20 @@ import (
 
 // VendorConnection represents an org's authenticated connection to an external vendor API.
 type VendorConnection struct {
-	ID           string                 `json:"id"`
-	OrgID        int                    `json:"org_id"`
-	Vendor       string                 `json:"vendor"`
-	DisplayName  string                 `json:"display_name"`
-	Status       string                 `json:"status"`        // connected | disconnected | error | scanning
-	AuthType     string                 `json:"auth_type"`     // api_key | oauth
-	Credentials  map[string]interface{} `json:"credentials"`   // masked — never expose raw secrets
-	Settings     map[string]interface{} `json:"settings"`
-	ConnectedAt  *time.Time             `json:"connected_at"`
-	LastScanAt   *time.Time             `json:"last_scan_at"`
-	ErrorMessage string                 `json:"error_message,omitempty"`
-	CreatedAt    time.Time              `json:"created_at"`
-	UpdatedAt    time.Time              `json:"updated_at"`
+	ID               string                 `json:"id"`
+	OrgID            int                    `json:"org_id"`
+	Vendor           string                 `json:"vendor"`
+	DisplayName      string                 `json:"display_name"`
+	Status           string                 `json:"status"`       // connected | disconnected | error
+	ScanStatus       string                 `json:"scan_status"`  // idle | scanning
+	AuthType         string                 `json:"auth_type"`    // api_key | oauth
+	Credentials      map[string]interface{} `json:"credentials"`  // masked — never expose raw secrets
+	Settings         map[string]interface{} `json:"settings"`
+	ConnectedAt      *time.Time             `json:"connected_at"`
+	LastScanAt       *time.Time             `json:"last_scan_at"`
+	ErrorMessage     string                 `json:"error_message,omitempty"`
+	CreatedAt        time.Time              `json:"created_at"`
+	UpdatedAt        time.Time              `json:"updated_at"`
 }
 
 // Scan represents a scanning job across one or more vendor connections.

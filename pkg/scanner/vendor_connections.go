@@ -1,7 +1,11 @@
 package scanner
 
 import (
+	"encoding/json"
+	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"strings"
 	"time"
 
@@ -218,10 +222,13 @@ func testConnection(vc *VendorConnection) ConnectionResult {
 		if token == "" {
 			token, _ = vc.Credentials["api_key"].(string)
 		}
+		if token == "" {
+			token, _ = vc.Credentials["auth_token"].(string)
+		}
 		if len(token) < 8 {
 			return ConnectionResult{Success: false, Message: "Sentry auth token is missing or too short"}
 		}
-		return ConnectionResult{Success: true, Message: "Sentry credentials validated (format check passed)"}
+		return testSentryCredentials(token)
 
 	case "datadog":
 		apiKey, _ := vc.Credentials["api_key"].(string)
@@ -252,6 +259,52 @@ func testConnection(vc *VendorConnection) ConnectionResult {
 		}
 		return ConnectionResult{Success: true, Message: "Credentials format accepted"}
 	}
+}
+
+// testSentryCredentials verifies a Sentry auth token by calling the real API.
+func testSentryCredentials(token string) ConnectionResult {
+	req, err := http.NewRequest("GET", "https://sentry.io/api/0/organizations/?member=1", nil)
+	if err != nil {
+		return ConnectionResult{Success: false, Message: fmt.Sprintf("Failed to build request: %v", err)}
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return ConnectionResult{Success: false, Message: fmt.Sprintf("Could not reach Sentry API: %v", err)}
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+		return ConnectionResult{Success: false, Message: "Invalid or expired token — check that it has org:read, project:read, and event:read scopes"}
+	}
+	if resp.StatusCode >= 400 {
+		return ConnectionResult{Success: false, Message: fmt.Sprintf("Sentry API error (HTTP %d): %s", resp.StatusCode, truncateStr(string(body), 200))}
+	}
+
+	var orgs []struct {
+		Slug string `json:"slug"`
+	}
+	if err := json.Unmarshal(body, &orgs); err != nil {
+		return ConnectionResult{Success: false, Message: "Unexpected response from Sentry API"}
+	}
+
+	n := len(orgs)
+	return ConnectionResult{
+		Success:          true,
+		Message:          fmt.Sprintf("Connected — %d organization(s) accessible", n),
+		EventsAccessible: &n,
+	}
+}
+
+func truncateStr(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "…"
 }
 
 // maskCredentials replaces credential values with masked representations.

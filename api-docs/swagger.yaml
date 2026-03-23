@@ -2043,7 +2043,7 @@ paths:
           required: false
           schema:
             type: string
-            enum: [connected, disconnected, error, scanning]
+            enum: [connected, disconnected, error]
           description: Filter by connection status
       responses:
         '200':
@@ -4070,7 +4070,12 @@ components:
           example: Sentry Production
         status:
           type: string
-          enum: [connected, disconnected, error, scanning]
+          enum: [connected, disconnected, error]
+          description: Credential connection status — whether the stored credentials are valid and reachable
+        scan_status:
+          type: string
+          enum: [idle, scanning]
+          description: Current scan activity — `scanning` while a scan job is actively running, `idle` otherwise
         auth_type:
           type: string
           enum: [api_key, oauth]
@@ -4116,7 +4121,17 @@ components:
           default: api_key
         credentials:
           type: object
-          description: Vendor-specific credential fields required to authenticate with the vendor API.
+          description: |
+            Vendor-specific credential fields required to authenticate with the vendor API.
+
+            **Sentry** — create an Auth Token at *Sentry → Settings → Account → API → Auth Tokens*
+            with scopes `org:read`, `project:read`, and `event:read`. Pass it as `{"token": "<your-token>"}`.
+
+            **Datadog** — provide `{"api_key": "...", "app_key": "..."}`.
+
+            **Stripe** — provide `{"api_key": "sk_live_..."}`.
+
+            **Mixpanel** — provide `{"service_account": "...", "secret": "..."}`.
           additionalProperties: true
         settings:
           type: object
@@ -4136,7 +4151,9 @@ components:
         events_accessible:
           type: integer
           nullable: true
-          description: Number of events accessible via the credentials (vendor-specific)
+          description: |
+            Vendor-specific count returned on a successful test.
+            For **Sentry** this is the number of organizations accessible with the token.
 
     Scan:
       type: object

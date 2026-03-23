@@ -205,16 +205,18 @@ func runScan(scan *Scan, connections []VendorConnection, events chan<- sseEvent)
 			`{"event":"progress","vendor":%q,"phase":"fetching","percent":%d}`, vc.Vendor, percent)}
 
 		// Mark vendor as scanning.
-		updateVendorConnectionStatus(vc.ID, "scanning", "", vc.ConnectedAt, vc.LastScanAt)
+		updateVendorScanStatus(vc.ID, "scanning")
 
 		findings, err := scanVendor(scan, &vc)
 		if err != nil {
 			scanErr = err.Error()
+			updateVendorScanStatus(vc.ID, "idle")
 			updateVendorConnectionStatus(vc.ID, "error", scanErr, vc.ConnectedAt, vc.LastScanAt)
 			continue
 		}
 
 		now := time.Now()
+		updateVendorScanStatus(vc.ID, "idle")
 		updateVendorConnectionStatus(vc.ID, "connected", "", vc.ConnectedAt, &now)
 
 		for _, f := range findings {
