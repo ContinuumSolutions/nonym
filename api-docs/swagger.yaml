@@ -1980,11 +1980,14 @@ paths:
       tags: [Vendor Connections]
       summary: Test credentials inline
       description: |
-        Validates vendor credentials without requiring an existing connection record.
-        Use this when the user is entering credentials for the first time (e.g. in a setup form)
-        before calling `POST /api/v1/vendor-connections` to save them.
+        Validates vendor credentials against the real vendor API.
 
-        No data is persisted — the test runs entirely in memory.
+        If a connection record for this org + vendor already exists, its `status` is updated
+        to `connected` (on success) or `error` (on failure) automatically — no separate
+        `/:id/test` call is needed.
+
+        If no connection record exists yet (e.g. first-time setup), use this to validate
+        credentials before calling `POST /api/v1/vendor-connections` to save them.
       security:
         - bearerAuth: []
       requestBody:

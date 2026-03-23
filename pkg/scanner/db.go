@@ -254,6 +254,44 @@ func getVendorConnection(orgID int, id string) (*VendorConnection, error) {
 	return &vc, nil
 }
 
+// getVendorConnectionByVendor returns the first connection for the given org and vendor slug.
+func getVendorConnectionByVendor(orgID int, vendor string) (*VendorConnection, error) {
+	row := db.QueryRow(formatQuery(`
+		SELECT id, org_id, vendor, display_name, status, scan_status, auth_type, credentials, settings,
+		       connected_at, last_scan_at, error_message, created_at, updated_at
+		FROM vendor_connections WHERE org_id = ? AND vendor = ? LIMIT 1
+	`), orgID, vendor)
+
+	var vc VendorConnection
+	var credRaw, settRaw string
+	var connectedAt, lastScanAt sql.NullTime
+	var errMsg sql.NullString
+	if err := row.Scan(
+		&vc.ID, &vc.OrgID, &vc.Vendor, &vc.DisplayName, &vc.Status, &vc.ScanStatus,
+		&vc.AuthType, &credRaw, &settRaw,
+		&connectedAt, &lastScanAt, &errMsg,
+		&vc.CreatedAt, &vc.UpdatedAt,
+	); err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal([]byte(credRaw), &vc.Credentials); err != nil {
+		log.Printf("scanner: getVendorConnectionByVendor credentials unmarshal error (id=%s): %v", vc.ID, err)
+	}
+	if err := json.Unmarshal([]byte(settRaw), &vc.Settings); err != nil {
+		log.Printf("scanner: getVendorConnectionByVendor settings unmarshal error (id=%s): %v", vc.ID, err)
+	}
+	if connectedAt.Valid {
+		t := connectedAt.Time
+		vc.ConnectedAt = &t
+	}
+	if lastScanAt.Valid {
+		t := lastScanAt.Time
+		vc.LastScanAt = &t
+	}
+	vc.ErrorMessage = errMsg.String
+	return &vc, nil
+}
+
 func deleteVendorConnection(orgID int, id string) error {
 	_, err := db.Exec(formatQuery(
 		`DELETE FROM vendor_connections WHERE id = ? AND org_id = ?`), id, orgID)

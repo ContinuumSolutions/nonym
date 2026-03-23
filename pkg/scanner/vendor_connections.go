@@ -119,10 +119,11 @@ func HandleDeleteVendorConnection(c *fiber.Ctx) error {
 	return c.SendStatus(204)
 }
 
-// HandleTestCredentials tests credentials inline without requiring an existing connection.
+// HandleTestCredentials tests credentials inline and, if a connection for this
+// org+vendor already exists, updates its status accordingly.
 // POST /api/v1/vendor-connections/test
 func HandleTestCredentials(c *fiber.Ctx) error {
-	_, ok := c.Locals("organization_id").(int)
+	orgID, ok := c.Locals("organization_id").(int)
 	if !ok {
 		return c.Status(401).JSON(fiber.Map{"error": "Authentication required"})
 	}
@@ -148,6 +149,18 @@ func HandleTestCredentials(c *fiber.Ctx) error {
 		Credentials: req.Credentials,
 	}
 	result := testConnection(vc)
+
+	// If a connection for this org+vendor already exists, update its status so
+	// the frontend immediately reflects the test outcome without a separate call.
+	if existing, err := getVendorConnectionByVendor(orgID, req.Vendor); err == nil {
+		if result.Success {
+			now := time.Now()
+			updateVendorConnectionStatus(existing.ID, "connected", "", &now, existing.LastScanAt)
+		} else {
+			updateVendorConnectionStatus(existing.ID, "error", result.Message, existing.ConnectedAt, existing.LastScanAt)
+		}
+	}
+
 	return c.JSON(result)
 }
 
