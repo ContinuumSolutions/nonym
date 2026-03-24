@@ -211,14 +211,19 @@ func runScan(scan *Scan, connections []VendorConnection, events chan<- sseEvent)
 		if err != nil {
 			scanErr = err.Error()
 			updateVendorScanStatus(vc.ID, "idle")
-			// Only mark as error if it's an auth/connectivity failure, not a data issue.
-			updateVendorConnectionStatus(vc.ID, "error", scanErr, vc.ConnectedAt, vc.LastScanAt)
+			// Only mark as error for auth/connectivity failures so the vendor
+			// remains available for scanning when the error is transient/data.
+			if isAuthOrConnectivityError(err) {
+				updateVendorConnectionStatus(vc.ID, "error", scanErr, vc.ConnectedAt, vc.LastScanAt)
+			}
 			continue
 		}
 
 		now := time.Now()
 		updateVendorScanStatus(vc.ID, "idle")
-		updateVendorLastScanAt(vc.ID, now) // connection status is owned by the test endpoint
+		// A successful scan confirms the connection is live — update status so
+		// that vendors recovered from a transient error become available again.
+		updateVendorConnectionStatus(vc.ID, "connected", "", vc.ConnectedAt, &now)
 
 		for _, f := range findings {
 			totalFindings++
@@ -237,6 +242,24 @@ func runScan(scan *Scan, connections []VendorConnection, events chan<- sseEvent)
 
 	events <- sseEvent{Type: "done", Payload: fmt.Sprintf(
 		`{"event":"done","findings_count":%d,"scan_id":%q}`, totalFindings, scan.ID)}
+}
+
+// isAuthOrConnectivityError returns true when the scan error indicates an
+// authentication or connectivity failure — i.e. the vendor credentials are
+// invalid or the service is unreachable — as opposed to a transient data
+// error (empty result set, rate limit, partial failure, etc.).
+func isAuthOrConnectivityError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "authentication failed") ||
+		strings.Contains(msg, "http 401") ||
+		strings.Contains(msg, "http 403") ||
+		strings.Contains(msg, "invalid") && strings.Contains(msg, "token") ||
+		strings.Contains(msg, "invalid") && strings.Contains(msg, "credential") ||
+		strings.Contains(msg, "unauthorized") ||
+		strings.Contains(msg, "forbidden")
 }
 
 // scanVendor fetches events from a vendor, detects PII, and persists findings.
