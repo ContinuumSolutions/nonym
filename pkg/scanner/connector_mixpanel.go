@@ -16,6 +16,35 @@ type mixpanelConnector struct{ client *http.Client }
 
 func (m *mixpanelConnector) Vendor() string { return "mixpanel" }
 
+// TestConnection verifies credentials by calling the engage API with page_size=1.
+func (m *mixpanelConnector) TestConnection(vc *VendorConnection) ConnectionResult {
+	user := credStr(vc, "service_account_user", "service_account")
+	secret := credStr(vc, "service_account_secret", "secret")
+	projectID, _ := vc.Credentials["project_id"].(string)
+	if user == "" || secret == "" || projectID == "" {
+		return ConnectionResult{Success: false, Message: "Mixpanel requires service_account, secret, and project_id"}
+	}
+	url := fmt.Sprintf("https://mixpanel.com/api/2.0/engage?project_id=%s&page_size=1", projectID)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return ConnectionResult{Success: false, Message: fmt.Sprintf("Failed to build request: %v", err)}
+	}
+	req.SetBasicAuth(user, secret)
+	req.Header.Set("Accept", "application/json")
+	resp, err := m.client.Do(req)
+	if err != nil {
+		return ConnectionResult{Success: false, Message: fmt.Sprintf("Could not reach Mixpanel API: %v", err)}
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == 401 {
+		return ConnectionResult{Success: false, Message: "Invalid Mixpanel credentials — check service account and secret"}
+	}
+	if resp.StatusCode >= 400 {
+		return ConnectionResult{Success: false, Message: fmt.Sprintf("Mixpanel API error (HTTP %d)", resp.StatusCode)}
+	}
+	return ConnectionResult{Success: true, Message: "Mixpanel credentials validated — project accessible"}
+}
+
 func (m *mixpanelConnector) FetchEvents(vc *VendorConnection) ([]NormalizedEvent, error) {
 	user := ""
 	for _, k := range []string{"service_account_user", "service_account"} {

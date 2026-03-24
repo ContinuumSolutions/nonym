@@ -16,6 +16,20 @@ type zendeskConnector struct{ client *http.Client }
 
 func (z *zendeskConnector) Vendor() string { return "zendesk" }
 
+// TestConnection verifies credentials by calling the current-user endpoint.
+func (z *zendeskConnector) TestConnection(vc *VendorConnection) ConnectionResult {
+	subdomain, _ := vc.Credentials["subdomain"].(string)
+	email, _ := vc.Credentials["email"].(string)
+	apiToken, _ := vc.Credentials["api_token"].(string)
+	if subdomain == "" || email == "" || apiToken == "" {
+		return ConnectionResult{Success: false, Message: "Zendesk requires subdomain, email, and api_token"}
+	}
+	if err := z.get(subdomain, email, apiToken, "/api/v2/users/me.json", new(struct{})); err != nil {
+		return ConnectionResult{Success: false, Message: fmt.Sprintf("Zendesk connection failed: %v", err)}
+	}
+	return ConnectionResult{Success: true, Message: "Zendesk credentials validated — account accessible"}
+}
+
 func (z *zendeskConnector) FetchEvents(vc *VendorConnection) ([]NormalizedEvent, error) {
 	subdomain, _ := vc.Credentials["subdomain"].(string)
 	email, _ := vc.Credentials["email"].(string)

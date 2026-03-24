@@ -18,6 +18,14 @@ type datadogConnector struct{ client *http.Client }
 
 func (d *datadogConnector) Vendor() string { return "datadog" }
 
+// TestConnection validates that both api_key and app_key are present.
+func (d *datadogConnector) TestConnection(vc *VendorConnection) ConnectionResult {
+	if credStr(vc, "api_key") == "" || credStr(vc, "app_key") == "" {
+		return ConnectionResult{Success: false, Message: "Datadog requires both api_key and app_key"}
+	}
+	return ConnectionResult{Success: true, Message: "Datadog credentials validated (format check passed)"}
+}
+
 func (d *datadogConnector) FetchEvents(vc *VendorConnection) ([]NormalizedEvent, error) {
 	apiKey, _ := vc.Credentials["api_key"].(string)
 	appKey, _ := vc.Credentials["app_key"].(string)

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -16,6 +17,33 @@ func init() {
 type newrelicConnector struct{ client *http.Client }
 
 func (n *newrelicConnector) Vendor() string { return "newrelic" }
+
+// TestConnection verifies the User API key via a lightweight NerdGraph identity query.
+func (n *newrelicConnector) TestConnection(vc *VendorConnection) ConnectionResult {
+	apiKey := credStr(vc, "api_key", "user_key", "token")
+	if !strings.HasPrefix(apiKey, "NRAK-") {
+		return ConnectionResult{Success: false, Message: "New Relic requires a User API key (NRAK-...)"}
+	}
+	query := `{"query":"{ actor { user { name email } } }"}`
+	req, err := http.NewRequest("POST", "https://api.newrelic.com/graphql", bytes.NewBufferString(query))
+	if err != nil {
+		return ConnectionResult{Success: false, Message: fmt.Sprintf("Failed to build request: %v", err)}
+	}
+	req.Header.Set("Api-Key", apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := n.client.Do(req)
+	if err != nil {
+		return ConnectionResult{Success: false, Message: fmt.Sprintf("Could not reach New Relic API: %v", err)}
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == 403 {
+		return ConnectionResult{Success: false, Message: "Invalid New Relic API key — must be a User key (NRAK-...)"}
+	}
+	if resp.StatusCode >= 400 {
+		return ConnectionResult{Success: false, Message: fmt.Sprintf("New Relic API error (HTTP %d)", resp.StatusCode)}
+	}
+	return ConnectionResult{Success: true, Message: "New Relic credentials validated — account accessible"}
+}
 
 // FetchEvents queries New Relic via the NerdGraph API (GraphQL) for recent log entries.
 func (n *newrelicConnector) FetchEvents(vc *VendorConnection) ([]NormalizedEvent, error) {

@@ -23,14 +23,28 @@ type bugsnagConnector struct {
 
 func (b *bugsnagConnector) Vendor() string { return "bugsnag" }
 
-func (b *bugsnagConnector) FetchEvents(vc *VendorConnection) ([]NormalizedEvent, error) {
-	token := ""
-	for _, k := range []string{"auth_token", "api_key", "token"} {
-		if v, ok := vc.Credentials[k].(string); ok && v != "" {
-			token = v
-			break
-		}
+// TestConnection verifies the auth token by listing organizations.
+func (b *bugsnagConnector) TestConnection(vc *VendorConnection) ConnectionResult {
+	token := credStr(vc, "auth_token", "api_key", "token")
+	if len(token) < 8 {
+		return ConnectionResult{Success: false, Message: "Bugsnag auth token is missing or too short"}
 	}
+	var orgs []struct {
+		ID string `json:"id"`
+	}
+	if err := b.get(token, "/user/organizations", &orgs); err != nil {
+		return ConnectionResult{Success: false, Message: fmt.Sprintf("Bugsnag connection failed: %v", err)}
+	}
+	n := len(orgs)
+	return ConnectionResult{
+		Success:          true,
+		Message:          fmt.Sprintf("Bugsnag token validated — %d organization(s) accessible", n),
+		EventsAccessible: &n,
+	}
+}
+
+func (b *bugsnagConnector) FetchEvents(vc *VendorConnection) ([]NormalizedEvent, error) {
+	token := credStr(vc, "auth_token", "api_key", "token")
 	if token == "" {
 		return nil, fmt.Errorf("bugsnag: no auth_token in credentials")
 	}

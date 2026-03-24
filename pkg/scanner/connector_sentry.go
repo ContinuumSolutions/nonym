@@ -25,6 +25,24 @@ type sentryConnector struct {
 
 func (s *sentryConnector) Vendor() string { return "sentry" }
 
+// TestConnection verifies the auth token by listing accessible organizations.
+func (s *sentryConnector) TestConnection(vc *VendorConnection) ConnectionResult {
+	token := s.token(vc)
+	if len(token) < 8 {
+		return ConnectionResult{Success: false, Message: "Sentry auth token is missing or too short"}
+	}
+	orgs, err := s.listOrganizations(token)
+	if err != nil {
+		return ConnectionResult{Success: false, Message: fmt.Sprintf("Sentry connection failed: %v", err)}
+	}
+	n := len(orgs)
+	return ConnectionResult{
+		Success:          true,
+		Message:          fmt.Sprintf("Connected — %d organization(s) accessible", n),
+		EventsAccessible: &n,
+	}
+}
+
 // FetchEvents lists all accessible projects then fetches up to 100 recent
 // events per project (capped at 500 total).
 func (s *sentryConnector) FetchEvents(vc *VendorConnection) ([]NormalizedEvent, error) {
@@ -268,12 +286,7 @@ func (s *sentryConnector) normalise(orgSlug, projectSlug string, events []sentry
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 func (s *sentryConnector) token(vc *VendorConnection) string {
-	for _, key := range []string{"token", "api_token", "api_key", "auth_token"} {
-		if v, ok := vc.Credentials[key].(string); ok && v != "" {
-			return v
-		}
-	}
-	return ""
+	return credStr(vc, "token", "api_token", "api_key", "auth_token")
 }
 
 func stringify(v interface{}) (string, bool) {

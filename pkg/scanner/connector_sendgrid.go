@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -21,6 +22,18 @@ type sendgridConnector struct {
 }
 
 func (s *sendgridConnector) Vendor() string { return "sendgrid" }
+
+// TestConnection verifies the API key by calling the user profile endpoint.
+func (s *sendgridConnector) TestConnection(vc *VendorConnection) ConnectionResult {
+	apiKey := credStr(vc, "api_key", "token")
+	if !strings.HasPrefix(apiKey, "SG.") {
+		return ConnectionResult{Success: false, Message: "SendGrid API key must start with SG."}
+	}
+	if err := s.get(apiKey, "/v3/user/profile", new(struct{})); err != nil {
+		return ConnectionResult{Success: false, Message: fmt.Sprintf("SendGrid connection failed: %v", err)}
+	}
+	return ConnectionResult{Success: true, Message: "SendGrid key validated — account accessible"}
+}
 
 func (s *sendgridConnector) FetchEvents(vc *VendorConnection) ([]NormalizedEvent, error) {
 	apiKey := ""

@@ -22,14 +22,20 @@ type pagerdutyConnector struct {
 
 func (p *pagerdutyConnector) Vendor() string { return "pagerduty" }
 
-func (p *pagerdutyConnector) FetchEvents(vc *VendorConnection) ([]NormalizedEvent, error) {
-	apiKey := ""
-	for _, k := range []string{"api_key", "token"} {
-		if v, ok := vc.Credentials[k].(string); ok && v != "" {
-			apiKey = v
-			break
-		}
+// TestConnection verifies the API key by calling the current-user endpoint.
+func (p *pagerdutyConnector) TestConnection(vc *VendorConnection) ConnectionResult {
+	apiKey := credStr(vc, "api_key", "token")
+	if len(apiKey) < 8 {
+		return ConnectionResult{Success: false, Message: "PagerDuty API key is missing or too short"}
 	}
+	if err := p.get(apiKey, "/users/me", new(struct{})); err != nil {
+		return ConnectionResult{Success: false, Message: fmt.Sprintf("PagerDuty connection failed: %v", err)}
+	}
+	return ConnectionResult{Success: true, Message: "PagerDuty key validated — account accessible"}
+}
+
+func (p *pagerdutyConnector) FetchEvents(vc *VendorConnection) ([]NormalizedEvent, error) {
+	apiKey := credStr(vc, "api_key", "token")
 	if apiKey == "" {
 		return nil, fmt.Errorf("pagerduty: no api_key in credentials")
 	}

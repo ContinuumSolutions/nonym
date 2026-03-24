@@ -8,9 +8,15 @@ type Connector interface {
 	// Vendor returns the slug that matches VendorConnection.Vendor (e.g. "sentry").
 	Vendor() string
 
+	// TestConnection verifies that the credentials are valid by making a
+	// lightweight API call where possible. The result is used to update the
+	// vendor connection status. Credential format validation belongs here —
+	// testConnection in vendor_connections.go is a thin dispatcher only.
+	TestConnection(vc *VendorConnection) ConnectionResult
+
 	// FetchEvents calls the vendor API and returns a flat list of normalised
-	// events ready for PII detection.  The slice may be empty but never nil on
-	// a clean run.  Implementations should cap the number of events they fetch
+	// events ready for PII detection. The slice may be empty but never nil on
+	// a clean run. Implementations should cap the number of events they fetch
 	// to avoid unbounded scans (recommended: ≤ 500 events per call).
 	FetchEvents(vc *VendorConnection) ([]NormalizedEvent, error)
 }
@@ -33,4 +39,16 @@ type ErrNoConnector struct{ Vendor string }
 
 func (e ErrNoConnector) Error() string {
 	return fmt.Sprintf("no connector registered for vendor %q", e.Vendor)
+}
+
+// credStr returns the first non-empty string credential value for any of the
+// given keys. Used by connector TestConnection and FetchEvents implementations
+// to avoid repeating the same credential-extraction loop.
+func credStr(vc *VendorConnection, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := vc.Credentials[k].(string); ok && v != "" {
+			return v
+		}
+	}
+	return ""
 }

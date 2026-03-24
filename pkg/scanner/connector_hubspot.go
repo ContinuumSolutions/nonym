@@ -22,14 +22,20 @@ type hubspotConnector struct {
 
 func (h *hubspotConnector) Vendor() string { return "hubspot" }
 
-func (h *hubspotConnector) FetchEvents(vc *VendorConnection) ([]NormalizedEvent, error) {
-	token := ""
-	for _, k := range []string{"access_token", "token", "api_key"} {
-		if v, ok := vc.Credentials[k].(string); ok && v != "" {
-			token = v
-			break
-		}
+// TestConnection verifies the token by fetching a single contact.
+func (h *hubspotConnector) TestConnection(vc *VendorConnection) ConnectionResult {
+	token := credStr(vc, "access_token", "token", "api_key")
+	if len(token) < 8 {
+		return ConnectionResult{Success: false, Message: "HubSpot access token is missing or too short"}
 	}
+	if err := h.get(token, "/crm/v3/objects/contacts?limit=1", new(struct{})); err != nil {
+		return ConnectionResult{Success: false, Message: fmt.Sprintf("HubSpot connection failed: %v", err)}
+	}
+	return ConnectionResult{Success: true, Message: "HubSpot token validated — CRM accessible"}
+}
+
+func (h *hubspotConnector) FetchEvents(vc *VendorConnection) ([]NormalizedEvent, error) {
+	token := credStr(vc, "access_token", "token", "api_key")
 	if token == "" {
 		return nil, fmt.Errorf("hubspot: no access_token in credentials")
 	}

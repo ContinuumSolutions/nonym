@@ -16,6 +16,23 @@ type posthogConnector struct{ client *http.Client }
 
 func (p *posthogConnector) Vendor() string { return "posthog" }
 
+// TestConnection verifies credentials by fetching the project details.
+func (p *posthogConnector) TestConnection(vc *VendorConnection) ConnectionResult {
+	apiKey, _ := vc.Credentials["api_key"].(string)
+	projectID, _ := vc.Credentials["project_id"].(string)
+	host, _ := vc.Credentials["host"].(string)
+	if host == "" {
+		host = "https://app.posthog.com"
+	}
+	if apiKey == "" || projectID == "" {
+		return ConnectionResult{Success: false, Message: "PostHog requires api_key and project_id"}
+	}
+	if err := p.get(host, apiKey, fmt.Sprintf("/api/projects/%s/", projectID), new(struct{})); err != nil {
+		return ConnectionResult{Success: false, Message: fmt.Sprintf("PostHog connection failed: %v", err)}
+	}
+	return ConnectionResult{Success: true, Message: "PostHog credentials validated — project accessible"}
+}
+
 func (p *posthogConnector) FetchEvents(vc *VendorConnection) ([]NormalizedEvent, error) {
 	apiKey, _ := vc.Credentials["api_key"].(string)
 	projectID, _ := vc.Credentials["project_id"].(string)

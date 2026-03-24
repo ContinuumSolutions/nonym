@@ -1,11 +1,7 @@
 package scanner
 
 import (
-	"encoding/json"
-	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"strings"
 	"time"
 
@@ -100,6 +96,11 @@ func HandleCreateVendorConnection(c *fiber.Ctx) error {
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to create vendor connection"})
 	}
 
+	// ON CONFLICT DO UPDATE preserves the original row's ID, so re-fetch the
+	// canonical record to ensure the response ID matches what is in the DB.
+	if canonical, err := getVendorConnectionByVendor(orgID, req.Vendor); err == nil {
+		vc = canonical
+	}
 	maskCredentials(vc)
 	return c.Status(201).JSON(vc)
 }
@@ -153,8 +154,8 @@ func HandleTestCredentials(c *fiber.Ctx) error {
 	// If a connection for this org+vendor already exists, update its status and
 	// return the refreshed connection object so the frontend needs no extra call.
 	if existing, err := getVendorConnectionByVendor(orgID, req.Vendor); err == nil {
+		now := time.Now()
 		if result.Success {
-			now := time.Now()
 			updateVendorConnectionStatus(existing.ID, "connected", "", &now, existing.LastScanAt)
 			existing.Status = "connected"
 			existing.ConnectedAt = &now
@@ -164,6 +165,7 @@ func HandleTestCredentials(c *fiber.Ctx) error {
 			existing.Status = "error"
 			existing.ErrorMessage = result.Message
 		}
+		existing.UpdatedAt = now
 		maskCredentials(existing)
 		result.Connection = existing
 	}
@@ -187,8 +189,8 @@ func HandleTestVendorConnection(c *fiber.Ctx) error {
 
 	result := testConnection(vc)
 
+	now := time.Now()
 	if result.Success {
-		now := time.Now()
 		updateVendorConnectionStatus(id, "connected", "", &now, vc.LastScanAt)
 		vc.Status = "connected"
 		vc.ConnectedAt = &now
@@ -198,6 +200,7 @@ func HandleTestVendorConnection(c *fiber.Ctx) error {
 		vc.Status = "error"
 		vc.ErrorMessage = result.Message
 	}
+	vc.UpdatedAt = now
 	maskCredentials(vc)
 	result.Connection = vc
 
@@ -236,381 +239,18 @@ type ConnectionResult struct {
 	Connection       *VendorConnection `json:"connection,omitempty"`
 }
 
-// testConnection validates credentials against the vendor.
+// testConnection delegates credential testing to the registered connector.
+// All validation logic (format checks, real API calls) lives in each
+// connector's TestConnection method — this function is a thin dispatcher only.
 func testConnection(vc *VendorConnection) ConnectionResult {
-	switch vc.Vendor {
-	case "sentry":
-		var token string
-		for _, key := range []string{"token", "api_token", "api_key", "auth_token"} {
-			if v, _ := vc.Credentials[key].(string); v != "" {
-				token = v
-				break
-			}
-		}
-		if len(token) < 8 {
-			return ConnectionResult{Success: false, Message: "Sentry auth token is missing or too short"}
-		}
-		return testSentryCredentials(token)
-
-	case "datadog":
-		apiKey, _ := vc.Credentials["api_key"].(string)
-		appKey, _ := vc.Credentials["app_key"].(string)
-		if apiKey == "" || appKey == "" {
-			return ConnectionResult{Success: false, Message: "Datadog requires both api_key and app_key"}
-		}
-		return ConnectionResult{Success: true, Message: "Datadog credentials validated (format check passed)"}
-
-	case "mixpanel":
-		serviceAccount, _ := vc.Credentials["service_account"].(string)
-		secret, _ := vc.Credentials["secret"].(string)
-		if serviceAccount == "" || secret == "" {
-			return ConnectionResult{Success: false, Message: "Mixpanel requires service_account and secret"}
-		}
-		return ConnectionResult{Success: true, Message: "Mixpanel credentials validated (format check passed)"}
-
-	case "stripe":
-		key, _ := vc.Credentials["restricted_key"].(string)
-		if key == "" {
-			key, _ = vc.Credentials["api_key"].(string)
-		}
-		if !strings.HasPrefix(key, "sk_") && !strings.HasPrefix(key, "rk_") {
-			return ConnectionResult{Success: false, Message: "Stripe key must start with sk_ (secret) or rk_ (restricted)"}
-		}
-		return testStripeCredentials(key)
-
-	case "rollbar":
-		token, _ := vc.Credentials["access_token"].(string)
-		if len(token) < 8 {
-			return ConnectionResult{Success: false, Message: "Rollbar access token is missing or too short"}
-		}
-		return ConnectionResult{Success: true, Message: "Rollbar token format accepted"}
-
-	case "bugsnag":
-		token, _ := vc.Credentials["auth_token"].(string)
-		if len(token) < 8 {
-			return ConnectionResult{Success: false, Message: "Bugsnag auth token is missing or too short"}
-		}
-		return ConnectionResult{Success: true, Message: "Bugsnag token format accepted"}
-
-	case "intercom":
-		token, _ := vc.Credentials["access_token"].(string)
-		if len(token) < 8 {
-			return ConnectionResult{Success: false, Message: "Intercom access token is missing or too short"}
-		}
-		return testIntercomCredentials(token)
-
-	case "zendesk":
-		subdomain, _ := vc.Credentials["subdomain"].(string)
-		email, _ := vc.Credentials["email"].(string)
-		apiToken, _ := vc.Credentials["api_token"].(string)
-		if subdomain == "" || email == "" || apiToken == "" {
-			return ConnectionResult{Success: false, Message: "Zendesk requires subdomain, email, and api_token"}
-		}
-		return ConnectionResult{Success: true, Message: "Zendesk credentials format accepted"}
-
-	case "hubspot":
-		token, _ := vc.Credentials["access_token"].(string)
-		if len(token) < 8 {
-			return ConnectionResult{Success: false, Message: "HubSpot access token is missing or too short"}
-		}
-		return testHubSpotCredentials(token)
-
-	case "segment":
-		token, _ := vc.Credentials["access_token"].(string)
-		workspace, _ := vc.Credentials["workspace_slug"].(string)
-		if token == "" || workspace == "" {
-			return ConnectionResult{Success: false, Message: "Segment requires access_token and workspace_slug"}
-		}
-		return ConnectionResult{Success: true, Message: "Segment credentials format accepted"}
-
-	case "amplitude":
-		apiKey, _ := vc.Credentials["api_key"].(string)
-		secretKey, _ := vc.Credentials["secret_key"].(string)
-		if apiKey == "" || secretKey == "" {
-			return ConnectionResult{Success: false, Message: "Amplitude requires api_key and secret_key"}
-		}
-		return ConnectionResult{Success: true, Message: "Amplitude credentials format accepted"}
-
-	case "posthog":
-		apiKey, _ := vc.Credentials["api_key"].(string)
-		projectID, _ := vc.Credentials["project_id"].(string)
-		if apiKey == "" || projectID == "" {
-			return ConnectionResult{Success: false, Message: "PostHog requires api_key and project_id"}
-		}
-		return ConnectionResult{Success: true, Message: "PostHog credentials format accepted"}
-
-	case "twilio":
-		sid, _ := vc.Credentials["account_sid"].(string)
-		token, _ := vc.Credentials["auth_token"].(string)
-		if !strings.HasPrefix(sid, "AC") || len(token) < 8 {
-			return ConnectionResult{Success: false, Message: "Twilio requires a valid account_sid (starts with AC) and auth_token"}
-		}
-		return ConnectionResult{Success: true, Message: "Twilio credentials format accepted"}
-
-	case "sendgrid":
-		key, _ := vc.Credentials["api_key"].(string)
-		if !strings.HasPrefix(key, "SG.") {
-			return ConnectionResult{Success: false, Message: "SendGrid API key must start with SG."}
-		}
-		return ConnectionResult{Success: true, Message: "SendGrid credentials format accepted"}
-
-	case "mailgun":
-		key, _ := vc.Credentials["api_key"].(string)
-		domain, _ := vc.Credentials["domain"].(string)
-		if len(key) < 8 || domain == "" {
-			return ConnectionResult{Success: false, Message: "Mailgun requires api_key and domain"}
-		}
-		return ConnectionResult{Success: true, Message: "Mailgun credentials format accepted"}
-
-	case "mailchimp":
-		key, _ := vc.Credentials["api_key"].(string)
-		if !strings.Contains(key, "-") {
-			return ConnectionResult{Success: false, Message: "Mailchimp API key format is invalid (should be key-dcXX)"}
-		}
-		return ConnectionResult{Success: true, Message: "Mailchimp credentials format accepted"}
-
-	case "pagerduty":
-		key, _ := vc.Credentials["api_key"].(string)
-		if len(key) < 8 {
-			return ConnectionResult{Success: false, Message: "PagerDuty API key is missing or too short"}
-		}
-		return ConnectionResult{Success: true, Message: "PagerDuty credentials format accepted"}
-
-	case "opsgenie":
-		key, _ := vc.Credentials["api_key"].(string)
-		if len(key) < 8 {
-			return ConnectionResult{Success: false, Message: "OpsGenie API key is missing or too short"}
-		}
-		return ConnectionResult{Success: true, Message: "OpsGenie credentials format accepted"}
-
-	case "newrelic":
-		key, _ := vc.Credentials["api_key"].(string)
-		accountID, _ := vc.Credentials["account_id"].(string)
-		if !strings.HasPrefix(key, "NRAK-") || accountID == "" {
-			return ConnectionResult{Success: false, Message: "New Relic requires a User API key (NRAK-...) and account_id"}
-		}
-		return ConnectionResult{Success: true, Message: "New Relic credentials format accepted"}
-
-	case "launchdarkly":
-		key, _ := vc.Credentials["api_key"].(string)
-		if !strings.HasPrefix(key, "api-") {
-			return ConnectionResult{Success: false, Message: "LaunchDarkly API token must start with api-"}
-		}
-		return ConnectionResult{Success: true, Message: "LaunchDarkly credentials format accepted"}
-
-	case "algolia":
-		appID, _ := vc.Credentials["app_id"].(string)
-		apiKey, _ := vc.Credentials["api_key"].(string)
-		if appID == "" || len(apiKey) < 8 {
-			return ConnectionResult{Success: false, Message: "Algolia requires app_id and api_key"}
-		}
-		return ConnectionResult{Success: true, Message: "Algolia credentials format accepted"}
-
-	case "elastic":
-		host, _ := vc.Credentials["host"].(string)
-		apiKey, _ := vc.Credentials["api_key"].(string)
-		if host == "" || apiKey == "" {
-			return ConnectionResult{Success: false, Message: "Elastic requires host and api_key"}
-		}
-		return ConnectionResult{Success: true, Message: "Elastic credentials format accepted"}
-
-	case "snowflake":
-		account, _ := vc.Credentials["account"].(string)
-		username, _ := vc.Credentials["username"].(string)
-		password, _ := vc.Credentials["password"].(string)
-		if account == "" || username == "" || password == "" {
-			return ConnectionResult{Success: false, Message: "Snowflake requires account, username, and password"}
-		}
-		return ConnectionResult{Success: true, Message: "Snowflake credentials format accepted"}
-
-	case "aws":
-		accessKeyID, _ := vc.Credentials["access_key_id"].(string)
-		secretKey, _ := vc.Credentials["secret_access_key"].(string)
-		region, _ := vc.Credentials["region"].(string)
-		if !strings.HasPrefix(accessKeyID, "AK") || len(secretKey) < 8 || region == "" {
-			return ConnectionResult{Success: false, Message: "AWS requires access_key_id (starts with AK), secret_access_key, and region"}
-		}
-		return ConnectionResult{Success: true, Message: "AWS credentials format accepted"}
-
-	case "gcp":
-		projectID, _ := vc.Credentials["project_id"].(string)
-		saJSON, _ := vc.Credentials["service_account_json"].(string)
-		if projectID == "" || saJSON == "" {
-			return ConnectionResult{Success: false, Message: "GCP requires project_id and service_account_json"}
-		}
-		return ConnectionResult{Success: true, Message: "GCP credentials format accepted"}
-
-	case "azure":
-		tenantID, _ := vc.Credentials["tenant_id"].(string)
-		clientID, _ := vc.Credentials["client_id"].(string)
-		clientSecret, _ := vc.Credentials["client_secret"].(string)
-		if tenantID == "" || clientID == "" || clientSecret == "" {
-			return ConnectionResult{Success: false, Message: "Azure requires tenant_id, client_id, and client_secret"}
-		}
-		return ConnectionResult{Success: true, Message: "Azure credentials format accepted"}
-
-	case "auth0":
-		domain, _ := vc.Credentials["domain"].(string)
-		mgmtToken, _ := vc.Credentials["management_token"].(string)
-		if domain == "" || mgmtToken == "" {
-			return ConnectionResult{Success: false, Message: "Auth0 requires domain and management_token"}
-		}
-		return ConnectionResult{Success: true, Message: "Auth0 credentials format accepted"}
-
-	case "okta":
-		orgURL, _ := vc.Credentials["org_url"].(string)
-		apiToken, _ := vc.Credentials["api_token"].(string)
-		if orgURL == "" || len(apiToken) < 8 {
-			return ConnectionResult{Success: false, Message: "Okta requires org_url and api_token"}
-		}
-		return ConnectionResult{Success: true, Message: "Okta credentials format accepted"}
-
-	case "salesforce":
-		instanceURL, _ := vc.Credentials["instance_url"].(string)
-		accessToken, _ := vc.Credentials["access_token"].(string)
-		if instanceURL == "" || accessToken == "" {
-			return ConnectionResult{Success: false, Message: "Salesforce requires instance_url and access_token"}
-		}
-		return ConnectionResult{Success: true, Message: "Salesforce credentials format accepted"}
-
-	case "cloudflare":
-		apiToken, _ := vc.Credentials["api_token"].(string)
-		accountID, _ := vc.Credentials["account_id"].(string)
-		if len(apiToken) < 8 || accountID == "" {
-			return ConnectionResult{Success: false, Message: "Cloudflare requires api_token and account_id"}
-		}
-		return ConnectionResult{Success: true, Message: "Cloudflare credentials format accepted"}
-
-	default:
-		if len(vc.Credentials) == 0 {
-			return ConnectionResult{Success: false, Message: "No credentials provided"}
-		}
-		return ConnectionResult{Success: true, Message: "Credentials format accepted"}
+	if c := connectorFor(vc.Vendor); c != nil {
+		return c.TestConnection(vc)
 	}
-}
-
-// testSentryCredentials verifies a Sentry auth token by calling the real API.
-func testSentryCredentials(token string) ConnectionResult {
-	req, err := http.NewRequest("GET", "https://sentry.io/api/0/organizations/?member=1", nil)
-	if err != nil {
-		return ConnectionResult{Success: false, Message: fmt.Sprintf("Failed to build request: %v", err)}
+	// Fallback for vendors without a registered connector.
+	if len(vc.Credentials) == 0 {
+		return ConnectionResult{Success: false, Message: "No credentials provided"}
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return ConnectionResult{Success: false, Message: fmt.Sprintf("Could not reach Sentry API: %v", err)}
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-
-	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		return ConnectionResult{Success: false, Message: "Invalid or expired token — check that it has org:read, project:read, and event:read scopes"}
-	}
-	if resp.StatusCode >= 400 {
-		return ConnectionResult{Success: false, Message: fmt.Sprintf("Sentry API error (HTTP %d): %s", resp.StatusCode, truncateStr(string(body), 200))}
-	}
-
-	var orgs []struct {
-		Slug string `json:"slug"`
-	}
-	if err := json.Unmarshal(body, &orgs); err != nil {
-		return ConnectionResult{Success: false, Message: "Unexpected response from Sentry API"}
-	}
-
-	n := len(orgs)
-	return ConnectionResult{
-		Success:          true,
-		Message:          fmt.Sprintf("Connected — %d organization(s) accessible", n),
-		EventsAccessible: &n,
-	}
-}
-
-func truncateStr(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	return s[:max] + "…"
-}
-
-// testStripeCredentials makes a live call to the Stripe API.
-// Keys shorter than 20 chars are clearly synthetic (test/placeholder) and
-// get a format-only pass so unit tests aren't network-dependent.
-func testStripeCredentials(key string) ConnectionResult {
-	if len(key) < 20 {
-		return ConnectionResult{Success: true, Message: "Stripe credentials validated (format check passed)"}
-	}
-	req, err := http.NewRequest("GET", "https://api.stripe.com/v1/account", nil)
-	if err != nil {
-		return ConnectionResult{Success: false, Message: fmt.Sprintf("Failed to build request: %v", err)}
-	}
-	req.SetBasicAuth(key, "")
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return ConnectionResult{Success: false, Message: fmt.Sprintf("Could not reach Stripe API: %v", err)}
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		return ConnectionResult{Success: false, Message: "Invalid or restricted key — ensure the key has read access to Account"}
-	}
-	if resp.StatusCode >= 400 {
-		return ConnectionResult{Success: false, Message: fmt.Sprintf("Stripe API error (HTTP %d)", resp.StatusCode)}
-	}
-	return ConnectionResult{Success: true, Message: "Stripe key validated — account accessible"}
-}
-
-// testIntercomCredentials makes a live call to the Intercom API.
-func testIntercomCredentials(token string) ConnectionResult {
-	req, err := http.NewRequest("GET", "https://api.intercom.io/me", nil)
-	if err != nil {
-		return ConnectionResult{Success: false, Message: fmt.Sprintf("Failed to build request: %v", err)}
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Intercom-Version", "2.10")
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return ConnectionResult{Success: false, Message: fmt.Sprintf("Could not reach Intercom API: %v", err)}
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		return ConnectionResult{Success: false, Message: "Invalid access token — check token scopes"}
-	}
-	if resp.StatusCode >= 400 {
-		return ConnectionResult{Success: false, Message: fmt.Sprintf("Intercom API error (HTTP %d)", resp.StatusCode)}
-	}
-	return ConnectionResult{Success: true, Message: "Intercom token validated — admin account accessible"}
-}
-
-// testHubSpotCredentials makes a live call to the HubSpot API.
-func testHubSpotCredentials(token string) ConnectionResult {
-	req, err := http.NewRequest("GET", "https://api.hubapi.com/oauth/v1/access-tokens/"+token, nil)
-	if err != nil {
-		return ConnectionResult{Success: false, Message: fmt.Sprintf("Failed to build request: %v", err)}
-	}
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return ConnectionResult{Success: false, Message: fmt.Sprintf("Could not reach HubSpot API: %v", err)}
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		return ConnectionResult{Success: false, Message: "Invalid private app token — check token permissions"}
-	}
-	if resp.StatusCode >= 400 {
-		return ConnectionResult{Success: false, Message: fmt.Sprintf("HubSpot API error (HTTP %d)", resp.StatusCode)}
-	}
-	return ConnectionResult{Success: true, Message: "HubSpot token validated"}
+	return ConnectionResult{Success: true, Message: "Credentials format accepted"}
 }
 
 // maskCredentials replaces credential values with masked representations.

@@ -22,14 +22,32 @@ type rollbarConnector struct {
 
 func (r *rollbarConnector) Vendor() string { return "rollbar" }
 
-func (r *rollbarConnector) FetchEvents(vc *VendorConnection) ([]NormalizedEvent, error) {
-	token := ""
-	for _, k := range []string{"access_token", "token", "api_key"} {
-		if v, ok := vc.Credentials[k].(string); ok && v != "" {
-			token = v
-			break
-		}
+// TestConnection verifies the access token by listing projects.
+func (r *rollbarConnector) TestConnection(vc *VendorConnection) ConnectionResult {
+	token := credStr(vc, "access_token", "token", "api_key")
+	if len(token) < 8 {
+		return ConnectionResult{Success: false, Message: "Rollbar access token is missing or too short"}
 	}
+	req, err := http.NewRequest("GET", r.baseURL+"/api/1/projects/?access_token="+token, nil)
+	if err != nil {
+		return ConnectionResult{Success: false, Message: fmt.Sprintf("Failed to build request: %v", err)}
+	}
+	resp, err := r.client.Do(req)
+	if err != nil {
+		return ConnectionResult{Success: false, Message: fmt.Sprintf("Could not reach Rollbar API: %v", err)}
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+		return ConnectionResult{Success: false, Message: "Invalid Rollbar token — check that it has read scope"}
+	}
+	if resp.StatusCode >= 400 {
+		return ConnectionResult{Success: false, Message: fmt.Sprintf("Rollbar API error (HTTP %d)", resp.StatusCode)}
+	}
+	return ConnectionResult{Success: true, Message: "Rollbar token validated — account accessible"}
+}
+
+func (r *rollbarConnector) FetchEvents(vc *VendorConnection) ([]NormalizedEvent, error) {
+	token := credStr(vc, "access_token", "token", "api_key")
 	if token == "" {
 		return nil, fmt.Errorf("rollbar: no access_token in credentials")
 	}

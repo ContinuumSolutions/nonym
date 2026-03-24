@@ -162,10 +162,45 @@ func insertVendorConnection(vc *VendorConnection) error {
 	return err
 }
 
+const vcSelectCols = `id, org_id, vendor, display_name, status, scan_status, auth_type, credentials, settings,
+	connected_at, last_scan_at, error_message, created_at, updated_at`
+
+// scanVendorConnection reads one VendorConnection from a sql.Row.
+func scanVendorConnection(row interface {
+	Scan(...interface{}) error
+}) (VendorConnection, error) {
+	var vc VendorConnection
+	var credRaw, settRaw string
+	var connectedAt, lastScanAt sql.NullTime
+	var errMsg sql.NullString
+	if err := row.Scan(
+		&vc.ID, &vc.OrgID, &vc.Vendor, &vc.DisplayName, &vc.Status, &vc.ScanStatus,
+		&vc.AuthType, &credRaw, &settRaw,
+		&connectedAt, &lastScanAt, &errMsg,
+		&vc.CreatedAt, &vc.UpdatedAt,
+	); err != nil {
+		return vc, err
+	}
+	if err := json.Unmarshal([]byte(credRaw), &vc.Credentials); err != nil {
+		log.Printf("scanner: scanVendorConnection credentials unmarshal error (id=%s): %v", vc.ID, err)
+	}
+	if err := json.Unmarshal([]byte(settRaw), &vc.Settings); err != nil {
+		log.Printf("scanner: scanVendorConnection settings unmarshal error (id=%s): %v", vc.ID, err)
+	}
+	if connectedAt.Valid {
+		t := connectedAt.Time
+		vc.ConnectedAt = &t
+	}
+	if lastScanAt.Valid {
+		t := lastScanAt.Time
+		vc.LastScanAt = &t
+	}
+	vc.ErrorMessage = errMsg.String
+	return vc, nil
+}
+
 func listVendorConnections(orgID int, statusFilter string) ([]VendorConnection, error) {
-	q := `SELECT id, org_id, vendor, display_name, status, scan_status, auth_type, credentials, settings,
-	             connected_at, last_scan_at, error_message, created_at, updated_at
-	      FROM vendor_connections WHERE org_id = ?`
+	q := `SELECT ` + vcSelectCols + ` FROM vendor_connections WHERE org_id = ?`
 	args := []interface{}{orgID}
 	if statusFilter != "" {
 		q += " AND status = ?"
@@ -181,34 +216,11 @@ func listVendorConnections(orgID int, statusFilter string) ([]VendorConnection, 
 
 	var out []VendorConnection
 	for rows.Next() {
-		var vc VendorConnection
-		var credRaw, settRaw string
-		var connectedAt, lastScanAt sql.NullTime
-		var errMsg sql.NullString
-		if err := rows.Scan(
-			&vc.ID, &vc.OrgID, &vc.Vendor, &vc.DisplayName, &vc.Status, &vc.ScanStatus,
-			&vc.AuthType, &credRaw, &settRaw,
-			&connectedAt, &lastScanAt, &errMsg,
-			&vc.CreatedAt, &vc.UpdatedAt,
-		); err != nil {
+		vc, err := scanVendorConnection(rows)
+		if err != nil {
 			log.Printf("scanner: listVendorConnections scan error: %v", err)
 			continue
 		}
-		if err := json.Unmarshal([]byte(credRaw), &vc.Credentials); err != nil {
-			log.Printf("scanner: listVendorConnections credentials unmarshal error (id=%s): %v", vc.ID, err)
-		}
-		if err := json.Unmarshal([]byte(settRaw), &vc.Settings); err != nil {
-			log.Printf("scanner: listVendorConnections settings unmarshal error (id=%s): %v", vc.ID, err)
-		}
-		if connectedAt.Valid {
-			t := connectedAt.Time
-			vc.ConnectedAt = &t
-		}
-		if lastScanAt.Valid {
-			t := lastScanAt.Time
-			vc.LastScanAt = &t
-		}
-		vc.ErrorMessage = errMsg.String
 		out = append(out, vc)
 	}
 	if out == nil {
@@ -218,77 +230,25 @@ func listVendorConnections(orgID int, statusFilter string) ([]VendorConnection, 
 }
 
 func getVendorConnection(orgID int, id string) (*VendorConnection, error) {
-	row := db.QueryRow(formatQuery(`
-		SELECT id, org_id, vendor, display_name, status, scan_status, auth_type, credentials, settings,
-		       connected_at, last_scan_at, error_message, created_at, updated_at
-		FROM vendor_connections WHERE id = ? AND org_id = ?
-	`), id, orgID)
-
-	var vc VendorConnection
-	var credRaw, settRaw string
-	var connectedAt, lastScanAt sql.NullTime
-	var errMsg sql.NullString
-	if err := row.Scan(
-		&vc.ID, &vc.OrgID, &vc.Vendor, &vc.DisplayName, &vc.Status, &vc.ScanStatus,
-		&vc.AuthType, &credRaw, &settRaw,
-		&connectedAt, &lastScanAt, &errMsg,
-		&vc.CreatedAt, &vc.UpdatedAt,
-	); err != nil {
+	row := db.QueryRow(formatQuery(
+		`SELECT `+vcSelectCols+` FROM vendor_connections WHERE id = ? AND org_id = ?`,
+	), id, orgID)
+	vc, err := scanVendorConnection(row)
+	if err != nil {
 		return nil, err
 	}
-	if err := json.Unmarshal([]byte(credRaw), &vc.Credentials); err != nil {
-		log.Printf("scanner: getVendorConnection credentials unmarshal error (id=%s): %v", vc.ID, err)
-	}
-	if err := json.Unmarshal([]byte(settRaw), &vc.Settings); err != nil {
-		log.Printf("scanner: getVendorConnection settings unmarshal error (id=%s): %v", vc.ID, err)
-	}
-	if connectedAt.Valid {
-		t := connectedAt.Time
-		vc.ConnectedAt = &t
-	}
-	if lastScanAt.Valid {
-		t := lastScanAt.Time
-		vc.LastScanAt = &t
-	}
-	vc.ErrorMessage = errMsg.String
 	return &vc, nil
 }
 
 // getVendorConnectionByVendor returns the first connection for the given org and vendor slug.
 func getVendorConnectionByVendor(orgID int, vendor string) (*VendorConnection, error) {
-	row := db.QueryRow(formatQuery(`
-		SELECT id, org_id, vendor, display_name, status, scan_status, auth_type, credentials, settings,
-		       connected_at, last_scan_at, error_message, created_at, updated_at
-		FROM vendor_connections WHERE org_id = ? AND vendor = ? LIMIT 1
-	`), orgID, vendor)
-
-	var vc VendorConnection
-	var credRaw, settRaw string
-	var connectedAt, lastScanAt sql.NullTime
-	var errMsg sql.NullString
-	if err := row.Scan(
-		&vc.ID, &vc.OrgID, &vc.Vendor, &vc.DisplayName, &vc.Status, &vc.ScanStatus,
-		&vc.AuthType, &credRaw, &settRaw,
-		&connectedAt, &lastScanAt, &errMsg,
-		&vc.CreatedAt, &vc.UpdatedAt,
-	); err != nil {
+	row := db.QueryRow(formatQuery(
+		`SELECT `+vcSelectCols+` FROM vendor_connections WHERE org_id = ? AND vendor = ? LIMIT 1`,
+	), orgID, vendor)
+	vc, err := scanVendorConnection(row)
+	if err != nil {
 		return nil, err
 	}
-	if err := json.Unmarshal([]byte(credRaw), &vc.Credentials); err != nil {
-		log.Printf("scanner: getVendorConnectionByVendor credentials unmarshal error (id=%s): %v", vc.ID, err)
-	}
-	if err := json.Unmarshal([]byte(settRaw), &vc.Settings); err != nil {
-		log.Printf("scanner: getVendorConnectionByVendor settings unmarshal error (id=%s): %v", vc.ID, err)
-	}
-	if connectedAt.Valid {
-		t := connectedAt.Time
-		vc.ConnectedAt = &t
-	}
-	if lastScanAt.Valid {
-		t := lastScanAt.Time
-		vc.LastScanAt = &t
-	}
-	vc.ErrorMessage = errMsg.String
 	return &vc, nil
 }
 

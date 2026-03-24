@@ -18,6 +18,14 @@ type algoliaConnector struct{ client *http.Client }
 
 func (a *algoliaConnector) Vendor() string { return "algolia" }
 
+// TestConnection validates that app_id and api_key are present.
+func (a *algoliaConnector) TestConnection(vc *VendorConnection) ConnectionResult {
+	if credStr(vc, "app_id") == "" || len(credStr(vc, "api_key")) < 8 {
+		return ConnectionResult{Success: false, Message: "Algolia requires app_id and api_key"}
+	}
+	return ConnectionResult{Success: true, Message: "Algolia credentials format accepted"}
+}
+
 func (a *algoliaConnector) FetchEvents(vc *VendorConnection) ([]NormalizedEvent, error) {
 	appID, _ := vc.Credentials["app_id"].(string)
 	apiKey, _ := vc.Credentials["api_key"].(string)

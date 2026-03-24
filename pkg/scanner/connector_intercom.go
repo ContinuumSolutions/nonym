@@ -23,14 +23,20 @@ type intercomConnector struct {
 
 func (ic *intercomConnector) Vendor() string { return "intercom" }
 
-func (ic *intercomConnector) FetchEvents(vc *VendorConnection) ([]NormalizedEvent, error) {
-	token := ""
-	for _, k := range []string{"access_token", "token", "api_key"} {
-		if v, ok := vc.Credentials[k].(string); ok && v != "" {
-			token = v
-			break
-		}
+// TestConnection verifies the access token by calling /me.
+func (ic *intercomConnector) TestConnection(vc *VendorConnection) ConnectionResult {
+	token := credStr(vc, "access_token", "token", "api_key")
+	if len(token) < 8 {
+		return ConnectionResult{Success: false, Message: "Intercom access token is missing or too short"}
 	}
+	if err := ic.get(token, "/me", new(struct{})); err != nil {
+		return ConnectionResult{Success: false, Message: fmt.Sprintf("Intercom connection failed: %v", err)}
+	}
+	return ConnectionResult{Success: true, Message: "Intercom token validated — admin account accessible"}
+}
+
+func (ic *intercomConnector) FetchEvents(vc *VendorConnection) ([]NormalizedEvent, error) {
+	token := credStr(vc, "access_token", "token", "api_key")
 	if token == "" {
 		return nil, fmt.Errorf("intercom: no access_token in credentials")
 	}

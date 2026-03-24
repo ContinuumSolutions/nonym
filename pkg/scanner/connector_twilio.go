@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -15,6 +16,33 @@ func init() {
 type twilioConnector struct{ client *http.Client }
 
 func (t *twilioConnector) Vendor() string { return "twilio" }
+
+// TestConnection verifies credentials by fetching the account resource.
+func (t *twilioConnector) TestConnection(vc *VendorConnection) ConnectionResult {
+	accountSID, _ := vc.Credentials["account_sid"].(string)
+	authToken, _ := vc.Credentials["auth_token"].(string)
+	if !strings.HasPrefix(accountSID, "AC") || len(authToken) < 8 {
+		return ConnectionResult{Success: false, Message: "Twilio requires a valid account_sid (starts with AC) and auth_token"}
+	}
+	url := fmt.Sprintf("https://api.twilio.com/2010-04-01/Accounts/%s.json", accountSID)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return ConnectionResult{Success: false, Message: fmt.Sprintf("Failed to build request: %v", err)}
+	}
+	req.SetBasicAuth(accountSID, authToken)
+	resp, err := t.client.Do(req)
+	if err != nil {
+		return ConnectionResult{Success: false, Message: fmt.Sprintf("Could not reach Twilio API: %v", err)}
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+		return ConnectionResult{Success: false, Message: "Invalid Twilio credentials — check account_sid and auth_token"}
+	}
+	if resp.StatusCode >= 400 {
+		return ConnectionResult{Success: false, Message: fmt.Sprintf("Twilio API error (HTTP %d)", resp.StatusCode)}
+	}
+	return ConnectionResult{Success: true, Message: "Twilio credentials validated — account accessible"}
+}
 
 func (t *twilioConnector) FetchEvents(vc *VendorConnection) ([]NormalizedEvent, error) {
 	accountSID, _ := vc.Credentials["account_sid"].(string)
