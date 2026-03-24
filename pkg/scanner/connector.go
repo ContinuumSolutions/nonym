@@ -33,6 +33,28 @@ func connectorFor(vendor string) Connector {
 	return registry[vendor]
 }
 
+// RegionDetector is an optional interface a Connector may implement to derive
+// the vendor's hosting region from its credentials or settings.  The returned
+// string should be a canonical region code: "US", "EU", "AU", "US-FED", etc.
+// Return "" if the region cannot be determined from the available credentials.
+// Connectors that are single-region (always US, globally distributed, etc.)
+// should return the fixed value rather than implementing this interface so that
+// a future catalogue default can override it without code changes.
+type RegionDetector interface {
+	DetectRegion(vc *VendorConnection) string
+}
+
+// detectRegion calls the connector's DetectRegion if it implements RegionDetector,
+// otherwise returns "".
+func detectRegion(vc *VendorConnection) string {
+	if c := connectorFor(vc.Vendor); c != nil {
+		if rd, ok := c.(RegionDetector); ok {
+			return rd.DetectRegion(vc)
+		}
+	}
+	return ""
+}
+
 // ErrNoConnector is returned when no real connector exists for a vendor and
 // the caller needs to know (rather than silently falling back).
 type ErrNoConnector struct{ Vendor string }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -15,6 +16,19 @@ func init() {
 type posthogConnector struct{ client *http.Client }
 
 func (p *posthogConnector) Vendor() string { return "posthog" }
+
+// DetectRegion derives the region from the host credential.
+// EU cloud: eu.posthog.com → "EU"; US cloud (default): "US"; self-hosted: "".
+func (p *posthogConnector) DetectRegion(vc *VendorConnection) string {
+	host, _ := vc.Credentials["host"].(string)
+	if host == "" {
+		return "US" // PostHog Cloud default is US
+	}
+	if strings.Contains(host, "eu.posthog.com") {
+		return "EU"
+	}
+	return "" // self-hosted: user must set manually
+}
 
 // TestConnection verifies credentials by fetching the project details.
 func (p *posthogConnector) TestConnection(vc *VendorConnection) ConnectionResult {

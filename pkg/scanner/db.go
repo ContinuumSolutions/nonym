@@ -66,8 +66,9 @@ func createTables() error {
 			updated_at    %s NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			UNIQUE(org_id, vendor)
 		)`, ts, ts, ts, ts),
-		// Migration: add scan_status to existing tables (ignore error if column already exists).
+		// Migrations: add columns to existing tables (errors ignored if column already exists).
 		`ALTER TABLE vendor_connections ADD COLUMN scan_status TEXT NOT NULL DEFAULT 'idle'`,
+		`ALTER TABLE vendor_connections ADD COLUMN hosting_region TEXT NOT NULL DEFAULT ''`,
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS scans (
 			id             TEXT PRIMARY KEY,
 			org_id         INTEGER NOT NULL,
@@ -146,8 +147,8 @@ func insertVendorConnection(vc *VendorConnection) error {
 	}
 	_, err := db.Exec(formatQuery(`
 		INSERT INTO vendor_connections
-			(id, org_id, vendor, display_name, status, scan_status, auth_type, credentials, settings, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			(id, org_id, vendor, display_name, status, scan_status, auth_type, credentials, settings, hosting_region, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(org_id, vendor) DO UPDATE SET
 			display_name=EXCLUDED.display_name,
 			status=EXCLUDED.status,
@@ -155,15 +156,16 @@ func insertVendorConnection(vc *VendorConnection) error {
 			auth_type=EXCLUDED.auth_type,
 			credentials=EXCLUDED.credentials,
 			settings=EXCLUDED.settings,
+			hosting_region=EXCLUDED.hosting_region,
 			updated_at=EXCLUDED.updated_at
 	`),
 		vc.ID, vc.OrgID, vc.Vendor, vc.DisplayName, vc.Status, vc.ScanStatus,
-		vc.AuthType, credJSON, settJSON, vc.CreatedAt, vc.UpdatedAt)
+		vc.AuthType, credJSON, settJSON, vc.HostingRegion, vc.CreatedAt, vc.UpdatedAt)
 	return err
 }
 
 const vcSelectCols = `id, org_id, vendor, display_name, status, scan_status, auth_type, credentials, settings,
-	connected_at, last_scan_at, error_message, created_at, updated_at`
+	hosting_region, connected_at, last_scan_at, error_message, created_at, updated_at`
 
 // scanVendorConnection reads one VendorConnection from a sql.Row.
 func scanVendorConnection(row interface {
@@ -176,7 +178,7 @@ func scanVendorConnection(row interface {
 	if err := row.Scan(
 		&vc.ID, &vc.OrgID, &vc.Vendor, &vc.DisplayName, &vc.Status, &vc.ScanStatus,
 		&vc.AuthType, &credRaw, &settRaw,
-		&connectedAt, &lastScanAt, &errMsg,
+		&vc.HostingRegion, &connectedAt, &lastScanAt, &errMsg,
 		&vc.CreatedAt, &vc.UpdatedAt,
 	); err != nil {
 		return vc, err
@@ -255,6 +257,26 @@ func getVendorConnectionByVendor(orgID int, vendor string) (*VendorConnection, e
 func deleteVendorConnection(orgID int, id string) error {
 	_, err := db.Exec(formatQuery(
 		`DELETE FROM vendor_connections WHERE id = ? AND org_id = ?`), id, orgID)
+	return err
+}
+
+func updateVendorHostingRegion(id, region string) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec(formatQuery(
+		`UPDATE vendor_connections SET hosting_region = ?, updated_at = ? WHERE id = ?`),
+		region, time.Now(), id)
+	return err
+}
+
+func updateVendorDisplayName(id, displayName string) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec(formatQuery(
+		`UPDATE vendor_connections SET display_name = ?, updated_at = ? WHERE id = ?`),
+		displayName, time.Now(), id)
 	return err
 }
 

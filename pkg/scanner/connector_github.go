@@ -23,6 +23,12 @@ type githubConnector struct {
 
 func (g *githubConnector) Vendor() string { return "github" }
 
+// DetectRegion returns "US" for github.com (all data is US-hosted).
+// GitHub Enterprise Server is self-hosted; region is unknown from credentials alone.
+func (g *githubConnector) DetectRegion(vc *VendorConnection) string {
+	return "US"
+}
+
 // TestConnection verifies the token via the /user endpoint.
 func (g *githubConnector) TestConnection(vc *VendorConnection) ConnectionResult {
 	token := credStr(vc, "token", "api_key")

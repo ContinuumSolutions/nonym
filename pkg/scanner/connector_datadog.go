@@ -18,6 +18,21 @@ type datadogConnector struct{ client *http.Client }
 
 func (d *datadogConnector) Vendor() string { return "datadog" }
 
+// DetectRegion derives the region from the site credential.
+func (d *datadogConnector) DetectRegion(vc *VendorConnection) string {
+	site, _ := vc.Credentials["site"].(string)
+	switch {
+	case strings.Contains(site, "datadoghq.eu"):
+		return "EU"
+	case strings.Contains(site, "ap1.datadoghq.com"):
+		return "AP"
+	case strings.Contains(site, "ddog-gov.com"):
+		return "US-FED"
+	default:
+		return "US" // datadoghq.com is the default
+	}
+}
+
 // TestConnection validates that both api_key and app_key are present.
 func (d *datadogConnector) TestConnection(vc *VendorConnection) ConnectionResult {
 	if credStr(vc, "api_key") == "" || credStr(vc, "app_key") == "" {

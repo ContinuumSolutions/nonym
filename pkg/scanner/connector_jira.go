@@ -20,6 +20,21 @@ type jiraConnector struct{ client *http.Client }
 
 func (j *jiraConnector) Vendor() string { return "jira" }
 
+// DetectRegion infers the region from the Jira Cloud base URL.
+// Atlassian's EU data residency uses a *.atlassian.net subdomain with an EU
+// "site" setting; the canonical EU URL suffix is ".atlassian.net" routed via
+// the EU pod — detectable via the "eu" sub-label in some enterprise URLs.
+func (j *jiraConnector) DetectRegion(vc *VendorConnection) string {
+	baseURL := strings.ToLower(credStr(vc, "base_url"))
+	if strings.Contains(baseURL, ".eu.atlassian.net") || strings.HasPrefix(baseURL, "https://eu.") {
+		return "EU"
+	}
+	if strings.Contains(baseURL, ".atlassian.net") {
+		return "US"
+	}
+	return "" // self-hosted / Data Center: user must set manually
+}
+
 // TestConnection verifies credentials via the /rest/api/3/myself endpoint.
 func (j *jiraConnector) TestConnection(vc *VendorConnection) ConnectionResult {
 	baseURL, email, token := credStr(vc, "base_url"), credStr(vc, "email"), credStr(vc, "api_token")

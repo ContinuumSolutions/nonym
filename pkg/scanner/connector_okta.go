@@ -19,6 +19,19 @@ type oktaConnector struct{ client *http.Client }
 
 func (o *oktaConnector) Vendor() string { return "okta" }
 
+// DetectRegion derives the region from the org URL.
+func (o *oktaConnector) DetectRegion(vc *VendorConnection) string {
+	orgURL := strings.ToLower(credStr(vc, "org_url"))
+	switch {
+	case strings.Contains(orgURL, ".okta-emea.com") || strings.Contains(orgURL, ".eu.okta.com"):
+		return "EU"
+	case strings.Contains(orgURL, ".oktapreview.com"):
+		return "" // sandbox — no fixed region
+	default:
+		return "US"
+	}
+}
+
 // TestConnection verifies by fetching a single user from the directory.
 func (o *oktaConnector) TestConnection(vc *VendorConnection) ConnectionResult {
 	orgURL, apiToken := credStr(vc, "org_url"), credStr(vc, "api_token")

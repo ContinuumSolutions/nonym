@@ -11,11 +11,12 @@ type VendorConnection struct {
 	OrgID            int                    `json:"org_id"`
 	Vendor           string                 `json:"vendor"`
 	DisplayName      string                 `json:"display_name"`
-	Status           string                 `json:"status"`       // connected | disconnected | error
-	ScanStatus       string                 `json:"scan_status"`  // idle | scanning
-	AuthType         string                 `json:"auth_type"`    // api_key | oauth
-	Credentials      map[string]interface{} `json:"credentials"`  // masked — never expose raw secrets
+	Status           string                 `json:"status"`          // connected | disconnected | error
+	ScanStatus       string                 `json:"scan_status"`     // idle | scanning
+	AuthType         string                 `json:"auth_type"`       // api_key | oauth
+	Credentials      map[string]interface{} `json:"credentials"`     // masked — never expose raw secrets
 	Settings         map[string]interface{} `json:"settings"`
+	HostingRegion    string                 `json:"hosting_region"`  // US | EU | AU | "" (auto-detected or user-set)
 	ConnectedAt      *time.Time             `json:"connected_at"`
 	LastScanAt       *time.Time             `json:"last_scan_at"`
 	ErrorMessage     string                 `json:"error_message,omitempty"`

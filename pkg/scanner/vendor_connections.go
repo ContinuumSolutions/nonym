@@ -158,6 +158,10 @@ func HandleTestCredentials(c *fiber.Ctx) error {
 
 	now := time.Now()
 
+	// Auto-detect region from the submitted credentials (uses the temp vc which
+	// has the real, unmasked credentials the user just provided).
+	detectedRegion := detectRegion(vc)
+
 	if existing, err := getVendorConnectionByVendor(orgID, req.Vendor); err == nil {
 		// Connection already exists — update its status.
 		if result.Success {
@@ -165,6 +169,11 @@ func HandleTestCredentials(c *fiber.Ctx) error {
 			existing.Status = "connected"
 			existing.ConnectedAt = &now
 			existing.ErrorMessage = ""
+			// Update region if we detected one and the user hasn't manually overridden it.
+			if existing.HostingRegion == "" && detectedRegion != "" {
+				updateVendorHostingRegion(existing.ID, detectedRegion)
+				existing.HostingRegion = detectedRegion
+			}
 		} else {
 			updateVendorConnectionStatus(existing.ID, "error", result.Message, existing.ConnectedAt, existing.LastScanAt)
 			existing.Status = "error"
@@ -181,17 +190,18 @@ func HandleTestCredentials(c *fiber.Ctx) error {
 			displayName = strings.ToUpper(displayName[:1]) + displayName[1:]
 		}
 		newVC := &VendorConnection{
-			ID:          newID(),
-			OrgID:       orgID,
-			Vendor:      req.Vendor,
-			DisplayName: displayName,
-			Status:      "connected",
-			AuthType:    req.AuthType,
-			Credentials: req.Credentials,
-			Settings:    map[string]interface{}{},
-			ConnectedAt: &now,
-			CreatedAt:   now,
-			UpdatedAt:   now,
+			ID:            newID(),
+			OrgID:         orgID,
+			Vendor:        req.Vendor,
+			DisplayName:   displayName,
+			Status:        "connected",
+			AuthType:      req.AuthType,
+			Credentials:   req.Credentials,
+			Settings:      map[string]interface{}{},
+			HostingRegion: detectedRegion,
+			ConnectedAt:   &now,
+			CreatedAt:     now,
+			UpdatedAt:     now,
 		}
 		if err := insertVendorConnection(newVC); err != nil {
 			log.Printf("scanner: HandleTestCredentials: create connection: %v", err)
@@ -229,6 +239,13 @@ func HandleTestVendorConnection(c *fiber.Ctx) error {
 		vc.Status = "connected"
 		vc.ConnectedAt = &now
 		vc.ErrorMessage = ""
+		// Auto-detect and persist hosting region if not already set by the user.
+		if vc.HostingRegion == "" {
+			if region := detectRegion(vc); region != "" {
+				updateVendorHostingRegion(id, region)
+				vc.HostingRegion = region
+			}
+		}
 	} else {
 		updateVendorConnectionStatus(id, "error", result.Message, vc.ConnectedAt, vc.LastScanAt)
 		vc.Status = "error"
@@ -239,6 +256,48 @@ func HandleTestVendorConnection(c *fiber.Ctx) error {
 	result.Connection = vc
 
 	return c.JSON(result)
+}
+
+// HandleUpdateVendorConnection updates mutable fields on a vendor connection.
+// PATCH /api/v1/vendor-connections/:id
+func HandleUpdateVendorConnection(c *fiber.Ctx) error {
+	orgID, ok := c.Locals("organization_id").(int)
+	if !ok {
+		return c.Status(401).JSON(fiber.Map{"error": "Authentication required"})
+	}
+
+	id := c.Params("id")
+	vc, err := getVendorConnection(orgID, id)
+	if err != nil {
+		return c.Status(404).JSON(fiber.Map{"error": "Vendor connection not found"})
+	}
+
+	var req struct {
+		DisplayName   *string `json:"display_name"`
+		HostingRegion *string `json:"hosting_region"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
+	}
+
+	if req.DisplayName != nil {
+		if err := updateVendorDisplayName(id, *req.DisplayName); err != nil {
+			log.Printf("scanner: HandleUpdateVendorConnection display_name: %v", err)
+			return c.Status(500).JSON(fiber.Map{"error": "Failed to update display name"})
+		}
+		vc.DisplayName = *req.DisplayName
+	}
+	if req.HostingRegion != nil {
+		if err := updateVendorHostingRegion(id, *req.HostingRegion); err != nil {
+			log.Printf("scanner: HandleUpdateVendorConnection hosting_region: %v", err)
+			return c.Status(500).JSON(fiber.Map{"error": "Failed to update hosting region"})
+		}
+		vc.HostingRegion = *req.HostingRegion
+	}
+
+	vc.UpdatedAt = time.Now()
+	maskCredentials(vc)
+	return c.JSON(vc)
 }
 
 // HandleTriggerVendorScan triggers a scan for a single vendor connection.

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -15,6 +16,19 @@ func init() {
 type zendeskConnector struct{ client *http.Client }
 
 func (z *zendeskConnector) Vendor() string { return "zendesk" }
+
+// DetectRegion infers region from the subdomain.
+// Zendesk EU instances use subdomain.zendesk.com but are routed to EU data centers
+// when the account was created in the EU. There is no reliable way to detect this
+// from the subdomain alone, so we check for the explicit ".eu" suffix used by
+// some Zendesk configurations and the EU pod hostname pattern.
+func (z *zendeskConnector) DetectRegion(vc *VendorConnection) string {
+	subdomain, _ := vc.Credentials["subdomain"].(string)
+	if strings.HasSuffix(subdomain, ".eu") || strings.Contains(subdomain, "-eu") {
+		return "EU"
+	}
+	return "US"
+}
 
 // TestConnection verifies credentials by calling the current-user endpoint.
 func (z *zendeskConnector) TestConnection(vc *VendorConnection) ConnectionResult {

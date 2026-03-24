@@ -267,6 +267,7 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 	app.Post("/api/v1/vendor-connections", authMiddleware, scanner.HandleCreateVendorConnection)
 	app.Post("/api/v1/vendor-connections/test", authMiddleware, scanner.HandleTestCredentials)
 	app.Delete("/api/v1/vendor-connections/:id", authMiddleware, scanner.HandleDeleteVendorConnection)
+	app.Patch("/api/v1/vendor-connections/:id", authMiddleware, scanner.HandleUpdateVendorConnection)
 	app.Post("/api/v1/vendor-connections/:id/test", authMiddleware, scanner.HandleTestVendorConnection)
 	app.Post("/api/v1/vendor-connections/:id/scan", authMiddleware, scanner.HandleTriggerVendorScan)
 
