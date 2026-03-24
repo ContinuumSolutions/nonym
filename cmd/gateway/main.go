@@ -293,6 +293,11 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 	app.Get("/api/v1/scanner/overview", authMiddleware, scanner.HandleScannerOverview)
 	app.Get("/api/v1/scanner/flows", authMiddleware, scanner.HandleScannerFlows)
 
+	// Vendor catalogue — full list of supported scanner vendors with auth fields
+	// for the "Connect a vendor" modal. This is the canonical endpoint per
+	// todo/vendor-catalogue.md.
+	app.Get("/api/v1/scanner/vendors/catalogue", authMiddleware, scanner.HandleGetCatalogue)
+
 	// Events
 	app.Get("/api/v1/events", authMiddleware, audit.HandleGetEvents)
 	app.Get("/api/v1/events/:id", authMiddleware, audit.HandleGetEvent)
