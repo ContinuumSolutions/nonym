@@ -787,6 +787,26 @@ var VendorCatalogue = []CatalogueEntry{
 		DocsURL:         "https://docs.microsoft.com/en-us/azure/active-directory/develop/quickstart-register-app",
 	},
 	{
+		ID:       "digitalocean",
+		Name:     "DigitalOcean",
+		Abbr:     "DO",
+		Color:    "#0080FF",
+		Bg:       "rgba(0,128,255,0.12)",
+		Category: "cloud",
+		Description: "Cloud infrastructure provider. DigitalOcean Spaces object " +
+			"storage buckets may be publicly accessible. App Platform environment " +
+			"variables and Droplet user-data scripts can contain credentials and " +
+			"personal configuration data.",
+		AuthType: "api_key",
+		AuthFields: []AuthField{
+			{Key: "api_token", Label: "Personal Access Token", Placeholder: "dop_v1_...", Secret: true,
+				HelpText: "API → Tokens → Generate New Token (Read scope is sufficient)."},
+		},
+		ScanMode:        "config",
+		ScanDescription: "Config audit checks Spaces bucket ACLs for public access, App Platform env vars for exposed secrets, and Droplet user-data for credential leakage.",
+		DocsURL:         "https://docs.digitalocean.com/reference/api/create-personal-access-token/",
+	},
+	{
 		ID:       "cloudflare",
 		Name:     "Cloudflare",
 		Abbr:     "CF",
@@ -806,6 +826,152 @@ var VendorCatalogue = []CatalogueEntry{
 		ScanMode:        "config",
 		ScanDescription: "Config audit checks Workers scripts for body logging, Logpush job configurations for PII export, WAF custom rules, and Zero Trust network policies.",
 		DocsURL:         "https://developers.cloudflare.com/fundamentals/api/get-started/create-token/",
+	},
+	// ── Email Delivery ────────────────────────────────────────────────────────
+	{
+		ID:       "postmark",
+		Name:     "Postmark",
+		Abbr:     "PM",
+		Color:    "#FFDE00",
+		Bg:       "rgba(255,222,0,0.12)",
+		Category: "email",
+		Description: "Transactional email delivery. Postmark stores sent message " +
+			"bodies, recipients, and metadata. Outbound emails frequently contain " +
+			"names, addresses, order details, and other personal information.",
+		AuthType: "api_key",
+		AuthFields: []AuthField{
+			{Key: "server_token", Label: "Server API Token", Placeholder: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx", Secret: true,
+				HelpText: "Postmark account → Servers → your server → API Tokens → Server API Token."},
+		},
+		ScanMode:        "both",
+		ScanDescription: "Fetches recent outbound messages and scans To/CC/Subject/body fields for PII. Config audit checks bounce and suppression list retention settings.",
+		DocsURL:         "https://postmarkapp.com/developer/api/overview",
+	},
+	// ── Developer Tools ───────────────────────────────────────────────────────
+	{
+		ID:       "github",
+		Name:     "GitHub",
+		Abbr:     "GH",
+		Color:    "#24292F",
+		Bg:       "rgba(36,41,47,0.12)",
+		Category: "developer-tools",
+		Description: "Code hosting and collaboration. GitHub issues, pull request " +
+			"descriptions, commit messages, and Actions logs can contain " +
+			"credentials, PII, and internal system details committed by mistake.",
+		AuthType: "api_key",
+		AuthFields: []AuthField{
+			{Key: "token", Label: "Personal Access Token", Placeholder: "ghp_... or github_pat_...", Secret: true,
+				HelpText: "Settings → Developer settings → Personal access tokens → Tokens (classic). Needs repo and read:org scopes."},
+			{Key: "org", Label: "Organization or Username", Placeholder: "my-org", Secret: false,
+				HelpText: "The GitHub org or user whose repositories will be scanned."},
+		},
+		ScanMode:        "both",
+		ScanDescription: "Scans recent issues and pull request bodies across org repositories for PII. Config audit checks secret scanning enablement, branch protection, and Actions secrets scope.",
+		DocsURL:         "https://docs.github.com/en/rest/authentication/authenticating-to-the-rest-api",
+	},
+	{
+		ID:       "dockerhub",
+		Name:     "Docker Hub",
+		Abbr:     "DH",
+		Color:    "#2496ED",
+		Bg:       "rgba(36,150,237,0.12)",
+		Category: "developer-tools",
+		Description: "Container image registry. Docker Hub repository descriptions " +
+			"and image labels can expose internal URLs, credentials baked into " +
+			"images, and build metadata referencing personal developer accounts.",
+		AuthType: "api_key",
+		AuthFields: []AuthField{
+			{Key: "username", Label: "Docker Hub Username", Placeholder: "myusername", Secret: false},
+			{Key: "pat", Label: "Personal Access Token", Placeholder: "dckr_pat_...", Secret: true,
+				HelpText: "Account Settings → Security → Access Tokens → Generate New Token (Read-only)."},
+		},
+		ScanMode:        "config",
+		ScanDescription: "Scans repository descriptions and image labels for hardcoded secrets, internal URLs, and PII in build metadata. Config audit checks public visibility and team access scope.",
+		DocsURL:         "https://docs.docker.com/docker-hub/access-tokens/",
+	},
+	// ── Project Management ────────────────────────────────────────────────────
+	{
+		ID:       "jira",
+		Name:     "Jira",
+		Abbr:     "JR",
+		Color:    "#0052CC",
+		Bg:       "rgba(0,82,204,0.12)",
+		Category: "project-management",
+		Description: "Issue and project tracking. Jira ticket descriptions, " +
+			"comments, and custom fields routinely contain customer names, " +
+			"support case details, and personal data referenced in bug reports.",
+		AuthType: "api_key",
+		AuthFields: []AuthField{
+			{Key: "base_url", Label: "Jira Cloud URL", Placeholder: "https://mycompany.atlassian.net", Secret: false,
+				HelpText: "Your Atlassian Cloud URL (include https://)."},
+			{Key: "email", Label: "Account Email", Placeholder: "admin@mycompany.com", Secret: false},
+			{Key: "api_token", Label: "API Token", Placeholder: "ATATxxxxxxxxxxxxxxxx", Secret: true,
+				HelpText: "Atlassian account settings → Security → API tokens → Create API token."},
+		},
+		ScanMode:        "both",
+		ScanDescription: "Fetches recent issues and scans summaries, descriptions, and custom field values for PII. Config audit checks project visibility, issue security schemes, and user directory exposure.",
+		DocsURL:         "https://developer.atlassian.com/cloud/jira/platform/rest/v3/intro/#authentication",
+	},
+	// ── Productivity ──────────────────────────────────────────────────────────
+	{
+		ID:       "airtable",
+		Name:     "Airtable",
+		Abbr:     "AT",
+		Color:    "#18BFFF",
+		Bg:       "rgba(24,191,255,0.12)",
+		Category: "productivity",
+		Description: "Flexible database and collaboration platform. Airtable bases " +
+			"are commonly used as lightweight CRMs and data stores that accumulate " +
+			"contact information, customer data, and operational records.",
+		AuthType: "api_key",
+		AuthFields: []AuthField{
+			{Key: "api_key", Label: "Personal Access Token", Placeholder: "patXXXXXXXXXXXXXX.XXXXXXXX", Secret: true,
+				HelpText: "Account → Developer hub → Personal access tokens → Create token. Grant data.records:read and schema.bases:read."},
+		},
+		ScanMode:        "both",
+		ScanDescription: "Lists bases and scans table records for PII in text, email, phone, and URL fields. Config audit checks base sharing links and workspace member permissions.",
+		DocsURL:         "https://airtable.com/developers/web/api/introduction",
+	},
+	{
+		ID:       "notion",
+		Name:     "Notion",
+		Abbr:     "NT",
+		Color:    "#000000",
+		Bg:       "rgba(0,0,0,0.08)",
+		Category: "productivity",
+		Description: "Note-taking and wiki platform. Notion pages and databases " +
+			"accumulate meeting notes, customer research, user interview " +
+			"transcripts, and internal docs that often contain personal data.",
+		AuthType: "api_key",
+		AuthFields: []AuthField{
+			{Key: "api_key", Label: "Internal Integration Token", Placeholder: "secret_...", Secret: true,
+				HelpText: "notion.so/my-integrations → New integration → Internal. Share relevant pages with the integration."},
+		},
+		ScanMode:        "both",
+		ScanDescription: "Searches pages and databases accessible to the integration and scans block content for PII in text, rich_text, email, and phone fields.",
+		DocsURL:         "https://developers.notion.com/docs/authorization",
+	},
+	// ── Customer Support (additional) ─────────────────────────────────────────
+	{
+		ID:       "zoho-desk",
+		Name:     "Zoho Desk",
+		Abbr:     "ZH",
+		Color:    "#E42527",
+		Bg:       "rgba(228,37,39,0.12)",
+		Category: "customer-support",
+		Description: "Customer support and ticketing. Zoho Desk tickets contain " +
+			"customer contact details, conversation history, and attachments that " +
+			"accumulate PII across all support interactions.",
+		AuthType: "api_key",
+		AuthFields: []AuthField{
+			{Key: "org_id", Label: "Organization ID", Placeholder: "123456789", Secret: false,
+				HelpText: "Setup → Developer Space → API (OrgId shown on the page)."},
+			{Key: "access_token", Label: "OAuth Access Token", Placeholder: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", Secret: true,
+				HelpText: "Use the Self Client flow: Setup → Developer Space → Self Client → Generate Code → exchange for access token with Desk.tickets.READ scope."},
+		},
+		ScanMode:        "both",
+		ScanDescription: "Fetches recent tickets and scans subject, description, and custom field values for PII. Config audit checks department-level data sharing and ticket visibility rules.",
+		DocsURL:         "https://desk.zoho.com/DeskAPIDocument#OauthTokens",
 	},
 	// ── Data Warehouse ────────────────────────────────────────────────────────
 	{
