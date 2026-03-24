@@ -120,8 +120,10 @@ func HandleDeleteVendorConnection(c *fiber.Ctx) error {
 	return c.SendStatus(204)
 }
 
-// HandleTestCredentials tests credentials inline and, if a connection for this
-// org+vendor already exists, updates its status accordingly.
+// HandleTestCredentials tests credentials inline. If a connection for this
+// org+vendor already exists its status is updated; if none exists and the test
+// succeeds a new connection is created with status "connected" so the vendor
+// is immediately available for scanning without a separate create call.
 // POST /api/v1/vendor-connections/test
 func HandleTestCredentials(c *fiber.Ctx) error {
 	orgID, ok := c.Locals("organization_id").(int)
@@ -143,6 +145,9 @@ func HandleTestCredentials(c *fiber.Ctx) error {
 	if len(req.Credentials) == 0 {
 		return c.Status(400).JSON(fiber.Map{"error": "credentials are required"})
 	}
+	if req.AuthType == "" {
+		req.AuthType = "api_key"
+	}
 
 	vc := &VendorConnection{
 		Vendor:      req.Vendor,
@@ -151,10 +156,10 @@ func HandleTestCredentials(c *fiber.Ctx) error {
 	}
 	result := testConnection(vc)
 
-	// If a connection for this org+vendor already exists, update its status and
-	// return the refreshed connection object so the frontend needs no extra call.
+	now := time.Now()
+
 	if existing, err := getVendorConnectionByVendor(orgID, req.Vendor); err == nil {
-		now := time.Now()
+		// Connection already exists — update its status.
 		if result.Success {
 			updateVendorConnectionStatus(existing.ID, "connected", "", &now, existing.LastScanAt)
 			existing.Status = "connected"
@@ -168,6 +173,35 @@ func HandleTestCredentials(c *fiber.Ctx) error {
 		existing.UpdatedAt = now
 		maskCredentials(existing)
 		result.Connection = existing
+	} else if result.Success {
+		// No connection exists yet — create one marked as connected so the
+		// vendor is available for scanning immediately.
+		displayName := req.Vendor
+		if len(displayName) > 0 {
+			displayName = strings.ToUpper(displayName[:1]) + displayName[1:]
+		}
+		newVC := &VendorConnection{
+			ID:          newID(),
+			OrgID:       orgID,
+			Vendor:      req.Vendor,
+			DisplayName: displayName,
+			Status:      "connected",
+			AuthType:    req.AuthType,
+			Credentials: req.Credentials,
+			Settings:    map[string]interface{}{},
+			ConnectedAt: &now,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}
+		if err := insertVendorConnection(newVC); err != nil {
+			log.Printf("scanner: HandleTestCredentials: create connection: %v", err)
+		} else {
+			// Re-fetch the canonical record (ON CONFLICT may have preserved an older row).
+			if canonical, err := getVendorConnectionByVendor(orgID, req.Vendor); err == nil {
+				maskCredentials(canonical)
+				result.Connection = canonical
+			}
+		}
 	}
 
 	return c.JSON(result)
