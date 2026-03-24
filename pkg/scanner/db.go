@@ -618,6 +618,21 @@ func findingCounts(orgID int) (FindingCounts, error) {
 	return fc, nil
 }
 
+// getOrgName returns the organisation's display name for the given ID.
+// Returns an empty string on any error so callers can degrade gracefully.
+func getOrgName(orgID int) string {
+	if db == nil {
+		return ""
+	}
+	var name string
+	if err := db.QueryRow(
+		formatQuery(`SELECT name FROM organizations WHERE id = ?`), orgID,
+	).Scan(&name); err != nil {
+		return ""
+	}
+	return name
+}
+
 // ── reports ───────────────────────────────────────────────────────────────────
 
 func insertReport(r *Report) error {
