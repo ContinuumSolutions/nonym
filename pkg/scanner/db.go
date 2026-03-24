@@ -431,6 +431,7 @@ type FindingFilter struct {
 	RiskLevel string
 	DataType  string
 	Status    string
+	Since     *time.Time // only return findings last seen at or after this time
 	Limit     int
 	Offset    int
 }
@@ -497,6 +498,10 @@ func listFindings(f FindingFilter) ([]Finding, error) {
 	if f.Status != "" {
 		q += " AND status = ?"
 		args = append(args, f.Status)
+	}
+	if f.Since != nil {
+		q += " AND last_seen_at >= ?"
+		args = append(args, *f.Since)
 	}
 	q += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
 	args = append(args, f.Limit, f.Offset)
@@ -618,9 +623,9 @@ func findingCounts(orgID int) (FindingCounts, error) {
 func insertReport(r *Report) error {
 	optJSON := marshalJSON(r.Options)
 	_, err := db.Exec(formatQuery(`
-		INSERT INTO reports (id, org_id, framework, time_range, options, status, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`), r.ID, r.OrgID, r.Framework, r.TimeRange, optJSON, r.Status, r.CreatedAt)
+		INSERT INTO reports (id, org_id, framework, time_range, options, status, share_token, expires_at, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`), r.ID, r.OrgID, r.Framework, r.TimeRange, optJSON, r.Status, r.ShareToken, r.ExpiresAt, r.CreatedAt)
 	return err
 }
 

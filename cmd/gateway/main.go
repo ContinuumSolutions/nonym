@@ -284,7 +284,8 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 	// Reports
 	app.Get("/api/v1/reports", authMiddleware, scanner.HandleListReports)
 	app.Post("/api/v1/reports/generate", authMiddleware, scanner.HandleGenerateReport)
-	app.Get("/api/v1/reports/share/:token", scanner.HandleGetSharedReport) // public — no auth
+	app.Get("/api/v1/reports/share/:token", scanner.HandleGetSharedReport)                  // public — no auth
+	app.Get("/api/v1/reports/share/:token/download", scanner.HandleDownloadSharedReport) // public — no auth
 	app.Get("/api/v1/reports/:id", authMiddleware, scanner.HandleGetReport)
 	app.Get("/api/v1/reports/:id/download", authMiddleware, scanner.HandleDownloadReport)
 
