@@ -123,6 +123,11 @@ func initializeServices(config *Config) error {
 		return fmt.Errorf("failed to initialize vendor tables: %w", err)
 	}
 
+	// Initialize DSAR tables
+	if err := audit.InitializeDsarTables(); err != nil {
+		return fmt.Errorf("failed to initialize DSAR tables: %w", err)
+	}
+
 	// Initialize router with provider configs
 
 	// Initialize authentication system
@@ -331,6 +336,17 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 
 	// Transactions endpoint
 	app.Get("/api/v1/transactions", authMiddleware, audit.HandleGetTransactionsV1)
+
+	// DSAR (Data Subject Access Request) endpoints — GDPR Art. 15, 16, 17, 20, 21
+	app.Get("/api/v1/dsars", authMiddleware, audit.HandleListDsars)
+	app.Post("/api/v1/dsars", authMiddleware, audit.HandleCreateDsar)
+	app.Get("/api/v1/dsars/:id", authMiddleware, audit.HandleGetDsar)
+	app.Patch("/api/v1/dsars/:id", authMiddleware, audit.HandleUpdateDsar)
+
+	// Subject identity endpoints
+	app.Get("/api/v1/subjects/lookup", authMiddleware, audit.HandleSubjectLookup)
+	app.Post("/api/v1/subjects/:id/export", authMiddleware, audit.HandleExportSubjectData)
+	app.Post("/api/v1/subjects/:id/erase", authMiddleware, audit.HandleEraseSubject)
 
 	// Dashboard API endpoints - support both JWT and API key authentication
 	dashboardAuthMiddleware := func(c *fiber.Ctx) error {
