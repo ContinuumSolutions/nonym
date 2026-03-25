@@ -90,10 +90,19 @@ func HandleProxy(c *fiber.Ctx) error {
 
 	request.Provider = provider
 
+	// Detect originating vendor from the X-Nonym-Vendor header (set by @nonym/* SDKs)
+	// or fall back to scanning the Referer/Origin host against the vendor catalog.
+	vendorName := c.Get("X-Nonym-Vendor")
+	if vendorName == "" {
+		if origin := c.Get("Origin"); origin != "" {
+			vendorName = router.DetectVendorFromHost(extractHost(origin))
+		}
+	}
+
 	// Apply NER analysis and anonymization
 	processedBody, redactionDetails, err := ner.ProcessContent(request.Body)
 	if err != nil {
-		audit.LogTransaction(requestID, "error", fmt.Sprintf("NER processing failed: %v", err), 0, nil, organizationID, userID)
+		audit.LogTransaction(requestID, "error", fmt.Sprintf("NER processing failed: %v", err), vendorName, 0, nil, organizationID, userID)
 		return c.Status(500).JSON(fiber.Map{
 			"error": "Content processing failed",
 		})
@@ -102,7 +111,7 @@ func HandleProxy(c *fiber.Ctx) error {
 	// Check if content should be blocked (strict mode)
 	if ner.ShouldBlock(redactionDetails) {
 		blockedRequests++
-		audit.LogTransaction(requestID, "blocked", "Content blocked due to sensitive data", 0, redactionDetails, organizationID, userID)
+		audit.LogTransaction(requestID, "blocked", "Content blocked due to sensitive data", vendorName, 0, redactionDetails, organizationID, userID)
 		audit.LogEvent("request_blocked", primaryPIIType(redactionDetails), "blocked",
 			requestID, provider, "", strconv.Itoa(userID), organizationID, redactionDetails)
 		return c.Status(403).JSON(fiber.Map{
@@ -117,7 +126,7 @@ func HandleProxy(c *fiber.Ctx) error {
 	// Forward request to target provider
 	resp, err := forwardRequest(modifiedRequest)
 	if err != nil {
-		audit.LogTransaction(requestID, "error", fmt.Sprintf("Upstream request failed: %v", err), 0, redactionDetails, organizationID, userID)
+		audit.LogTransaction(requestID, "error", fmt.Sprintf("Upstream request failed: %v", err), vendorName, 0, redactionDetails, organizationID, userID)
 		return c.Status(502).JSON(fiber.Map{
 			"error": "Upstream service unavailable",
 		})
@@ -157,7 +166,7 @@ func HandleProxy(c *fiber.Ctx) error {
 	}
 
 	// Log transaction
-	audit.LogTransaction(requestID, "success", provider, resp.StatusCode, redactionDetails, organizationID, userID)
+	audit.LogTransaction(requestID, "success", provider, vendorName, resp.StatusCode, redactionDetails, organizationID, userID)
 
 	// Log a security event when PII was detected and anonymized
 	if len(redactionDetails) > 0 {
@@ -282,6 +291,20 @@ func calculateSuccessRate() float64 {
 func calculateAvgProcessingTime() float64 {
 	// This would be calculated from audit logs
 	return 25.5 // Placeholder milliseconds
+}
+
+// extractHost returns the hostname from a URL string, stripping scheme and path.
+func extractHost(rawURL string) string {
+	if idx := strings.Index(rawURL, "://"); idx != -1 {
+		rawURL = rawURL[idx+3:]
+	}
+	if idx := strings.IndexByte(rawURL, '/'); idx != -1 {
+		rawURL = rawURL[:idx]
+	}
+	if idx := strings.IndexByte(rawURL, ':'); idx != -1 {
+		rawURL = rawURL[:idx]
+	}
+	return rawURL
 }
 
 // primaryPIIType returns the highest-severity entity type found, or "multiple"

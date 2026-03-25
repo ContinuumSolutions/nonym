@@ -46,7 +46,7 @@ func TestLogTransaction(t *testing.T) {
 		},
 	}
 
-	LogTransaction("test-123", "success", "openai", 200, redactionDetails, 1, 1)
+	LogTransaction("test-123", "success", "openai", "", 200, redactionDetails, 1, 1)
 
 	// Verify transaction was stored
 	transactions, err := GetTransactions(1, 0, "1")
@@ -80,7 +80,7 @@ func TestLogTransactionWithoutRedactions(t *testing.T) {
 	Initialize(":memory:")
 
 	// Test logging without redactions
-	LogTransaction("test-456", "success", "anthropic", 200, nil, 1, 1)
+	LogTransaction("test-456", "success", "anthropic", "", 200, nil, 1, 1)
 
 	transactions, err := GetTransactions(1, 0, "1")
 	if err != nil {
@@ -104,7 +104,7 @@ func TestLogBlockedTransaction(t *testing.T) {
 	Initialize(":memory:")
 
 	// Log a blocked transaction
-	LogTransaction("blocked-123", "blocked", "local", 403, []ner.RedactionDetail{
+	LogTransaction("blocked-123", "blocked", "local", "", 403, []ner.RedactionDetail{
 		{EntityType: "ssn", OriginalText: "123-45-6789", RedactedText: "{{SSN_ABC}}"},
 	}, 1, 1)
 
@@ -126,14 +126,14 @@ func TestGetStatistics(t *testing.T) {
 	Initialize(":memory:")
 
 	// Log some test transactions
-	LogTransaction("tx1", "success", "openai", 200, []ner.RedactionDetail{
+	LogTransaction("tx1", "success", "openai", "", 200, []ner.RedactionDetail{
 		{EntityType: "email", OriginalText: "test@example.com", RedactedText: "{{EMAIL_A}}"},
 	}, 1, 1)
-	LogTransaction("tx2", "success", "local", 200, nil, 1, 1)
-	LogTransaction("tx3", "error", "openai", 500, []ner.RedactionDetail{
+	LogTransaction("tx2", "success", "local", "", 200, nil, 1, 1)
+	LogTransaction("tx3", "error", "openai", "", 500, []ner.RedactionDetail{
 		{EntityType: "ssn", OriginalText: "123-45-6789", RedactedText: "{{SSN_B}}"},
 	}, 1, 1)
-	LogTransaction("blocked1", "blocked", "anthropic", 403, []ner.RedactionDetail{
+	LogTransaction("blocked1", "blocked", "anthropic", "", 403, []ner.RedactionDetail{
 		{EntityType: "credit_card", OriginalText: "4111111111111111", RedactedText: "{{CARD_C}}"},
 	}, 1, 1)
 
@@ -184,7 +184,7 @@ func TestHandleGetTransactions(t *testing.T) {
 
 	// Log some test transactions
 	for i := 0; i < 5; i++ {
-		LogTransaction(fmt.Sprintf("tx%d", i), "success", "openai", 200, nil, 1, 1)
+		LogTransaction(fmt.Sprintf("tx%d", i), "success", "openai", "", 200, nil, 1, 1)
 	}
 
 	app := fiber.New()
@@ -251,11 +251,11 @@ func TestHandleGetStatistics(t *testing.T) {
 	Initialize(":memory:")
 
 	// Log some test data
-	LogTransaction("tx1", "success", "openai", 200, []ner.RedactionDetail{
+	LogTransaction("tx1", "success", "openai", "", 200, []ner.RedactionDetail{
 		{EntityType: "email", OriginalText: "test@example.com", RedactedText: "{{EMAIL_A}}"},
 		{EntityType: "phone", OriginalText: "555-123-4567", RedactedText: "{{PHONE_B}}"},
 	}, 1, 1)
-	LogTransaction("blocked1", "blocked", "anthropic", 403, nil, 1, 1)
+	LogTransaction("blocked1", "blocked", "anthropic", "", 403, nil, 1, 1)
 
 	app := fiber.New()
 	// Add middleware to simulate authentication context
@@ -391,7 +391,7 @@ func TestTransactionPagination(t *testing.T) {
 
 	// Log 10 transactions
 	for i := 0; i < 10; i++ {
-		LogTransaction(fmt.Sprintf("page-tx-%d", i), "success", "openai", 200, nil, 1, 1)
+		LogTransaction(fmt.Sprintf("page-tx-%d", i), "success", "openai", "", 200, nil, 1, 1)
 		time.Sleep(1 * time.Millisecond) // Ensure different timestamps
 	}
 
@@ -425,6 +425,35 @@ func TestTransactionPagination(t *testing.T) {
 	}
 }
 
+func TestLogTransactionVendorName(t *testing.T) {
+	Initialize(":memory:")
+
+	LogTransaction("vendor-tx-1", "success", "openai", "sentry", 200, nil, 1, 1)
+	LogTransaction("vendor-tx-2", "success", "anthropic", "", 200, nil, 1, 1)
+
+	transactions, err := GetTransactions(10, 0, "1")
+	if err != nil {
+		t.Fatalf("Failed to get transactions: %v", err)
+	}
+	if len(transactions) != 2 {
+		t.Fatalf("Expected 2 transactions, got %d", len(transactions))
+	}
+
+	// Results are newest-first; vendor-tx-2 is last inserted so index 0.
+	for _, tx := range transactions {
+		switch tx.ID {
+		case "vendor-tx-1":
+			if tx.VendorName != "sentry" {
+				t.Errorf("Expected vendor_name sentry, got %q", tx.VendorName)
+			}
+		case "vendor-tx-2":
+			if tx.VendorName != "" {
+				t.Errorf("Expected empty vendor_name, got %q", tx.VendorName)
+			}
+		}
+	}
+}
+
 func TestRedactionDetailsStorage(t *testing.T) {
 	Initialize(":memory:")
 
@@ -443,7 +472,7 @@ func TestRedactionDetailsStorage(t *testing.T) {
 		},
 	}
 
-	LogTransaction("redaction-test", "success", "openai", 200, redactionDetails, 1, 1)
+	LogTransaction("redaction-test", "success", "openai", "", 200, redactionDetails, 1, 1)
 
 	transactions, err := GetTransactions(1, 0, "1")
 	if err != nil {
@@ -485,4 +514,3 @@ func TestRedactionDetailsStorage(t *testing.T) {
 		t.Errorf("Phone redaction detail not found")
 	}
 }
-

@@ -234,6 +234,16 @@ func HandleGetDashboardLayout(c *fiber.Ctx) error {
 			Grid:                   GridPlacement{Row: 3, ColSpan: 4, Order: 2},
 			Display:                DisplayOptions{ColorScheme: "blue", ValueFormat: "number"},
 		},
+		{
+			ID:                     "compliance-summary",
+			Type:                   "compliance_summary",
+			Title:                  "Compliance Shield",
+			Subtitle:               stringPtr("Regulatory framework coverage"),
+			Endpoint:               "/api/v1/dashboard/widgets/compliance-summary",
+			RefreshIntervalSeconds: 300,
+			Grid:                   GridPlacement{Row: 4, ColSpan: 12, Order: 0},
+			Display:                DisplayOptions{ColorScheme: "blue", ValueFormat: "number"},
+		},
 	}
 
 	return c.JSON(DashboardLayoutResponse{Widgets: widgets})
@@ -272,6 +282,8 @@ func HandleGetWidgetData(c *fiber.Ctx) error {
 		return handleRecentActivity(c, orgID)
 	case "live-stats":
 		return handleLiveStats(c, orgID)
+	case "compliance-summary":
+		return handleComplianceSummary(c, orgID)
 	default:
 		return c.Status(404).JSON(fiber.Map{
 			"error":     "Widget not found",

@@ -162,9 +162,13 @@ func TestMLLabelToEntityType(t *testing.T) {
 		expected EntityType
 	}{
 		{"person", EntityPerson},
-		{"location", EntityLocation},
+		{"location", EntityAddress},   // location → canonical ADDRESS
+		{"address", EntityAddress},
 		{"organization", EntityOrganization},
-		{"custom", EntityType("custom")},
+		{"date", EntityDate},
+		{"phone number", EntityPhone},
+		{"credit card", EntityCreditCard},
+		{"custom", EntityType("CUSTOM")}, // unknown labels normalized to UPPER_SNAKE_CASE
 	}
 	for _, tc := range cases {
 		got := mlLabelToEntityType(tc.label)

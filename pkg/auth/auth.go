@@ -24,6 +24,36 @@ var (
 	jwtSecret []byte
 )
 
+// sessionTimeout returns the inactivity timeout from SESSION_TIMEOUT env (default 1h).
+func sessionTimeout() time.Duration {
+	if v := os.Getenv("SESSION_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
+		}
+	}
+	return time.Hour
+}
+
+// maxLoginAttempts returns MAX_LOGIN_ATTEMPTS env (default 5).
+func maxLoginAttempts() int {
+	if v := os.Getenv("MAX_LOGIN_ATTEMPTS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 5
+}
+
+// lockoutDuration returns LOCKOUT_DURATION env (default 15m).
+func lockoutDuration() time.Duration {
+	if v := os.Getenv("LOCKOUT_DURATION"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
+		}
+	}
+	return 15 * time.Minute
+}
+
 // Initialize sets up the authentication system
 func Initialize(database *sql.DB) error {
 	db = database
@@ -142,7 +172,7 @@ func verifyPassword(hashedPassword, password string) bool {
 
 // generateJWTToken generates a JWT token for a user
 func generateJWTToken(user *User) (string, time.Time, error) {
-	expiresAt := time.Now().Add(24 * time.Hour) // 24 hour expiry
+	expiresAt := time.Now().Add(sessionTimeout())
 
 	claims := jwt.MapClaims{
 		"user_id":         strconv.Itoa(user.ID),
@@ -168,16 +198,23 @@ func getUserByID(userID int) (*User, error) {
 	query := formatQuery(`
 		SELECT id, email, password_hash, first_name, last_name, role,
 		       organization_id, is_active, email_verified, last_login,
-		       created_at, updated_at
+		       created_at, updated_at,
+		       COALESCE(totp_enabled, false), totp_secret, totp_verified_at,
+		       COALESCE(failed_login_attempts, 0), locked_until
 		FROM users
 		WHERE id = ? AND is_active = true
 	`)
 
 	var lastLogin sql.NullTime
+	var totpSecret sql.NullString
+	var totpVerifiedAt sql.NullTime
+	var lockedUntil sql.NullTime
 	err := db.QueryRow(query, userID).Scan(
 		&user.ID, &user.Email, &user.PasswordHash, &user.FirstName,
 		&user.LastName, &user.Role, &user.OrganizationID, &user.IsActive,
 		&user.EmailVerified, &lastLogin, &user.CreatedAt, &user.UpdatedAt,
+		&user.TOTPEnabled, &totpSecret, &totpVerifiedAt,
+		&user.FailedLoginAttempts, &lockedUntil,
 	)
 
 	if err != nil {
@@ -189,6 +226,15 @@ func getUserByID(userID int) (*User, error) {
 
 	if lastLogin.Valid {
 		user.LastLogin = &lastLogin.Time
+	}
+	if totpSecret.Valid {
+		user.TOTPSecret = &totpSecret.String
+	}
+	if totpVerifiedAt.Valid {
+		user.TOTPVerifiedAt = &totpVerifiedAt.Time
+	}
+	if lockedUntil.Valid {
+		user.LockedUntil = &lockedUntil.Time
 	}
 
 	return user, nil
@@ -200,16 +246,23 @@ func getUserByEmail(email string) (*User, error) {
 	query := formatQuery(`
 		SELECT id, email, password_hash, first_name, last_name, role,
 		       organization_id, is_active, email_verified, last_login,
-		       created_at, updated_at
+		       created_at, updated_at,
+		       COALESCE(totp_enabled, false), totp_secret, totp_verified_at,
+		       COALESCE(failed_login_attempts, 0), locked_until
 		FROM users
 		WHERE email = ? AND is_active = true
 	`)
 
 	var lastLogin sql.NullTime
+	var totpSecret sql.NullString
+	var totpVerifiedAt sql.NullTime
+	var lockedUntil sql.NullTime
 	err := db.QueryRow(query, email).Scan(
 		&user.ID, &user.Email, &user.PasswordHash, &user.FirstName,
 		&user.LastName, &user.Role, &user.OrganizationID, &user.IsActive,
 		&user.EmailVerified, &lastLogin, &user.CreatedAt, &user.UpdatedAt,
+		&user.TOTPEnabled, &totpSecret, &totpVerifiedAt,
+		&user.FailedLoginAttempts, &lockedUntil,
 	)
 
 	if err != nil {
@@ -221,6 +274,15 @@ func getUserByEmail(email string) (*User, error) {
 
 	if lastLogin.Valid {
 		user.LastLogin = &lastLogin.Time
+	}
+	if totpSecret.Valid {
+		user.TOTPSecret = &totpSecret.String
+	}
+	if totpVerifiedAt.Valid {
+		user.TOTPVerifiedAt = &totpVerifiedAt.Time
+	}
+	if lockedUntil.Valid {
+		user.LockedUntil = &lockedUntil.Time
 	}
 
 	return user, nil
@@ -235,10 +297,18 @@ func getOrganizationByID(orgID int) (*Organization, error) {
 		WHERE id = ? AND is_active = true
 	`)
 
+	var ownerID sql.NullInt64
+	var description sql.NullString
 	err := db.QueryRow(query, orgID).Scan(
-		&org.ID, &org.Name, &org.Slug, &org.Description,
-		&org.OwnerID, &org.IsActive, &org.CreatedAt, &org.UpdatedAt,
+		&org.ID, &org.Name, &org.Slug, &description,
+		&ownerID, &org.IsActive, &org.CreatedAt, &org.UpdatedAt,
 	)
+	if ownerID.Valid {
+		org.OwnerID = int(ownerID.Int64)
+	}
+	if description.Valid {
+		org.Description = description.String
+	}
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -327,11 +397,19 @@ func RegisterUser(req *SignupRequest) (*User, *Organization, error) {
 		// Verify organization exists
 		orgQuery := formatQuery("SELECT id, name, slug, description, owner_id, is_active, created_at, updated_at FROM organizations WHERE id = ? AND is_active = true")
 		organization = &Organization{}
+		var orgOwnerID sql.NullInt64
+		var orgDescription sql.NullString
 		err = tx.QueryRow(orgQuery, *req.OrganizationID).Scan(
 			&organization.ID, &organization.Name, &organization.Slug,
-			&organization.Description, &organization.OwnerID, &organization.IsActive,
+			&orgDescription, &orgOwnerID, &organization.IsActive,
 			&organization.CreatedAt, &organization.UpdatedAt,
 		)
+		if orgOwnerID.Valid {
+			organization.OwnerID = int(orgOwnerID.Int64)
+		}
+		if orgDescription.Valid {
+			organization.Description = orgDescription.String
+		}
 		if err != nil {
 			return nil, nil, fmt.Errorf("invalid organization: %w", err)
 		}
@@ -458,9 +536,45 @@ func LoginUser(req *LoginRequest, clientIP, userAgent string) (*LoginResponse, e
 		return nil, fmt.Errorf("user account is disabled")
 	}
 
+	// Check account lockout
+	if user.LockedUntil != nil && user.LockedUntil.After(time.Now()) {
+		remaining := time.Until(*user.LockedUntil).Round(time.Second)
+		return nil, fmt.Errorf("account locked due to too many failed login attempts. Try again in %s", remaining)
+	}
+
 	// Verify password
 	if !verifyPassword(user.PasswordHash, req.Password) {
+		newAttempts := user.FailedLoginAttempts + 1
+		if newAttempts >= maxLoginAttempts() {
+			lockedUntil := time.Now().Add(lockoutDuration())
+			db.Exec(formatQuery(
+				"UPDATE users SET failed_login_attempts = ?, locked_until = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+			), newAttempts, lockedUntil, user.ID)
+			log.Printf("Account locked: %s after %d failed attempts", user.Email, newAttempts)
+			return nil, fmt.Errorf("account locked due to too many failed login attempts. Try again in %s", lockoutDuration())
+		}
+		db.Exec(formatQuery(
+			"UPDATE users SET failed_login_attempts = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+		), newAttempts, user.ID)
 		return nil, fmt.Errorf("invalid email or password")
+	}
+
+	// Successful authentication — reset lockout counters
+	db.Exec(formatQuery(
+		"UPDATE users SET failed_login_attempts = 0, locked_until = NULL, last_login = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+	), user.ID)
+
+	// If 2FA is enabled, return an MFA challenge token instead of a full JWT
+	if user.TOTPEnabled {
+		mfaToken, mfaExpiresAt, err := generateMFAToken(user.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate MFA token: %w", err)
+		}
+		return &LoginResponse{
+			MFARequired:       true,
+			MFAToken:          mfaToken,
+			MFATokenExpiresAt: mfaExpiresAt,
+		}, nil
 	}
 
 	// Get user's organization
@@ -478,9 +592,12 @@ func LoginUser(req *LoginRequest, clientIP, userAgent string) (*LoginResponse, e
 		return nil, fmt.Errorf("failed to generate token: %w", err)
 	}
 
-	// Update last login
-	updateLoginQuery := formatQuery("UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?")
-	db.Exec(updateLoginQuery, user.ID)
+	// Create a session record for inactivity tracking
+	sessionID := fmt.Sprintf("sess_%d_%d", user.ID, time.Now().UnixNano())
+	db.Exec(formatQuery(`
+		INSERT INTO user_sessions (user_id, organization_id, session_token, ip_address, user_agent, expires_at, last_accessed_at, is_active)
+		VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, TRUE)
+	`), user.ID, user.OrganizationID, sessionID, clientIP, userAgent, expiresAt)
 
 	log.Printf("User logged in: %s (ID: %d, Org: %d)", user.Email, user.ID, user.OrganizationID)
 
@@ -540,6 +657,30 @@ func ValidateToken(tokenString string) (*User, error) {
 	if !user.IsActive {
 		return nil, fmt.Errorf("user account is disabled")
 	}
+
+	// Check inactivity timeout via user_sessions.
+	// We match the most recent active session for this user and verify it hasn't
+	// been idle longer than SESSION_TIMEOUT.
+	timeout := sessionTimeout()
+	cutoff := time.Now().Add(-timeout)
+	var lastAccessed time.Time
+	var sessionID int
+	sessQuery := formatQuery(`
+		SELECT id, last_accessed_at FROM user_sessions
+		WHERE user_id = ? AND is_active = TRUE
+		ORDER BY last_accessed_at DESC LIMIT 1
+	`)
+	row := db.QueryRow(sessQuery, user.ID)
+	if err := row.Scan(&sessionID, &lastAccessed); err == nil {
+		if lastAccessed.Before(cutoff) {
+			// Session expired due to inactivity — deactivate all sessions
+			db.Exec(formatQuery("UPDATE user_sessions SET is_active = FALSE WHERE user_id = ?"), user.ID)
+			return nil, fmt.Errorf("session expired due to inactivity")
+		}
+		// Refresh last_accessed_at
+		db.Exec(formatQuery("UPDATE user_sessions SET last_accessed_at = CURRENT_TIMESTAMP WHERE id = ?"), sessionID)
+	}
+	// If no session row found we allow through (API key paths, legacy tokens, etc.)
 
 	return user, nil
 }

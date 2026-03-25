@@ -2,22 +2,34 @@ openapi: 3.0.3
 info:
   title: Nonym API
   description: |
-    A high-performance Privacy Air-Gap middleware that intercepts data between internal systems and external AI models.
-    Acts as a transparent reverse proxy that detects and anonymizes PII in real-time, ensuring sensitive data never leaves your infrastructure.
+    **Stop leaking data to vendors.** Nonym is a high-performance Privacy Gateway that intercepts
+    all outbound traffic to AI providers and third-party monitoring tools (Sentry, Datadog, PostHog),
+    stripping PII before it ever leaves your infrastructure.
 
     ## Authentication
 
     This API uses two authentication methods:
-    - **Bearer Token Authentication** for dashboard/management endpoints (obtained via login)
-    - **API Key Authentication** for proxy endpoints (using X-API-Key header)
+    - **Bearer Token** (`Authorization: Bearer <jwt>`) — dashboard and management endpoints (obtained via login)
+    - **Nonym API Key** (`X-API-Key: <nonym_key>`) — proxy endpoints
+
+    ## Provider keys
+
+    Nonym **never stores provider keys** (OpenAI, Anthropic, Datadog, etc.).
+    Pass your provider key in the `Authorization: Bearer <provider_key>` header of each proxy request.
+    Nonym forwards it unchanged to the upstream provider after stripping PII from the payload.
 
     ## Features
 
     - **Real-time PII Detection**: Email, SSN, credit cards, API keys, phone numbers, IP addresses
     - **Smart Anonymization**: Context-preserving tokenization with secure de-anonymization
+    - **Vendor Protection**: Catalog of known monitoring vendors (Sentry, Datadog, PostHog) with setup wizard
+    - **Vendor Attribution**: Every proxied request is attributed to its originating vendor via `vendor_name`
+    - **Vendor Scanner**: Free-tier discovery tool that detects unprotected vendor SDK configurations
+    - **Compliance Reports**: On-demand GDPR / HIPAA / PCI-DSS reports with entity breakdown and exposure estimates
     - **Intelligent Routing**: Content-based routing (sensitive → local LLM, general → cloud AI)
     - **Strict Mode**: Block requests with high-sensitivity data entirely
     - **Real-time Dashboard**: Comprehensive monitoring via web interface
+    - **Published Benchmarks**: Sub-40 ms P99 gateway overhead — latency data available at `/api/v1/benchmarks`
   version: 1.0.0
   contact:
     name: Continuum Solutions
@@ -36,6 +48,8 @@ tags:
     description: Health check, status, and documentation endpoints
   - name: Authentication
     description: User authentication and session management
+  - name: Two-Factor Authentication
+    description: TOTP-based 2FA setup, verification, and challenge (RFC 6238, compatible with Google Authenticator / Authy / 1Password)
   - name: Users
     description: User profile and management
   - name: API Keys
@@ -46,12 +60,40 @@ tags:
     description: Team member management
   - name: Security
     description: Security settings and session management
+  - name: Compliance
+    description: Regulatory compliance framework coverage — per-event attribution (GDPR, HIPAA, PCI-DSS, SOC2) and configurable fine-rate estimates
   - name: Analytics
     description: Statistics and analytics
   - name: Protection
     description: Protection events and monitoring
   - name: Proxy
     description: AI provider proxy endpoints
+  - name: Vendors
+    description: Vendor catalog and setup wizard — discover and configure protection for Sentry, Datadog, PostHog, and other monitoring/analytics vendors
+  - name: Scanner
+    description: |
+      Vendor PII scanner. For vendors with a registered connector (currently **Sentry**) the scan
+      calls the vendor API directly — fetching real error events, breadcrumbs, user context, tags,
+      and exception payloads — and runs PII detection over that live data.
+
+      For vendors without a connector the scan falls back to running PII detection over the
+      stored credential and settings field values.
+  - name: Vendor Connections
+    description: Authenticated connections to external SaaS APIs (Sentry, Datadog, Mixpanel, Stripe, …) used by the V2 scanner
+  - name: Scans
+    description: Scan jobs that run PII detection across all connected vendor APIs
+  - name: Findings
+    description: Individual PII findings produced by scan jobs
+  - name: Reports
+    description: Compliance reports (GDPR, SOC2, HIPAA, Custom) generated from scan findings
+  - name: Events
+    description: Protection events — PII detections, blocked requests, and other gateway activity
+  - name: Webhooks
+    description: Webhook subscriptions — receive real-time event notifications via HTTP POST
+  - name: Dashboard
+    description: Dashboard layout and per-widget data used by the web UI
+  - name: Benchmarks
+    description: Published latency benchmarks showing Nonym's processing overhead
 
 paths:
   # Health endpoints
@@ -214,7 +256,12 @@ paths:
     post:
       tags: [Authentication]
       summary: User login
-      description: Authenticates a user and returns a JWT token
+      description: |
+        Authenticates a user and returns a JWT token.
+
+        **When 2FA is enabled** the response does not include a full session token.
+        Instead it returns `mfa_required: true` and a short-lived `mfa_token` (15 min).
+        Pass that token to `POST /api/v1/auth/2fa/challenge` to complete login.
       requestBody:
         required: true
         content:
@@ -223,11 +270,29 @@ paths:
               $ref: '#/components/schemas/LoginRequest'
       responses:
         '200':
-          description: Login successful
+          description: Login successful (or MFA challenge required)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/LoginResponse'
+              examples:
+                normal_login:
+                  summary: Standard login (no 2FA)
+                  value:
+                    token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    expires_at: "2026-03-17T10:30:00Z"
+                    user:
+                      id: 1
+                      email: "user@example.com"
+                    organization:
+                      id: 1
+                      name: "Acme"
+                mfa_challenge:
+                  summary: 2FA required — pass mfa_token to /auth/2fa/challenge
+                  value:
+                    mfa_required: true
+                    mfa_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    mfa_token_expires_at: "2026-03-16T12:15:00Z"
         '401':
           description: Invalid credentials
           content:
@@ -253,6 +318,275 @@ paths:
                   message:
                     type: string
                     example: Logged out successfully
+
+  # Two-Factor Authentication endpoints
+  /api/v1/auth/2fa/status:
+    get:
+      tags: [Two-Factor Authentication]
+      summary: Get 2FA status
+      description: Returns the current TOTP 2FA state for the authenticated user. Used by the Settings page on load.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current 2FA status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TOTPStatusResponse'
+              example:
+                enabled: true
+                verified_at: "2026-03-10T09:14:22Z"
+                backup_codes_remaining: 6
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/2fa/setup/begin:
+    post:
+      tags: [Two-Factor Authentication]
+      summary: Begin 2FA setup
+      description: |
+        Start the TOTP setup flow. Verifies the user's current password, generates a new TOTP
+        secret, stores it in `totp_setup_sessions`, and returns the secret + OTPAuth URI for
+        QR code rendering.
+
+        - Returns `409` if 2FA is already enabled.
+        - Any existing pending setup session for this user is replaced.
+        - Secret is 20-byte (160-bit), cryptographically random, Base32-encoded.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TOTPSetupBeginRequest'
+      responses:
+        '200':
+          description: Setup session created — render QR code from `otpauth_uri`
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TOTPSetupBeginResponse'
+              example:
+                session_id: "550e8400-e29b-41d4-a716-446655440000"
+                secret: "JBSWY3DPEHPK3PXP"
+                otpauth_uri: "otpauth://totp/Nonym:user@example.com?secret=JBSWY3DPEHPK3PXP&issuer=Nonym&algorithm=SHA1&digits=6&period=30"
+                expires_at: "2026-03-16T12:10:00Z"
+        '400':
+          description: Missing or invalid password field
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Wrong password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 2FA is already enabled for this user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/2fa/setup/verify:
+    post:
+      tags: [Two-Factor Authentication]
+      summary: Verify 2FA setup
+      description: |
+        Confirm the user has successfully configured their authenticator by submitting a valid
+        TOTP code for the pending setup session.
+
+        On success:
+        - Promotes the pending secret to `users.totp_secret` (encrypted at rest)
+        - Sets `totp_enabled = true`, `totp_verified_at = now()`
+        - Generates 8 backup codes (format `xxxx-xxxx`, bcrypt-hashed in DB)
+        - Deletes the setup session
+        - Returns the plaintext backup codes **once** — they are never shown again
+
+        Tolerates ±1 step (30 s) clock drift. Rate-limited to 5 attempts per session.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TOTPSetupVerifyRequest'
+      responses:
+        '200':
+          description: 2FA enabled — save these backup codes now, they are shown only once
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TOTPSetupVerifyResponse'
+              example:
+                backup_codes:
+                  - "a3bk-p7mw"
+                  - "r9cx-t4nh"
+                  - "q6jv-s2fy"
+                  - "w8nm-h5j3"
+                  - "k4ts-b7rp"
+                  - "m2wq-f8cx"
+                  - "n7hv-k3sq"
+                  - "j5pb-r6tn"
+        '400':
+          description: Invalid or expired `session_id`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: TOTP code is wrong or expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many attempts (5 per session)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/2fa:
+    delete:
+      tags: [Two-Factor Authentication]
+      summary: Disable 2FA
+      description: |
+        Disables TOTP 2FA for the current user. Requires password confirmation.
+
+        On success:
+        - Clears `totp_secret`, `totp_enabled`, `totp_verified_at`
+        - Deletes all backup codes for this user
+        - Deletes any pending setup sessions
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TOTPDisableRequest'
+      responses:
+        '204':
+          description: 2FA disabled successfully (no body)
+        '401':
+          description: Wrong password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 2FA is not enabled for this user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/2fa/backup-codes/regenerate:
+    post:
+      tags: [Two-Factor Authentication]
+      summary: Regenerate backup codes
+      description: |
+        Generates a fresh set of 8 backup codes (e.g. after the user has used most of them).
+        All previous backup codes are invalidated. Requires password confirmation.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TOTPRegenerateRequest'
+      responses:
+        '200':
+          description: New backup codes — save these now, shown only once
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TOTPRegenerateResponse'
+        '401':
+          description: Wrong password or not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 2FA is not enabled for this user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/2fa/challenge:
+    post:
+      tags: [Two-Factor Authentication]
+      summary: Complete MFA login challenge
+      description: |
+        Step 2 of the login flow when `mfa_required: true` was returned by `POST /api/v1/auth/login`.
+
+        Accepts either:
+        - A 6-digit TOTP code from the authenticator app
+        - A 9-character backup code in `xxxx-xxxx` format (the format is auto-detected)
+
+        On success returns the same full session response as a normal login.
+        Failed attempts are counted; after 5 failures the account is temporarily locked.
+
+        The `mfa_token` must be passed in the request body (not in the Authorization header).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TOTPChallengeRequest'
+      responses:
+        '200':
+          description: MFA verified — full session token returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Invalid or expired `mfa_token`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Wrong TOTP or backup code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many failed attempts; account temporarily locked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /api/v1/auth/me:
     get:
@@ -665,7 +999,11 @@ paths:
     get:
       tags: [Protection]
       summary: Get protection events
-      description: Returns protection events with filtering options
+      description: |
+        Returns protection events with filtering options. Each event now includes
+        `compliance_frameworks` — the set of regulatory frameworks (GDPR, HIPAA, PCI-DSS, SOC2)
+        that apply based on the entity types detected. Use the `framework` parameter to filter
+        events to a specific regulatory scope.
       security:
         - bearerAuth: []
       parameters:
@@ -692,6 +1030,12 @@ paths:
           in: query
           schema:
             type: string
+        - name: framework
+          in: query
+          schema:
+            type: string
+            enum: [GDPR, HIPAA, PCI-DSS, SOC2]
+          description: Filter to events tagged with this compliance framework
         - name: timeRange
           in: query
           schema:
@@ -719,6 +1063,1707 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProtectionStatsResponse'
+
+  # Compliance endpoints
+  /api/v1/settings/compliance:
+    get:
+      tags: [Compliance]
+      summary: Get compliance fine rate configuration
+      description: |
+        Returns the organization's current per-event fine rate configuration for
+        GDPR, HIPAA, and PCI-DSS. Falls back to system defaults when the organization
+        has not configured custom rates.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current compliance fine rate settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceSettingsResponse'
+              example:
+                fine_rates:
+                  - framework: GDPR
+                    per_event_amount: 20000
+                    currency: EUR
+                  - framework: HIPAA
+                    per_event_amount: 15000
+                    currency: USD
+                  - framework: PCI-DSS
+                    per_event_amount: 5000
+                    currency: USD
+                disclaimer: "These estimates are for internal risk awareness only and do not constitute legal advice."
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags: [Compliance]
+      summary: Update compliance fine rate configuration
+      description: |
+        Updates per-event fine rate estimates. Requires `admin` or `owner` role.
+
+        Validates:
+        - `framework` is one of `GDPR`, `HIPAA`, `PCI-DSS`
+        - `per_event_amount` > 0
+        - `currency` is a known ISO 4217 code (EUR, USD, GBP, CAD, AUD)
+
+        Partial updates are supported — only send the frameworks you want to change.
+        Returns the full updated rate list.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComplianceSettingsUpdateRequest'
+            example:
+              fine_rates:
+                - framework: GDPR
+                  per_event_amount: 50000
+                  currency: EUR
+      responses:
+        '200':
+          description: Updated compliance settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceSettingsResponse'
+        '400':
+          description: Invalid framework, amount, or currency
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Admin role required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/dashboard/widgets/compliance-summary:
+    get:
+      tags: [Dashboard, Compliance]
+      summary: Compliance Shield widget data
+      description: |
+        Returns per-framework compliance coverage metrics for the authenticated
+        organization. Used by the Compliance Shield panel on the Protection page and
+        the main dashboard.
+
+        Aggregates events from the requested time range and returns:
+        - Event and redaction counts per framework
+        - Top detected entity types per framework
+        - Estimated fine exposure averted (using org's configured or default rates)
+        - Total exposure in USD (EUR rates converted at a fixed 1.08 rate)
+
+        SOC2 returns `null` for `estimated_exposure_averted` because SOC2 violations
+        carry no direct statutory fine — the frontend renders "Audit-ready / Compliant".
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: timeRange
+          in: query
+          schema:
+            type: string
+            enum: [1h, 24h, 7d, 30d]
+            default: 24h
+          description: Aggregation window
+      responses:
+        '200':
+          description: Compliance summary metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceSummaryResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/dashboard/layout:
+    get:
+      tags: [Dashboard]
+      summary: Get dashboard layout
+      description: |
+        Returns the full widget configuration for the dashboard — widget IDs, types, titles,
+        data endpoint URLs, refresh intervals, and grid placement metadata. Fetch this once on
+        load, then poll each widget's `endpoint` independently at its `refresh_interval_seconds`.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Dashboard layout
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardLayoutResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/dashboard/widgets/{widget_id}:
+    get:
+      tags: [Dashboard]
+      summary: Get widget data
+      description: |
+        Returns live data for a specific dashboard widget. Each widget type returns a
+        different response shape (see schema). All widgets are scoped to the authenticated org.
+
+        | `widget_id` | Type | Response shape |
+        |---|---|---|
+        | `stat-total-requests` | `stat_card` | `StatCardData` |
+        | `stat-pii-protected` | `stat_card` | `StatCardData` |
+        | `stat-blocked-requests` | `stat_card` | `StatCardData` |
+        | `stat-avg-latency` | `stat_card` | `StatCardData` |
+        | `success-rate` | `success_rate` | `SuccessRateData` |
+        | `protection-summary` | `protection_summary` | `ProtectionSummaryData` |
+        | `gateway-status` | `gateway_status` | `GatewayStatusData` |
+        | `top-providers` | `top_providers` | `TopProvidersData` |
+        | `recent-activity` | `activity_chart` | `ActivityChartData` |
+        | `live-stats` | `live_stats` | `LiveStatsData` |
+        | `compliance-summary` | `compliance_summary` | `ComplianceSummaryResponse` |
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: widget_id
+          in: path
+          required: true
+          schema:
+            type: string
+            enum:
+              - stat-total-requests
+              - stat-pii-protected
+              - stat-blocked-requests
+              - stat-avg-latency
+              - success-rate
+              - protection-summary
+              - gateway-status
+              - top-providers
+              - recent-activity
+              - live-stats
+              - compliance-summary
+      responses:
+        '200':
+          description: Widget data (shape varies by widget_id — see description table)
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Widget not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ── Events & Webhooks ────────────────────────────────────────────────────────
+
+  /api/v1/events:
+    get:
+      tags: [Events]
+      summary: List protection events
+      description: |
+        Returns paginated protection events for the org with optional filters.
+        Events are created whenever the gateway detects PII, blocks a request, or encounters a provider error.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pii_detected, request_blocked, provider_error, rate_limit_exceeded]
+        - name: pii_type
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by PII type (e.g. `EMAIL`, `PHONE`, `SSN`)
+        - name: provider
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by provider slug (e.g. `openai`, `sentry`)
+        - name: severity
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [low, medium, high, critical]
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [open, resolved, ignored]
+        - name: framework
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter to events tagged with a compliance framework (e.g. `GDPR`)
+        - name: start_time
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: end_time
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Events list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventsResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/events/{id}:
+    get:
+      tags: [Events]
+      summary: Get event
+      description: Returns a single protection event by ID.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Event details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/events/{id}/status:
+    patch:
+      tags: [Events]
+      summary: Update event status
+      description: Changes the status of an event to `open`, `resolved`, or `ignored`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [open, resolved, ignored]
+            example:
+              status: resolved
+      responses:
+        '200':
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Event status updated successfully
+        '400':
+          description: Invalid status value
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/webhooks:
+    get:
+      tags: [Webhooks]
+      summary: List webhooks
+      description: Returns all webhook configurations for the authenticated user.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Webhooks list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  webhooks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Webhook'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags: [Webhooks]
+      summary: Create webhook
+      description: |
+        Registers a new webhook endpoint. Nonym will POST a signed JSON payload to `url`
+        whenever any of the subscribed `events` occur.
+
+        **Payload signing:** if `secret` is provided, each delivery includes an
+        `X-Nonym-Signature-256: sha256=<hex>` header — HMAC-SHA256 of the raw request body
+        using the secret as the key. Verify this header to ensure the request is genuine.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookRequest'
+            example:
+              url: https://your-server.com/nonym-webhook
+              events: [pii_detected, request_blocked]
+              secret: my-signing-secret
+      responses:
+        '201':
+          description: Webhook created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Webhook'
+        '400':
+          description: Missing URL or events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/webhooks/{id}/test:
+    post:
+      tags: [Webhooks]
+      summary: Test webhook
+      description: |
+        Sends a representative `webhook.test` payload to the webhook URL to verify that
+        the endpoint is reachable and correctly handles Nonym deliveries.
+
+        The test payload includes an `X-Nonym-Signature-256` header if the webhook has a
+        secret configured. Returns the HTTP status code and first 4 KB of the response body
+        from the target endpoint.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Delivery result (success or failure — HTTP 200 either way)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookTestResult'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Webhook not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Invalid webhook URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Compliance report endpoints
+  /api/v1/compliance/reports:
+    get:
+      tags: [Compliance]
+      summary: List available compliance reports
+      description: Returns metadata for the three available framework reports (GDPR, HIPAA, PCI-DSS) including their citation and endpoint URL.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Available report types
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reports:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ComplianceReportMeta'
+                  note:
+                    type: string
+              example:
+                reports:
+                  - framework: GDPR
+                    citation: "Art. 5(1)(c) · Data Minimisation"
+                    description: "Covers personal data processing for EU residents."
+                    endpoint: "/api/v1/compliance/reports/gdpr"
+                  - framework: HIPAA
+                    citation: "45 CFR § 164 · PHI Safeguards"
+                    description: "Covers Protected Health Information."
+                    endpoint: "/api/v1/compliance/reports/hipaa"
+                  - framework: PCI-DSS
+                    citation: "Req. 3.3 · Cardholder Data Protection"
+                    description: "Covers payment card data."
+                    endpoint: "/api/v1/compliance/reports/pci"
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/compliance/reports/{framework}:
+    get:
+      tags: [Compliance]
+      summary: Get compliance report
+      description: |
+        Generates a full downloadable compliance report for the specified framework.
+
+        **Supported framework values**: `gdpr`, `hipaa`, `pci` (case-insensitive; also accepts `pci-dss`)
+
+        The report includes:
+        - **Summary** — total/protected/blocked request counts and a compliance score (0–100)
+        - **Entity breakdown** — per-entity-type redaction counts relevant to this framework
+        - **Daily activity** — redaction counts per day for the selected period
+        - **Estimated exposure averted** — fine estimate using org's configured or default rates
+        - **Recommendations** — framework-specific guidance
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: framework
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [gdpr, hipaa, pci, pci-dss]
+          description: Compliance framework
+        - name: timeRange
+          in: query
+          schema:
+            type: string
+            enum: [7d, 30d, 90d]
+            default: 30d
+          description: Reporting period
+      responses:
+        '200':
+          description: Full compliance report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComplianceReport'
+        '400':
+          description: Unknown framework
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Vendor catalog and setup wizard
+  /api/v1/vendors:
+    get:
+      tags: [Vendors]
+      summary: List vendor catalog
+      description: Returns the full catalog of supported monitoring/analytics vendors with their profiles, known ingest hosts, data types collected, and integration methods.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Vendor catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  vendors:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VendorProfile'
+                  total:
+                    type: integer
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/vendors/configured:
+    get:
+      tags: [Vendors]
+      summary: List configured vendor integrations
+      description: Returns the vendor integrations the organization has set up. Each entry identifies the vendor, the integration method, and its current status.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Configured vendor integrations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  integrations:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VendorIntegration'
+                  total:
+                    type: integer
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/vendors/setup:
+    post:
+      tags: [Vendors]
+      summary: Configure vendor integration (setup wizard)
+      description: |
+        Creates or updates a vendor integration for the organization (upsert).
+
+        Returns the saved integration record plus step-by-step `setup_instructions`
+        tailored to the chosen `method`:
+        - **proxy** — route vendor SDK traffic through the Nonym gateway
+        - **sdk_wrapper** — replace the vendor's SDK with the `@nonym/<vendor>` drop-in
+
+        Calling this endpoint a second time with the same `vendor_id` updates the method (idempotent).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VendorSetupRequest'
+            examples:
+              sentry_sdk:
+                summary: Protect Sentry via SDK wrapper
+                value:
+                  vendor_id: sentry
+                  method: sdk_wrapper
+              datadog_proxy:
+                summary: Protect Datadog via proxy
+                value:
+                  vendor_id: datadog
+                  method: proxy
+      responses:
+        '201':
+          description: Integration configured — follow setup_instructions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  integration:
+                    $ref: '#/components/schemas/VendorIntegration'
+                  setup_instructions:
+                    type: object
+                    description: Vendor- and method-specific step-by-step instructions
+        '400':
+          description: Unknown vendor_id, missing vendor_id, or unsupported method
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/vendors/{id}:
+    get:
+      tags: [Vendors]
+      summary: Get vendor profile
+      description: Returns the catalog profile for a single vendor by its ID (e.g. `sentry`, `datadog`, `posthog`).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Vendor ID (e.g. `sentry`, `datadog`, `posthog`, `mixpanel`, `newrelic`)
+          example: sentry
+      responses:
+        '200':
+          description: Vendor profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorProfile'
+        '404':
+          description: Vendor not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/vendors/configured/{vendor_id}:
+    delete:
+      tags: [Vendors]
+      summary: Remove vendor integration
+      description: Removes a previously configured vendor integration for the organization.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: vendor_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Vendor ID to remove (e.g. `sentry`)
+      responses:
+        '200':
+          description: Integration removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Vendor scanner
+  /api/v1/scanner:
+    post:
+      tags: [Scanner]
+      summary: Scan environment for unprotected vendors
+      description: |
+        Accepts a flat map of environment variables and/or config key-value pairs and
+        returns a finding for each known vendor whose fingerprint is detected.
+
+        Nothing is persisted server-side — the scan runs entirely on the submitted payload.
+
+        Each finding reports:
+        - Which vendor was detected and which key triggered it
+        - A masked version of the value (never logs raw secrets)
+        - Whether the vendor appears to already be routed through Nonym
+        - A risk level (`high` / `medium` / `low`)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScanRequest'
+            example:
+              env:
+                SENTRY_DSN: "https://<key>@o<org>.ingest.sentry.io/<project>"
+                DD_API_KEY: "<your-datadog-key>"
+              config:
+                posthogKey: "<your-posthog-key>"
+      responses:
+        '200':
+          description: Scan results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanResult'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/scanner/sentry:
+    get:
+      tags: [Scanner]
+      summary: Sentry scanner (free tier)
+      description: |
+        Validates a Sentry DSN and reports whether it is protected by Nonym.
+        Also returns the full vendor profile and step-by-step setup guides for both
+        the proxy and SDK wrapper integration methods.
+
+        The `dsn` parameter is optional — omit it to get the setup guide without a finding.
+      parameters:
+        - name: dsn
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Sentry DSN to inspect (e.g. `https://key@o123.ingest.sentry.io/456`)
+        - name: proxied
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Set to `true` if the DSN is already routed through Nonym
+      responses:
+        '200':
+          description: Sentry scan result and setup guide
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  vendor:
+                    $ref: '#/components/schemas/VendorProfile'
+                  finding:
+                    $ref: '#/components/schemas/ScanFinding'
+                    nullable: true
+                  setup_guide:
+                    type: object
+                    description: Step-by-step instructions for proxy and SDK wrapper methods
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ── Scanner V2: overview & flows ────────────────────────────────────────────
+
+  /api/v1/scanner/overview:
+    get:
+      tags: [Scanner]
+      summary: Scanner overview
+      description: Returns a high-level summary of the org's scanner state — connected vendor count, finding counts by risk level, an overall risk score (0–100), per-framework compliance snapshot, and the timestamp of the last completed scan.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Scanner overview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScannerOverview'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/scanner/flows:
+    get:
+      tags: [Scanner]
+      summary: Data-flow graph
+      description: Returns nodes (your application + each vendor connection) and edges (data flows with finding counts and risk levels) for rendering a data-flow diagram.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Data-flow graph
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nodes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FlowNode'
+                  edges:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FlowEdge'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ── Vendor Connections ────────────────────────────────────────────────────────
+
+  /api/v1/vendor-connections/test:
+    post:
+      tags: [Vendor Connections]
+      summary: Test credentials inline
+      description: |
+        Validates vendor credentials against the real vendor API.
+
+        If a connection record for this org + vendor already exists, its `status` is updated
+        to `connected` (on success) or `error` (on failure) automatically — no separate
+        `/:id/test` call is needed.
+
+        If no connection record exists yet (e.g. first-time setup), use this to validate
+        credentials before calling `POST /api/v1/vendor-connections` to save them.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vendor, credentials]
+              properties:
+                vendor:
+                  type: string
+                  example: sentry
+                auth_type:
+                  type: string
+                  enum: [api_key, oauth]
+                  default: api_key
+                credentials:
+                  type: object
+                  additionalProperties: true
+            example:
+              vendor: sentry
+              auth_type: api_key
+              credentials:
+                api_token: sntryu_xxxxxxxxxxxx
+      responses:
+        '200':
+          description: Test result — includes `connection` with updated status when a saved record exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionResult'
+              example:
+                success: true
+                message: "Connected — 1 organization(s) accessible"
+                events_accessible: 1
+                connection:
+                  id: "c8dcf5f3-9aad-431f-9f51-6cfdf5e9f452"
+                  org_id: 2
+                  vendor: "sentry"
+                  display_name: "Sentry"
+                  status: "connected"
+                  scan_status: "idle"
+                  auth_type: "api_key"
+                  credentials:
+                    api_token: "sntryu*****...7f16"
+                    org_slug: "********"
+                  settings:
+                    scan_frequency: "daily"
+                  connected_at: "2026-03-23T16:20:00Z"
+                  last_scan_at: null
+                  created_at: "2026-03-23T16:16:47.068Z"
+                  updated_at: "2026-03-23T16:20:00Z"
+        '400':
+          description: Missing vendor or credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/vendor-connections:
+    get:
+      tags: [Vendor Connections]
+      summary: List vendor connections
+      description: Returns all vendor connections for the authenticated organisation. Credential values are masked in the response.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [connected, disconnected, error]
+          description: Filter by connection status
+      responses:
+        '200':
+          description: List of vendor connections
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  connections:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VendorConnection'
+                  total:
+                    type: integer
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags: [Vendor Connections]
+      summary: Create vendor connection
+      description: Adds a new vendor connection for the org. Credentials are stored encrypted and never returned in plain text.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VendorConnectionCreateRequest'
+            example:
+              vendor: sentry
+              auth_type: api_key
+              credentials:
+                api_token: sntryu_xxxxxxxxxxxx
+                org_slug: my-org
+              display_name: Sentry Production
+      responses:
+        '201':
+          description: Vendor connection created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorConnection'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/vendor-connections/{id}:
+    delete:
+      tags: [Vendor Connections]
+      summary: Delete vendor connection
+      description: Permanently removes a vendor connection and its stored credentials.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Deleted successfully
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/vendor-connections/{id}/test:
+    post:
+      tags: [Vendor Connections]
+      summary: Test vendor connection
+      description: Validates the stored credentials against the vendor and updates the connection status to `connected` or `error`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Test result — always includes `connection` with updated status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionResult'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Vendor connection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/vendor-connections/{id}/scan:
+    post:
+      tags: [Vendor Connections]
+      summary: Trigger scan for a single vendor
+      description: Creates and starts a scan scoped to this vendor connection. Returns the new scan ID immediately; use `GET /api/v1/scans/{id}/status` to stream progress.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '202':
+          description: Scan started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  scan_id:
+                    type: string
+                    format: uuid
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Vendor connection not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ── Scans ────────────────────────────────────────────────────────────────────
+
+  /api/v1/scans:
+    get:
+      tags: [Scans]
+      summary: List scans
+      description: Returns paginated scan history for the org, newest first.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: List of scans
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  scans:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Scan'
+                  total:
+                    type: integer
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags: [Scans]
+      summary: Start a new scan
+      description: |
+        Creates and immediately starts a scan across all connected vendors (or a specified subset).
+        Returns `202 Accepted` with the scan ID. Stream real-time progress via `GET /api/v1/scans/{id}/status`.
+
+        When `vendor_ids` is provided the scan runs against those specific connections **regardless of their current status** (useful for scanning a newly added connection before it has been tested). When `vendor_ids` is omitted only `connected` vendors are included.
+
+        **Per-vendor behaviour:**
+        - **OpenAI / Anthropic** — reads from Nonym's own proxy transaction log. Fetches up to 500 transactions (last 30 days) that had at least one redaction and surfaces the already-identified PII entities (EMAIL, PHONE, SSN, CREDIT_CARD, IP_ADDRESS, API_KEY, PERSON, …) as findings. No external API call is made. These vendors are auto-connected on creation — no credentials required.
+        - **Sentry** — calls the Sentry API (`/api/0/organizations/`, `/projects/`, `/events/`). Fetches up to 500 real error events across all accessible projects and scans each event's message, user context (email, IP, username), tags, extra fields, breadcrumbs, and exception values for PII.
+        - **All other vendors** — falls back to running PII detection over the stored credential and settings field values until a dedicated connector is added.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                vendor_ids:
+                  type: array
+                  items:
+                    type: string
+                  description: Vendor connection UUIDs or vendor name slugs (e.g. `"sentry"`) to scan. When provided, runs against these connections regardless of status. Omit to scan all `connected` vendors.
+            example:
+              vendor_ids: []
+      responses:
+        '202':
+          description: Scan started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  scan_id:
+                    type: string
+                    format: uuid
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: No connected vendors available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/scans/{id}:
+    get:
+      tags: [Scans]
+      summary: Get scan
+      description: Returns the full state of a single scan job.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Scan details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Scan'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Scan not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/scans/{id}/status:
+    get:
+      tags: [Scans]
+      summary: Stream scan progress (SSE)
+      description: |
+        Returns a Server-Sent Events stream of scan progress events.
+
+        Event types:
+        - `progress` — phase and percentage update (`{"event":"progress","phase":"fetching","vendor":"sentry","percent":20}`)
+        - `finding` — a new finding was persisted (`{"event":"finding","finding_id":"...","vendor":"sentry","risk_level":"high"}`)
+        - `done` — scan completed (`{"event":"done","findings_count":3,"scan_id":"..."}`)
+        - `error` — scan failed (`{"event":"error","message":"...","scan_id":"..."}`)
+
+        If the scan is already complete when the request arrives the terminal event is sent immediately and the stream closes.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: SSE event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Scan not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ── Findings ──────────────────────────────────────────────────────────────────
+
+  /api/v1/findings:
+    get:
+      tags: [Findings]
+      summary: List findings
+      description: Returns paginated findings for the org with optional filters.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: vendor
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by vendor name (e.g. `sentry`)
+        - name: risk_level
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [high, medium, low]
+        - name: data_type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [email, phone, name, ip_address, api_key, token, financial, health]
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [open, resolved, suppressed]
+          description: Defaults to returning all statuses
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: List of findings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  findings:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Finding'
+                  total:
+                    type: integer
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/findings/{id}:
+    get:
+      tags: [Findings]
+      summary: Get finding
+      description: Returns a single finding by ID.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Finding details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Finding'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Finding not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    patch:
+      tags: [Findings]
+      summary: Update finding status
+      description: Changes the status of a finding to `open`, `resolved`, or `suppressed`. Setting `resolved` records the resolved_at timestamp.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [open, resolved, suppressed]
+            example:
+              status: resolved
+      responses:
+        '200':
+          description: Updated finding
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Finding'
+        '400':
+          description: Invalid status value
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ── Reports ───────────────────────────────────────────────────────────────────
+
+  /api/v1/reports:
+    get:
+      tags: [Reports]
+      summary: List scanner reports
+      description: Returns all generated compliance reports for the org, newest first.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of reports
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reports:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ScannerReport'
+                  total:
+                    type: integer
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/reports/generate:
+    post:
+      tags: [Reports]
+      summary: Generate a compliance report
+      description: |
+        Creates a report record and queues async generation. Returns `202 Accepted` immediately.
+        Poll `GET /api/v1/reports/{id}` until `status` is `done`, then download via `GET /api/v1/reports/{id}/download`.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [framework, time_range]
+              properties:
+                framework:
+                  type: string
+                  enum: [GDPR, SOC2, HIPAA, Custom]
+                time_range:
+                  type: string
+                  description: Human-readable or ISO range (e.g. `last_30_days`, `2026-01-01/2026-03-31`)
+                options:
+                  type: object
+                  description: Framework-specific generation options
+            example:
+              framework: GDPR
+              time_range: last_30_days
+      responses:
+        '202':
+          description: Report generation started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  report_id:
+                    type: string
+                    format: uuid
+        '400':
+          description: Validation error (invalid framework or missing time_range)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/reports/{id}:
+    get:
+      tags: [Reports]
+      summary: Get report
+      description: Returns the current state of a report. Poll this endpoint until `status` is `done` or `failed`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Report details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScannerReport'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Report not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/reports/{id}/download:
+    get:
+      tags: [Reports]
+      summary: Download report file
+      description: Redirects (`302`) to the signed download URL for the generated report file. Returns `422` if the report is not yet ready.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '302':
+          description: Redirect to download URL
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Report not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Report not ready for download
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/reports/share/{token}:
+    get:
+      tags: [Reports]
+      summary: Get shared report (public)
+      description: Returns a report by its share token. No authentication required. Returns `410 Gone` if the share link has expired.
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Shared report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScannerReport'
+        '404':
+          description: Report not found or share link invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '410':
+          description: Share link has expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Benchmarks
+  /api/v1/benchmarks:
+    get:
+      tags: [Benchmarks]
+      summary: Get published latency benchmarks
+      description: |
+        Returns pre-measured P50/P95/P99 latency benchmarks for the Nonym NER pipeline
+        and proxy layer, addressing latency concerns proactively.
+
+        **Key finding**: Nonym adds < 40 ms at P99. Upstream AI provider latency
+        (typically 300–2,000 ms) dominates end-to-end response time.
+
+        If transactions exist in the last hour, `live_stats` is populated with the
+        real average processing time observed in this deployment.
+
+        This endpoint is public — no authentication required.
+      responses:
+        '200':
+          description: Benchmark report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BenchmarkReport'
+              example:
+                generated_at: "2026-03-21T12:00:00Z"
+                environment: "4 vCPU / 8 GB RAM — Linux amd64"
+                go_version: "go1.22"
+                methodology: "Benchmarks measured using `go test -bench -benchmem`..."
+                results:
+                  - label: "NER scan — short prompt (< 500 tokens)"
+                    p50_ms: 3.2
+                    p95_ms: 7.8
+                    p99_ms: 12.4
+                    throughput: "> 3,000 req/s"
+                    description: "Regex-only path. Covers EMAIL, PHONE, SSN, CREDIT_CARD, IP_ADDRESS."
 
   # Documentation endpoints
   /api/docs:
@@ -774,9 +2819,40 @@ paths:
     post:
       tags: [Proxy]
       summary: Chat completions proxy
-      description: Proxy endpoint for OpenAI-compatible chat completions with PII protection
+      description: |
+        Drop-in replacement for OpenAI-compatible chat completions endpoints.
+        Nonym strips PII from the request before forwarding it to the upstream provider,
+        then returns the provider's response unchanged.
+
+        **Two keys, two headers — do not confuse them:**
+
+        | Header | Value | Purpose |
+        |--------|-------|---------|
+        | `X-API-Key` | Your Nonym API key | Authenticates your app with the Nonym gateway |
+        | `Authorization` | `Bearer <provider_key>` | Your provider key (OpenAI, Anthropic, etc.) — passed through as-is, never stored by Nonym |
+
+        Point your existing OpenAI SDK at the Nonym gateway URL and add `X-API-Key`.
+        No other changes are needed.
       security:
         - apiKeyAuth: []
+      parameters:
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+            example: "Bearer sk-..."
+          description: |
+            Your AI provider API key in `Bearer <key>` format.
+            Nonym forwards this header unchanged to the upstream provider.
+            It is never logged or stored.
+        - in: header
+          name: X-Nonym-Vendor
+          required: false
+          schema:
+            type: string
+            example: "openai"
+          description: Optional vendor tag for audit attribution (set automatically by `@nonym/*` SDKs).
       requestBody:
         required: true
         content:
@@ -785,20 +2861,20 @@ paths:
               type: object
               description: OpenAI-compatible chat completion request
               example:
-                model: "gpt-3.5-turbo"
+                model: "gpt-4o"
                 messages:
                   - role: "user"
-                    content: "Hello, my email is john@example.com"
+                    content: "Summarise this support ticket for user John Smith."
       responses:
         '200':
-          description: Chat completion response (PII anonymized)
+          description: Provider response returned unchanged after PII has been stripped from the request.
           content:
             application/json:
               schema:
                 type: object
-                description: OpenAI-compatible response with anonymized content
+                description: OpenAI-compatible response
         '401':
-          description: API key required
+          description: Missing or invalid Nonym API key (`X-API-Key`)
           content:
             application/json:
               schema:
@@ -808,9 +2884,18 @@ paths:
     post:
       tags: [Proxy]
       summary: Completions proxy
-      description: Proxy endpoint for text completions with PII protection
+      description: |
+        Legacy text completions proxy. Provider key is passed in `Authorization: Bearer <key>`;
+        Nonym API key in `X-API-Key`. See `/v1/chat/completions` for full header details.
       security:
         - apiKeyAuth: []
+      parameters:
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+          description: Provider API key (`Bearer <key>`). Forwarded unchanged, never stored.
       requestBody:
         required: true
         content:
@@ -821,7 +2906,7 @@ paths:
         '200':
           description: Completion response
         '401':
-          description: API key required
+          description: Missing or invalid Nonym API key
           content:
             application/json:
               schema:
@@ -831,9 +2916,18 @@ paths:
     post:
       tags: [Proxy]
       summary: Embeddings proxy
-      description: Proxy endpoint for embeddings with PII protection
+      description: |
+        Embeddings proxy. Provider key is passed in `Authorization: Bearer <key>`;
+        Nonym API key in `X-API-Key`. See `/v1/chat/completions` for full header details.
       security:
         - apiKeyAuth: []
+      parameters:
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+          description: Provider API key (`Bearer <key>`). Forwarded unchanged, never stored.
       requestBody:
         required: true
         content:
@@ -844,7 +2938,7 @@ paths:
         '200':
           description: Embeddings response
         '401':
-          description: API key required
+          description: Missing or invalid Nonym API key
           content:
             application/json:
               schema:
@@ -854,14 +2948,23 @@ paths:
     get:
       tags: [Proxy]
       summary: List models proxy
-      description: Proxy endpoint to list available models
+      description: |
+        Lists models available from the configured upstream provider.
+        Provider key in `Authorization: Bearer <key>`; Nonym API key in `X-API-Key`.
       security:
         - apiKeyAuth: []
+      parameters:
+        - in: header
+          name: Authorization
+          required: true
+          schema:
+            type: string
+          description: Provider API key (`Bearer <key>`). Forwarded unchanged, never stored.
       responses:
         '200':
-          description: List of available models
+          description: List of available models from the upstream provider
         '401':
-          description: API key required
+          description: Missing or invalid Nonym API key
           content:
             application/json:
               schema:
@@ -878,7 +2981,11 @@ components:
       type: apiKey
       in: header
       name: X-API-Key
-      description: API key for accessing proxy endpoints
+      description: |
+        Your **Nonym** API key — authenticates your application with the Nonym gateway.
+        This is NOT the provider key (OpenAI, Anthropic, etc.).
+        Provider keys are passed directly in the `Authorization` header of each request
+        and are forwarded unchanged to the upstream provider after PII is stripped.
 
   schemas:
     Error:
@@ -954,16 +3061,31 @@ components:
 
     LoginResponse:
       type: object
+      description: |
+        Returned by login and by the MFA challenge endpoint.
+        When `mfa_required` is true the token fields are absent; use `mfa_token` with `/auth/2fa/challenge`.
       properties:
         token:
           type: string
+          description: Full session JWT (absent when mfa_required is true)
         expires_at:
           type: string
           format: date-time
+          description: When the session token expires
         user:
-          $ref: '#/components/schemas/User'
+          $ref: '#/components/schemas/UserProfile'
         organization:
           $ref: '#/components/schemas/Organization'
+        mfa_required:
+          type: boolean
+          description: True when the account has 2FA enabled and a challenge is needed
+        mfa_token:
+          type: string
+          description: Short-lived JWT (15 min) to complete the MFA challenge
+        mfa_token_expires_at:
+          type: string
+          format: date-time
+          description: Expiry of the MFA challenge token
 
     User:
       type: object
@@ -1049,6 +3171,9 @@ components:
         email_verified:
           type: boolean
           description: Whether the user's email is verified
+        two_fa_enabled:
+          type: boolean
+          description: Whether TOTP two-factor authentication is active for this user
         created_at:
           type: string
           format: date-time
@@ -1257,6 +3382,9 @@ components:
           type: string
           format: uuid
           description: User UUID
+        vendor_name:
+          type: string
+          description: Vendor attributed to this request (e.g. "sentry", "datadog")
 
     RedactionDetail:
       type: object
@@ -1350,6 +3478,15 @@ components:
           type: string
         metadata:
           type: object
+        compliance_frameworks:
+          type: array
+          description: |
+            Regulatory frameworks applicable to this event based on detected entity types.
+            Computed server-side at write time — do not re-derive client-side.
+          items:
+            type: string
+            enum: [GDPR, HIPAA, PCI-DSS, SOC2]
+          example: ["GDPR", "HIPAA", "SOC2"]
 
     ProtectionEventsResponse:
       type: object
@@ -1383,6 +3520,228 @@ components:
         lastUpdate:
           type: string
           format: date-time
+
+    # Compliance schemas
+    FineRate:
+      type: object
+      properties:
+        framework:
+          type: string
+          enum: [GDPR, HIPAA, PCI-DSS]
+          description: Regulatory framework name
+        per_event_amount:
+          type: number
+          description: Estimated fine exposure per event (in `currency`)
+          example: 20000
+        currency:
+          type: string
+          description: ISO 4217 currency code
+          example: EUR
+      required: [framework, per_event_amount, currency]
+
+    ComplianceSettingsResponse:
+      type: object
+      properties:
+        fine_rates:
+          type: array
+          items:
+            $ref: '#/components/schemas/FineRate'
+        disclaimer:
+          type: string
+          description: Legal disclaimer — always present
+          example: "These estimates are for internal risk awareness only and do not constitute legal advice."
+
+    ComplianceSettingsUpdateRequest:
+      type: object
+      properties:
+        fine_rates:
+          type: array
+          description: Partial list — only included frameworks are updated
+          items:
+            $ref: '#/components/schemas/FineRate'
+      required: [fine_rates]
+
+    ExposureEstimate:
+      type: object
+      nullable: true
+      description: Estimated fine exposure averted. Null for SOC2 (no statutory fine).
+      properties:
+        amount:
+          type: number
+          description: Total estimated exposure (events_protected × per_event_basis)
+          example: 640000
+        currency:
+          type: string
+          example: EUR
+        per_event_basis:
+          type: number
+          description: Per-event rate used for calculation
+          example: 20000
+        disclaimer:
+          type: string
+          enum: [estimate]
+          description: Always "estimate" — these are not legally binding figures
+
+    FrameworkSummary:
+      type: object
+      properties:
+        key:
+          type: string
+          enum: [GDPR, HIPAA, PCI-DSS, SOC2]
+        label:
+          type: string
+        events_protected:
+          type: integer
+          description: Number of distinct events tagged with this framework
+        redactions:
+          type: integer
+          description: Total redactions across events tagged with this framework
+        top_entity_types:
+          type: array
+          description: Up to 3 most-frequent entity types contributing to this framework
+          items:
+            type: string
+          example: ["PERSON", "EMAIL", "ADDRESS"]
+        citation:
+          type: string
+          description: Primary regulatory citation
+          example: "Art. 5(1)(c) · Data Minimisation"
+        estimated_exposure_averted:
+          $ref: '#/components/schemas/ExposureEstimate'
+
+    ComplianceSummaryResponse:
+      type: object
+      properties:
+        time_range:
+          type: string
+          enum: [1h, 24h, 7d, 30d]
+        generated_at:
+          type: string
+          format: date-time
+        frameworks:
+          type: array
+          items:
+            $ref: '#/components/schemas/FrameworkSummary'
+        total_estimated_exposure_averted_usd:
+          type: number
+          description: |
+            Sum of all non-null framework exposures converted to USD.
+            EUR amounts are converted at a fixed 1.08 rate.
+          example: 826200
+
+    # Two-Factor Authentication schemas
+    TOTPSetupBeginRequest:
+      type: object
+      required: [password]
+      properties:
+        password:
+          type: string
+          description: User's current password (required to initiate setup)
+
+    TOTPSetupBeginResponse:
+      type: object
+      properties:
+        session_id:
+          type: string
+          format: uuid
+          description: Temporary setup session ID — pass to /setup/verify
+        secret:
+          type: string
+          description: Base32-encoded TOTP secret for manual entry in authenticator app
+          example: JBSWY3DPEHPK3PXP
+        otpauth_uri:
+          type: string
+          description: OTPAuth URI — pass to a QR code library to render the setup QR code
+          example: "otpauth://totp/Nonym:user@example.com?secret=JBSWY3DPEHPK3PXP&issuer=Nonym&algorithm=SHA1&digits=6&period=30"
+        expires_at:
+          type: string
+          format: date-time
+          description: When the setup session expires (10 minutes from creation)
+
+    TOTPSetupVerifyRequest:
+      type: object
+      required: [session_id, totp_code]
+      properties:
+        session_id:
+          type: string
+          format: uuid
+          description: Session ID returned by /setup/begin
+        totp_code:
+          type: string
+          description: 6-digit TOTP code from the authenticator app
+          example: "123456"
+
+    TOTPSetupVerifyResponse:
+      type: object
+      properties:
+        backup_codes:
+          type: array
+          description: 8 single-use backup codes — shown only once, store securely
+          items:
+            type: string
+          example:
+            - "a3bk-p7mw"
+            - "r9cx-t4nh"
+            - "q6jv-s2fy"
+            - "w8nm-h5j3"
+            - "k4ts-b7rp"
+            - "m2wq-f8cx"
+            - "n7hv-k3sq"
+            - "j5pb-r6tn"
+
+    TOTPDisableRequest:
+      type: object
+      required: [password]
+      properties:
+        password:
+          type: string
+          description: User's current password (required to disable 2FA)
+
+    TOTPStatusResponse:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Whether TOTP 2FA is currently active
+        verified_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When 2FA was first successfully verified (null if not enabled)
+        backup_codes_remaining:
+          type: integer
+          description: Number of unused backup codes remaining
+
+    TOTPRegenerateRequest:
+      type: object
+      required: [password]
+      properties:
+        password:
+          type: string
+          description: User's current password (required to regenerate backup codes)
+
+    TOTPRegenerateResponse:
+      type: object
+      properties:
+        backup_codes:
+          type: array
+          description: 8 fresh single-use backup codes — previous codes are invalidated
+          items:
+            type: string
+
+    TOTPChallengeRequest:
+      type: object
+      required: [mfa_token, totp_code]
+      properties:
+        mfa_token:
+          type: string
+          description: Short-lived MFA token received from the login response
+        totp_code:
+          type: string
+          description: |
+            Either a 6-digit TOTP code (e.g. `123456`) or a 9-character backup code
+            in `xxxx-xxxx` format (e.g. `a3bk-p7mw`). The type is auto-detected.
+          example: "123456"
 
     # Health schemas
     GatewayStatus:
@@ -1419,3 +3778,1036 @@ components:
           type: number
         error_rate:
           type: number
+
+    # Vendor catalog schemas
+    VendorProfile:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique vendor identifier (e.g. "sentry", "datadog")
+        name:
+          type: string
+          description: Human-readable vendor name
+        description:
+          type: string
+          description: Short description of what the vendor does
+        category:
+          type: string
+          description: Vendor category (e.g. "error-tracking", "apm")
+        known_hosts:
+          type: array
+          items:
+            type: string
+          description: Hostname patterns associated with this vendor
+        data_types:
+          type: array
+          items:
+            type: string
+          description: Types of data the vendor receives (e.g. "errors", "traces")
+        compliance_frameworks:
+          type: array
+          items:
+            type: string
+          description: Compliance frameworks this vendor is relevant to
+        integration_methods:
+          type: array
+          items:
+            type: string
+          description: Supported integration methods (e.g. "sdk", "http")
+        sdk_packages:
+          type: array
+          items:
+            type: string
+          description: Official SDK package names
+        nonym_sdk:
+          type: string
+          description: Drop-in Nonym SDK package that protects this vendor's traffic
+
+    VendorIntegration:
+      type: object
+      properties:
+        id:
+          type: integer
+        organization_id:
+          type: integer
+        vendor_id:
+          type: string
+        vendor_name:
+          type: string
+        method:
+          type: string
+          description: Integration method chosen (e.g. "sdk", "http")
+        status:
+          type: string
+          enum: [active, inactive]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    VendorSetupRequest:
+      type: object
+      required:
+        - vendor_id
+      properties:
+        vendor_id:
+          type: string
+          description: Vendor ID from the catalog (e.g. "sentry")
+        method:
+          type: string
+          description: Integration method (defaults to "sdk" if omitted)
+
+    # Scanner schemas
+    ScanRequest:
+      type: object
+      properties:
+        env:
+          type: object
+          additionalProperties:
+            type: string
+          description: Environment variable key-value pairs to scan
+        config:
+          type: object
+          additionalProperties:
+            type: string
+          description: Configuration key-value pairs to scan
+
+    ScanFinding:
+      type: object
+      properties:
+        vendor_id:
+          type: string
+          description: Vendor that matched (e.g. "sentry")
+        vendor_name:
+          type: string
+          description: Human-readable vendor name
+        indicator:
+          type: string
+          description: The env/config key that triggered the match
+        value:
+          type: string
+          description: Masked version of the detected value
+        protected:
+          type: boolean
+          description: Whether the value is already routed through Nonym
+        risk:
+          type: string
+          enum: [high, medium, low]
+          description: Risk level of the unprotected credential
+        description:
+          type: string
+          description: Human-readable explanation of the finding
+
+    ScanResult:
+      type: object
+      properties:
+        scanned_at:
+          type: string
+          format: date-time
+        total_vendors:
+          type: integer
+          description: Number of vendors checked in the catalog
+        findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScanFinding'
+        protected:
+          type: integer
+          description: Number of findings already protected by Nonym
+        unprotected:
+          type: integer
+          description: Number of findings NOT yet protected by Nonym
+        instructions:
+          type: object
+          additionalProperties:
+            type: string
+          description: Quick-start instructions keyed by vendor_id
+
+    # Compliance report schemas
+    EntityCount:
+      type: object
+      properties:
+        entity_type:
+          type: string
+          description: NER entity type (e.g. "PERSON", "EMAIL")
+        count:
+          type: integer
+
+    DailyCount:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        count:
+          type: integer
+
+    ReportSummary:
+      type: object
+      properties:
+        total_requests:
+          type: integer
+        protected_requests:
+          type: integer
+        blocked_requests:
+          type: integer
+        total_redactions:
+          type: integer
+        unique_entity_types:
+          type: integer
+        compliance_score:
+          type: number
+          description: Score in the range [0, 100] representing compliance posture
+
+    ComplianceReport:
+      type: object
+      properties:
+        framework:
+          type: string
+          description: Canonical framework name (GDPR, HIPAA, or PCI-DSS)
+        citation:
+          type: string
+          description: Relevant regulatory article or section reference
+        generated_at:
+          type: string
+          format: date-time
+        organization_id:
+          type: integer
+        time_range:
+          type: string
+          description: Time window label (7d, 30d, or 90d)
+        period_start:
+          type: string
+          format: date-time
+        period_end:
+          type: string
+          format: date-time
+        summary:
+          $ref: '#/components/schemas/ReportSummary'
+        entity_breakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/EntityCount'
+        daily_activity:
+          type: array
+          items:
+            $ref: '#/components/schemas/DailyCount'
+        estimated_exposure_averted:
+          type: integer
+          description: Estimated number of PII items prevented from reaching vendors
+        recommendations:
+          type: array
+          items:
+            type: string
+          description: Framework-specific compliance recommendations
+
+    ComplianceReportMeta:
+      type: object
+      description: Summary entry returned by the list endpoint
+      properties:
+        framework:
+          type: string
+        citation:
+          type: string
+        description:
+          type: string
+        endpoint:
+          type: string
+          description: URL path to fetch the full report for this framework
+
+    # Benchmark schemas
+    BenchmarkResult:
+      type: object
+      properties:
+        label:
+          type: string
+          description: Human-readable benchmark name
+        p50_ms:
+          type: number
+          description: Median latency in milliseconds
+        p95_ms:
+          type: number
+          description: 95th-percentile latency in milliseconds
+        p99_ms:
+          type: number
+          description: 99th-percentile latency in milliseconds
+        throughput:
+          type: string
+          description: Requests-per-second figure (e.g. "2 400 req/s")
+        description:
+          type: string
+          description: What this benchmark measures
+
+    LiveBenchmark:
+      type: object
+      properties:
+        sample_size:
+          type: integer
+          description: Number of transactions sampled
+        avg_processing_ms:
+          type: number
+          description: Average observed processing time in milliseconds
+        period:
+          type: string
+          description: Time window used for the live sample (e.g. "last 1 hour")
+
+    BenchmarkReport:
+      type: object
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        environment:
+          type: string
+          description: Runtime environment description
+        go_version:
+          type: string
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BenchmarkResult'
+        live_stats:
+          $ref: '#/components/schemas/LiveBenchmark'
+          nullable: true
+          description: Real-time stats from recent transactions (null if no data)
+        methodology:
+          type: string
+          description: Explanation of how benchmarks were produced
+
+    # ── V2 Scanner schemas ────────────────────────────────────────────────────
+
+    VendorConnection:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        org_id:
+          type: integer
+        vendor:
+          type: string
+          example: sentry
+        display_name:
+          type: string
+          example: Sentry Production
+        status:
+          type: string
+          enum: [connected, disconnected, error]
+          description: Credential connection status — whether the stored credentials are valid and reachable
+        scan_status:
+          type: string
+          enum: [idle, scanning]
+          description: Current scan activity — `scanning` while a scan job is actively running, `idle` otherwise
+        auth_type:
+          type: string
+          enum: [api_key, oauth]
+        credentials:
+          type: object
+          description: Credential values are masked (e.g. `sk_****xxxx`) — never returned in plain text
+          additionalProperties: true
+        settings:
+          type: object
+          additionalProperties: true
+        connected_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_scan_at:
+          type: string
+          format: date-time
+          nullable: true
+        error_message:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    VendorConnectionCreateRequest:
+      type: object
+      required: [vendor]
+      properties:
+        vendor:
+          type: string
+          description: |
+            Vendor slug for a third-party monitoring or analytics service (e.g. `sentry`, `datadog`).
+            AI proxy providers such as `openai` and `anthropic` are managed via the AI proxy
+            configuration and cannot be added as scanner vendor connections.
+          example: sentry
+        auth_type:
+          type: string
+          enum: [api_key, oauth]
+          default: api_key
+        credentials:
+          type: object
+          description: |
+            Vendor-specific credential fields required to authenticate with the vendor API.
+
+            **Sentry** — create an Auth Token at *Sentry → Settings → Account → API → Auth Tokens*
+            with scopes `org:read`, `project:read`, and `event:read`.
+            Pass it as `{"api_token": "<your-token>"}`. Optionally include `"org_slug"` to tag the connection.
+            Accepted key names: `api_token`, `token`, `api_key`, `auth_token`.
+
+            **Datadog** — provide `{"api_key": "...", "app_key": "..."}`.
+
+            **Stripe** — provide `{"api_key": "sk_live_..."}`.
+
+            **Mixpanel** — provide `{"service_account": "...", "secret": "..."}`.
+          additionalProperties: true
+        settings:
+          type: object
+          additionalProperties: true
+        display_name:
+          type: string
+          description: Human-readable label. Defaults to capitalised vendor name.
+
+    ConnectionResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+          description: Human-readable outcome message
+        events_accessible:
+          type: integer
+          nullable: true
+          description: |
+            Vendor-specific count returned on a successful test.
+            For **Sentry** this is the number of organizations accessible with the token.
+        connection:
+          allOf:
+            - $ref: '#/components/schemas/VendorConnection'
+          nullable: true
+          description: |
+            The updated vendor connection record after the test, with credentials masked.
+            Present only when a saved connection record exists for this org + vendor.
+            Use this object to update local state — `status` will be `connected` on success
+            or `error` on failure.
+
+    Scan:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        org_id:
+          type: integer
+        vendor_ids:
+          type: array
+          items:
+            type: string
+          description: Vendor names included in this scan
+        status:
+          type: string
+          enum: [pending, running, done, failed]
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        findings_count:
+          type: integer
+        error_message:
+          type: string
+          nullable: true
+        triggered_by:
+          type: string
+          enum: [manual, scheduled, onboarding]
+        created_at:
+          type: string
+          format: date-time
+
+    Finding:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        org_id:
+          type: integer
+        scan_id:
+          type: string
+          format: uuid
+        vendor_connection_id:
+          type: string
+          format: uuid
+        vendor:
+          type: string
+          example: sentry
+        data_type:
+          type: string
+          enum: [email, phone, name, ip_address, api_key, token, financial, health]
+        risk_level:
+          type: string
+          enum: [high, medium, low]
+        title:
+          type: string
+        description:
+          type: string
+        location:
+          type: string
+          nullable: true
+          description: Field path or source location where the data was found
+        endpoint:
+          type: string
+          nullable: true
+          description: API endpoint or URL associated with the finding
+        occurrences:
+          type: integer
+          description: Number of times this finding has been observed
+        sample_masked:
+          type: string
+          nullable: true
+          description: Masked sample of the detected value
+        status:
+          type: string
+          enum: [open, resolved, suppressed]
+        compliance_impact:
+          type: array
+          items:
+            $ref: '#/components/schemas/ComplianceImpact'
+        fixes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Fix'
+        first_seen_at:
+          type: string
+          format: date-time
+        last_seen_at:
+          type: string
+          format: date-time
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+        resolved_by:
+          type: integer
+          nullable: true
+          description: User ID who resolved the finding
+        created_at:
+          type: string
+          format: date-time
+
+    ComplianceImpact:
+      type: object
+      properties:
+        framework:
+          type: string
+          enum: [GDPR, SOC2, HIPAA]
+        article:
+          type: string
+          description: Relevant article or control reference
+        risk_level:
+          type: string
+          enum: [high, medium, low]
+
+    Fix:
+      type: object
+      properties:
+        language:
+          type: string
+          description: Programming language for the code snippet
+          example: go
+        code:
+          type: string
+          description: Code snippet showing how to remediate the finding
+        description:
+          type: string
+          description: Plain-English description of the fix
+
+    ScannerReport:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        org_id:
+          type: integer
+        framework:
+          type: string
+          enum: [GDPR, SOC2, HIPAA, Custom]
+        time_range:
+          type: string
+          example: last_30_days
+        options:
+          type: object
+          additionalProperties: true
+        status:
+          type: string
+          enum: [pending, generating, done, failed]
+        file_url:
+          type: string
+          nullable: true
+          description: URL of the generated report file (populated when status is `done`)
+        share_token:
+          type: string
+          nullable: true
+          description: Token for the public share link
+        generated_at:
+          type: string
+          format: date-time
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the share link expires (30 days after generation)
+        created_at:
+          type: string
+          format: date-time
+
+    FindingCounts:
+      type: object
+      properties:
+        high:
+          type: integer
+        medium:
+          type: integer
+        low:
+          type: integer
+        total:
+          type: integer
+
+    FrameworkStatus:
+      type: object
+      properties:
+        violations:
+          type: integer
+          description: Number of open findings that impact this framework
+        status:
+          type: string
+          enum: [ok, warning, critical]
+          description: "`ok` = 0 violations, `warning` = 1–5, `critical` = 6+"
+
+    ComplianceSnapshot:
+      type: object
+      properties:
+        gdpr:
+          $ref: '#/components/schemas/FrameworkStatus'
+        soc2:
+          $ref: '#/components/schemas/FrameworkStatus'
+        hipaa:
+          $ref: '#/components/schemas/FrameworkStatus'
+
+    ScannerOverview:
+      type: object
+      properties:
+        vendors_connected:
+          type: integer
+          description: Number of vendor connections with status `connected`
+        findings:
+          $ref: '#/components/schemas/FindingCounts'
+        risk_score:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Overall risk score derived from open finding counts
+        compliance:
+          $ref: '#/components/schemas/ComplianceSnapshot'
+        last_scan_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Completion time of the most recent scan
+
+    FlowNode:
+      type: object
+      properties:
+        id:
+          type: string
+          description: "`app` for the user's application node, UUID for vendor nodes"
+        label:
+          type: string
+        type:
+          type: string
+          enum: [app, vendor]
+
+    FlowEdge:
+      type: object
+      properties:
+        from:
+          type: string
+          description: Source node ID
+        to:
+          type: string
+          description: Destination node ID
+        findings_count:
+          type: integer
+          description: Number of open findings on this data-flow edge
+        risk_level:
+          type: string
+          enum: [high, medium, low]
+          description: Highest risk level among findings on this edge
+
+    # ── Events & Webhooks schemas ─────────────────────────────────────────────
+
+    Event:
+      type: object
+      properties:
+        id:
+          type: string
+          example: evt_1711234567890
+        timestamp:
+          type: string
+          format: date-time
+        type:
+          type: string
+          enum: [pii_detected, request_blocked, provider_error, rate_limit_exceeded]
+        pii_type:
+          type: string
+          description: Type of PII involved (e.g. `EMAIL`, `PHONE`, `SSN`)
+          nullable: true
+        action:
+          type: string
+          enum: [anonymized, blocked, detected]
+        request_id:
+          type: string
+        user_id:
+          type: string
+          nullable: true
+        organization_id:
+          type: integer
+        provider:
+          type: string
+          nullable: true
+          description: Upstream provider slug (e.g. `openai`, `sentry`)
+        model:
+          type: string
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+          nullable: true
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        status:
+          type: string
+          enum: [open, resolved, ignored]
+        description:
+          type: string
+          nullable: true
+        compliance_frameworks:
+          type: array
+          items:
+            type: string
+          description: Compliance frameworks this event is attributed to (e.g. `["GDPR", "HIPAA"]`)
+
+    EventsResponse:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/Event'
+        total:
+          type: integer
+          format: int64
+        has_more:
+          type: boolean
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    Webhook:
+      type: object
+      properties:
+        id:
+          type: string
+          example: wh_1711234567890
+        url:
+          type: string
+          format: uri
+          example: https://your-server.com/nonym-webhook
+        events:
+          type: array
+          items:
+            type: string
+          description: Event types this webhook subscribes to
+          example: [pii_detected, request_blocked]
+        secret:
+          type: string
+          description: HMAC-SHA256 signing secret (omitted from GET responses for security)
+          nullable: true
+        status:
+          type: string
+          enum: [active, disabled, failed]
+        created_at:
+          type: string
+          format: date-time
+        last_trigger:
+          type: string
+          format: date-time
+          nullable: true
+        user_id:
+          type: string
+        organization_id:
+          type: integer
+
+    WebhookRequest:
+      type: object
+      required: [url, events]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: HTTPS endpoint that will receive POST deliveries
+        events:
+          type: array
+          items:
+            type: string
+            enum: [pii_detected, request_blocked, provider_error, rate_limit_exceeded]
+          description: Event types to subscribe to
+        secret:
+          type: string
+          description: Optional HMAC-SHA256 signing secret for verifying deliveries
+
+    WebhookTestResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        status_code:
+          type: integer
+          description: HTTP status code returned by the target endpoint
+          nullable: true
+        response_body:
+          type: string
+          description: First 4 KB of the response body from the target endpoint
+          nullable: true
+        error:
+          type: string
+          description: Error message if delivery failed (network error, timeout, etc.)
+          nullable: true
+        payload:
+          type: object
+          description: The test payload that was delivered
+
+    # ── Dashboard schemas ─────────────────────────────────────────────────────
+
+    DashboardLayoutResponse:
+      type: object
+      properties:
+        widgets:
+          type: array
+          items:
+            $ref: '#/components/schemas/WidgetConfig'
+
+    WidgetConfig:
+      type: object
+      properties:
+        id:
+          type: string
+          example: stat-total-requests
+        type:
+          type: string
+          example: stat_card
+        title:
+          type: string
+        subtitle:
+          type: string
+          nullable: true
+        endpoint:
+          type: string
+          description: URL to fetch data for this widget
+          example: /api/v1/dashboard/widgets/stat-total-requests
+        refresh_interval_seconds:
+          type: integer
+          description: How often the UI should poll this widget's endpoint
+        grid:
+          $ref: '#/components/schemas/GridPlacement'
+        display:
+          $ref: '#/components/schemas/DisplayOptions'
+
+    GridPlacement:
+      type: object
+      properties:
+        row:
+          type: integer
+        col_span:
+          type: integer
+          description: Number of 12-column grid columns to span
+        order:
+          type: integer
+          description: Render order within the row
+
+    DisplayOptions:
+      type: object
+      properties:
+        color_scheme:
+          type: string
+          enum: [blue, green, red, purple]
+        icon:
+          type: string
+          nullable: true
+        value_format:
+          type: string
+          enum: [number, percent, duration_ms]
+        threshold_warning:
+          type: number
+          nullable: true
+        threshold_critical:
+          type: number
+          nullable: true
+
+    StatCardData:
+      type: object
+      properties:
+        value:
+          type: number
+        unit:
+          type: string
+          nullable: true
+        delta:
+          type: number
+          description: Change vs the previous equivalent period
+        delta_period:
+          type: string
+          example: vs last 24h
+
+    SuccessRateData:
+      type: object
+      properties:
+        success_rate:
+          type: number
+          format: float
+          description: Percentage of requests processed without error (0–100)
+        redacted_requests:
+          type: integer
+          format: int64
+        total_requests:
+          type: integer
+          format: int64
+
+    ProtectionSummaryData:
+      type: object
+      properties:
+        rows:
+          type: array
+          items:
+            type: object
+            properties:
+              key:
+                type: string
+              label:
+                type: string
+              value:
+                description: Numeric or string summary value
+              color:
+                type: string
+
+    GatewayStatusData:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        uptime:
+          type: integer
+          format: int64
+          description: Seconds since process start
+        components:
+          type: array
+          items:
+            type: object
+            properties:
+              key:
+                type: string
+              name:
+                type: string
+              status:
+                type: string
+              provider:
+                type: boolean
+        memory_usage:
+          type: object
+          properties:
+            heap:
+              type: integer
+              format: int64
+              description: Heap memory in bytes
+            stack:
+              type: integer
+              format: int64
+            total:
+              type: integer
+              format: int64
+
+    TopProvidersData:
+      type: object
+      properties:
+        providers:
+          type: array
+          items:
+            type: object
+            properties:
+              provider:
+                type: string
+              label:
+                type: string
+              requests:
+                type: integer
+                format: int64
+              percent:
+                type: number
+                format: float
+              color:
+                type: string
+
+    ActivityChartData:
+      type: object
+      properties:
+        period_label:
+          type: string
+          example: Last 24 hours
+        points:
+          type: array
+          items:
+            type: object
+            properties:
+              timestamp:
+                type: string
+                format: date-time
+              count:
+                type: integer
+                format: int64
+
+    LiveStatsData:
+      type: object
+      properties:
+        rows:
+          type: array
+          items:
+            type: object
+            properties:
+              key:
+                type: string
+              label:
+                type: string
+              value:
+                type: number
+              format:
+                type: string
+                enum: [number, percent, duration_ms]
+              color_rule:
+                type: object
+                nullable: true
+                properties:
+                  threshold_warning:
+                    type: number
+                  threshold_critical:
+                    type: number
+                  direction:
+                    type: string
+                    enum: [higher_is_worse, lower_is_worse]

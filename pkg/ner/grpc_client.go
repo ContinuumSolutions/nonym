@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -177,16 +178,34 @@ func CloseGRPCClient() {
 	}
 }
 
-// mlLabelToEntityType maps GLiNER label strings to our EntityType constants.
+// mlLabelToEntityType maps GLiNER label strings to canonical EntityType constants.
+// All output types use UPPER_SNAKE_CASE per the entity type specification.
 func mlLabelToEntityType(label string) EntityType {
-	switch label {
+	switch strings.ToLower(label) {
 	case "person":
 		return EntityPerson
-	case "location":
-		return EntityLocation
-	case "organization":
+	case "location", "address":
+		return EntityAddress
+	case "organization", "organization medical facility":
 		return EntityOrganization
+	case "date", "time", "dob":
+		return EntityDate
+	case "phone number", "phone":
+		return EntityPhone
+	case "email":
+		return EntityEmail
+	case "credit card":
+		return EntityCreditCard
+	case "ssn":
+		return EntitySSN
+	case "nin":
+		return EntityNIN
+	case "ip_address", "ip address":
+		return EntityIPAddress
+	case "iban":
+		return EntityIBAN
 	default:
-		return EntityType(label)
+		// Normalize any other label: lower → upper, spaces → underscores.
+		return EntityType(strings.ToUpper(strings.ReplaceAll(label, " ", "_")))
 	}
 }

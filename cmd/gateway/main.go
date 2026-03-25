@@ -20,6 +20,7 @@ import (
 	"github.com/ContinuumSolutions/nonym/pkg/interceptor"
 	"github.com/ContinuumSolutions/nonym/pkg/ner"
 	"github.com/ContinuumSolutions/nonym/pkg/router"
+	"github.com/ContinuumSolutions/nonym/pkg/scanner"
 )
 
 // Config holds the application configuration
@@ -112,6 +113,21 @@ func initializeServices(config *Config) error {
 		return fmt.Errorf("failed to initialize events tables: %w", err)
 	}
 
+	// Initialize compliance tables
+	if err := audit.InitializeComplianceTables(); err != nil {
+		return fmt.Errorf("failed to initialize compliance tables: %w", err)
+	}
+
+	// Initialize vendor integration tables
+	if err := audit.InitializeVendorTables(); err != nil {
+		return fmt.Errorf("failed to initialize vendor tables: %w", err)
+	}
+
+	// Initialize DSAR tables
+	if err := audit.InitializeDsarTables(); err != nil {
+		return fmt.Errorf("failed to initialize DSAR tables: %w", err)
+	}
+
 	// Initialize router with provider configs
 
 	// Initialize authentication system
@@ -120,6 +136,11 @@ func initializeServices(config *Config) error {
 	}
 	if err := router.Initialize(config.Providers); err != nil {
 		return fmt.Errorf("failed to initialize router: %w", err)
+	}
+
+	// Initialize V2 scanner (shares the audit DB connection).
+	if err := scanner.Initialize(audit.GetDatabase(), audit.IsPostgres()); err != nil {
+		return fmt.Errorf("failed to initialize scanner: %w", err)
 	}
 
 	return nil
@@ -211,8 +232,103 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 
 	// Security endpoints
 	app.Put("/api/v1/security/2fa", authMiddleware, auth.HandleUpdateTwoFactor)
+
+	// TOTP 2FA endpoints
+	app.Get("/api/v1/auth/2fa/status", authMiddleware, auth.HandleTOTPStatus)
+	app.Post("/api/v1/auth/2fa/setup/begin", authMiddleware, auth.HandleTOTPSetupBegin)
+	app.Post("/api/v1/auth/2fa/setup/verify", authMiddleware, auth.HandleTOTPSetupVerify)
+	app.Delete("/api/v1/auth/2fa", authMiddleware, auth.HandleTOTPDisable)
+	app.Post("/api/v1/auth/2fa/backup-codes/regenerate", authMiddleware, auth.HandleTOTPRegenerateBackupCodes)
+	app.Post("/api/v1/auth/2fa/challenge", auth.HandleTOTPChallenge) // No auth — uses mfa_token
 	app.Delete("/api/v1/security/sessions/:id", authMiddleware, auth.HandleTerminateSession)
 	app.Put("/api/v1/security/settings", authMiddleware, auth.HandleUpdateSecuritySettings)
+
+	// Compliance settings
+	app.Get("/api/v1/settings/compliance", authMiddleware, audit.HandleGetComplianceSettings)
+	app.Put("/api/v1/settings/compliance", authMiddleware, audit.HandleUpdateComplianceSettings)
+
+	// Compliance reports (GDPR, HIPAA, PCI-DSS)
+	app.Get("/api/v1/compliance/reports", authMiddleware, audit.HandleListComplianceReports)
+	app.Get("/api/v1/compliance/reports/:framework", authMiddleware, audit.HandleGetComplianceReport)
+
+	// Vendor catalog and setup wizard
+	app.Get("/api/v1/vendors", authMiddleware, audit.HandleListVendors)
+	app.Get("/api/v1/vendors/configured", authMiddleware, audit.HandleGetConfiguredVendors)
+	app.Post("/api/v1/vendors/setup", authMiddleware, audit.HandleSetupVendor)
+	app.Get("/api/v1/vendors/:id", authMiddleware, audit.HandleGetVendor)
+	app.Delete("/api/v1/vendors/configured/:vendor_id", authMiddleware, audit.HandleRemoveVendor)
+
+	// Vendor scanner (free-tier discovery)
+	app.Post("/api/v1/scanner", authMiddleware, audit.HandleScanVendors)
+	app.Get("/api/v1/scanner/sentry", authMiddleware, audit.HandleScanSentry)
+
+	// Benchmarks
+	app.Get("/api/v1/benchmarks", audit.HandleGetBenchmarks)
+
+	// ── V2 Scanner endpoints ─────────────────────────────────────────────────
+	// Vendor connections (authenticated external API connections for scanning).
+	// Note: /api/v1/vendors remains the existing vendor catalog / SDK-integration system.
+	app.Get("/api/v1/vendor-connections", authMiddleware, scanner.HandleListVendorConnections)
+	app.Post("/api/v1/vendor-connections", authMiddleware, scanner.HandleCreateVendorConnection)
+	app.Post("/api/v1/vendor-connections/test", authMiddleware, scanner.HandleTestCredentials)
+	app.Delete("/api/v1/vendor-connections/:id", authMiddleware, scanner.HandleDeleteVendorConnection)
+	app.Patch("/api/v1/vendor-connections/:id", authMiddleware, scanner.HandleUpdateVendorConnection)
+	app.Post("/api/v1/vendor-connections/:id/test", authMiddleware, scanner.HandleTestVendorConnection)
+	app.Post("/api/v1/vendor-connections/:id/scan", authMiddleware, scanner.HandleTriggerVendorScan)
+
+	// Scans
+	app.Get("/api/v1/scans", authMiddleware, scanner.HandleListScans)
+	app.Post("/api/v1/scans", authMiddleware, scanner.HandleCreateScan)
+	app.Get("/api/v1/scans/:id", authMiddleware, scanner.HandleGetScan)
+	app.Get("/api/v1/scans/:id/status", authMiddleware, scanner.HandleScanStatus)
+
+	// Findings
+	app.Get("/api/v1/findings", authMiddleware, scanner.HandleListFindings)
+	app.Get("/api/v1/findings/:id", authMiddleware, scanner.HandleGetFinding)
+	app.Patch("/api/v1/findings/:id", authMiddleware, scanner.HandlePatchFinding)
+
+	// Reports
+	app.Get("/api/v1/reports", authMiddleware, scanner.HandleListReports)
+	app.Post("/api/v1/reports/generate", authMiddleware, scanner.HandleGenerateReport)
+	app.Get("/api/v1/reports/share/:token", scanner.HandleGetSharedReport)                  // public — no auth
+	app.Get("/api/v1/reports/share/:token/download", scanner.HandleDownloadSharedReport) // public — no auth
+	app.Get("/api/v1/reports/:id", authMiddleware, scanner.HandleGetReport)
+	app.Get("/api/v1/reports/:id/download", authMiddleware, scanner.HandleDownloadReport)
+
+	// Scanner overview and data flows (additive to existing /api/v1/scanner routes)
+	app.Get("/api/v1/scanner/overview", authMiddleware, scanner.HandleScannerOverview)
+	app.Get("/api/v1/scanner/flows", authMiddleware, scanner.HandleScannerFlows)
+
+	// Vendor catalogue — full list of supported scanner vendors with auth fields
+	// for the "Connect a vendor" modal. This is the canonical endpoint per
+	// todo/vendor-catalogue.md.
+	app.Get("/api/v1/scanner/vendors/catalogue", authMiddleware, scanner.HandleGetCatalogue)
+
+	// DPA registry (GDPR Art. 28 / BAA tracking)
+	app.Get("/api/v1/scanner/dpa-registry", authMiddleware, scanner.HandleGetDPARegistry)
+	app.Put("/api/v1/scanner/dpa-registry/:vendor_id", authMiddleware, scanner.HandleUpsertDPARecord)
+
+	// AI traffic + PII exposure summary
+	app.Get("/api/v1/scanner/ai-traffic", authMiddleware, scanner.HandleGetAITraffic)
+
+	// Shadow SaaS detection
+	app.Get("/api/v1/scanner/detected-vendors", authMiddleware, scanner.HandleGetDetectedVendors)
+
+	// One-click fix — create a proxy-level data-handling rule
+	app.Post("/api/v1/scanner/proxy-rules", authMiddleware, scanner.HandleCreateProxyRule)
+
+	// Approve / block shadow vendors
+	app.Post("/api/v1/scanner/vendor-allowlist", authMiddleware, scanner.HandleUpsertVendorAllowlist)
+
+	// Events
+	app.Get("/api/v1/events", authMiddleware, audit.HandleGetEvents)
+	app.Get("/api/v1/events/:id", authMiddleware, audit.HandleGetEvent)
+	app.Patch("/api/v1/events/:id/status", authMiddleware, audit.HandleUpdateEventStatus)
+
+	// Webhooks
+	app.Post("/api/v1/webhooks", authMiddleware, audit.HandleCreateWebhook)
+	app.Get("/api/v1/webhooks", authMiddleware, audit.HandleGetWebhooks)
+	app.Post("/api/v1/webhooks/:id/test", authMiddleware, audit.HandleTestWebhook)
 
 	// Protection and analytics endpoints
 	app.Get("/api/v1/protection-events", authMiddleware, audit.HandleGetProtectionEvents)
@@ -220,6 +336,17 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 
 	// Transactions endpoint
 	app.Get("/api/v1/transactions", authMiddleware, audit.HandleGetTransactionsV1)
+
+	// DSAR (Data Subject Access Request) endpoints — GDPR Art. 15, 16, 17, 20, 21
+	app.Get("/api/v1/dsars", authMiddleware, audit.HandleListDsars)
+	app.Post("/api/v1/dsars", authMiddleware, audit.HandleCreateDsar)
+	app.Get("/api/v1/dsars/:id", authMiddleware, audit.HandleGetDsar)
+	app.Patch("/api/v1/dsars/:id", authMiddleware, audit.HandleUpdateDsar)
+
+	// Subject identity endpoints
+	app.Get("/api/v1/subjects/lookup", authMiddleware, audit.HandleSubjectLookup)
+	app.Post("/api/v1/subjects/:id/export", authMiddleware, audit.HandleExportSubjectData)
+	app.Post("/api/v1/subjects/:id/erase", authMiddleware, audit.HandleEraseSubject)
 
 	// Dashboard API endpoints - support both JWT and API key authentication
 	dashboardAuthMiddleware := func(c *fiber.Ctx) error {
