@@ -299,6 +299,22 @@ func startGatewayServer(config *Config, errChan chan<- error) {
 	// todo/vendor-catalogue.md.
 	app.Get("/api/v1/scanner/vendors/catalogue", authMiddleware, scanner.HandleGetCatalogue)
 
+	// DPA registry (GDPR Art. 28 / BAA tracking)
+	app.Get("/api/v1/scanner/dpa-registry", authMiddleware, scanner.HandleGetDPARegistry)
+	app.Put("/api/v1/scanner/dpa-registry/:vendor_id", authMiddleware, scanner.HandleUpsertDPARecord)
+
+	// AI traffic + PII exposure summary
+	app.Get("/api/v1/scanner/ai-traffic", authMiddleware, scanner.HandleGetAITraffic)
+
+	// Shadow SaaS detection
+	app.Get("/api/v1/scanner/detected-vendors", authMiddleware, scanner.HandleGetDetectedVendors)
+
+	// One-click fix — create a proxy-level data-handling rule
+	app.Post("/api/v1/scanner/proxy-rules", authMiddleware, scanner.HandleCreateProxyRule)
+
+	// Approve / block shadow vendors
+	app.Post("/api/v1/scanner/vendor-allowlist", authMiddleware, scanner.HandleUpsertVendorAllowlist)
+
 	// Events
 	app.Get("/api/v1/events", authMiddleware, audit.HandleGetEvents)
 	app.Get("/api/v1/events/:id", authMiddleware, audit.HandleGetEvent)

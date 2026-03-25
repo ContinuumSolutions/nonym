@@ -117,6 +117,35 @@ func createTables() error {
 			expires_at   %s,
 			created_at   %s NOT NULL DEFAULT CURRENT_TIMESTAMP
 		)`, ts, ts, ts),
+		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS dpa_records (
+			id            TEXT PRIMARY KEY,
+			org_id        INTEGER NOT NULL,
+			vendor_id     TEXT NOT NULL,
+			status        TEXT NOT NULL DEFAULT 'missing',
+			region        TEXT NOT NULL DEFAULT '',
+			last_reviewed %s,
+			expires_at    %s,
+			created_at    %s NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at    %s NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(org_id, vendor_id)
+		)`, ts, ts, ts, ts),
+		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS proxy_rules (
+			id          TEXT PRIMARY KEY,
+			org_id      INTEGER NOT NULL,
+			vendor_id   TEXT NOT NULL,
+			data_type   TEXT NOT NULL,
+			action      TEXT NOT NULL,
+			created_at  %s NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(org_id, vendor_id, data_type)
+		)`, ts),
+		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS shadow_vendor_allowlist (
+			id          TEXT PRIMARY KEY,
+			org_id      INTEGER NOT NULL,
+			host        TEXT NOT NULL,
+			action      TEXT NOT NULL,
+			created_at  %s NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(org_id, host)
+		)`, ts),
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {
@@ -131,6 +160,15 @@ func createTables() error {
 	return nil
 }
 
+
+// sinceExpr returns a SQL expression for "now minus N days" compatible with
+// both SQLite and PostgreSQL.
+func sinceExpr(days int) string {
+	if isPostgres {
+		return fmt.Sprintf("NOW() - INTERVAL '%d days'", days)
+	}
+	return fmt.Sprintf("datetime('now', '-%d days')", days)
+}
 
 // newID generates a UUID string.
 func newID() string {
